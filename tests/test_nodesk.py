@@ -591,6 +591,18 @@ class ApiTest(unittest.TestCase):
         self.assertFalse(self.get("/api/state")["settings"]["sources"]["arp"])
         self.call("PUT", "/api/settings", {"interval_min": 5, "sources": {"arp": True}})
 
+    def test_card_colors(self):
+        st, body = self.call("PUT", "/api/settings", {"colors": {"net": "#AABBCC", "other": ""}})
+        self.assertEqual(st, 200)
+        colors = json.loads(body)["colors"]
+        self.assertEqual(colors["net"], "#aabbcc")
+        self.assertEqual(colors["other"], "", "renksiz")
+        self.assertEqual(colors["srv"], store.DEFAULT_SETTINGS["colors"]["srv"], "değiştirilmeyen varsayılanda")
+        for bad in ({"net": "red"}, {"net": "#12345"}, {"uzay": "#112233"}, {"net": "#112233;x"}):
+            st, _ = self.call("PUT", "/api/settings", {"colors": bad})
+            self.assertEqual(st, 400, bad)
+        self.call("PUT", "/api/settings", {"colors": store.DEFAULT_SETTINGS["colors"]})
+
     def test_agents_and_ingest(self):
         st, body = self.call("POST", "/api/agents", {"name": "cloud-amd-1", "kind": "linux"})
         self.assertEqual(st, 200)

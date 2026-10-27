@@ -14,7 +14,8 @@
   --text: #17222B; --muted: #5E6C76; --cable: #8C9AA3; --on: #1F9C78; --tail: #5B57D6;
   --relay: #B7801C; --off: #A3ADB3; --exit: #5B57D6; --hl: #E0B020; --panel: #FFFFFF; --danger: #C2412D;
   --field: #F3F5F2; --svcline: #7A9DB0;
-  --c-net: #2F6FB5; --c-srv: #B04A8B; --c-svc: #0F8EA5; --c-sys: #7A8A1E;
+  --c-net: #3b82d6; --c-srv: #c2508a; --c-pc: #8e66d0; --c-mobile: #e07b53; --c-media: #d6a03a;
+  --c-home: #4f9d69; --c-other: transparent; --c-app: #1e9ab0; --c-sys: #8c9440;
   --shadow: 0 1px 0 rgba(23,34,43,.06), 0 6px 18px rgba(23,34,43,.07);
   --sans: "Barlow Semi Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -25,7 +26,6 @@
     --text: #DCE4E8; --muted: #8B9AA6; --cable: #50616E; --on: #5BC8A6; --tail: #8E8CF0;
     --relay: #E6B85C; --off: #55636E; --exit: #8E8CF0; --hl: #F0C94A; --panel: #1B252F; --danger: #F07A63;
     --field: #24303B; --svcline: #4A6D80;
-    --c-net: #6FA8E8; --c-srv: #E07BB8; --c-svc: #4FC3D6; --c-sys: #B5C454;
     --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
   }
 }
@@ -34,7 +34,6 @@
   --text: #DCE4E8; --muted: #8B9AA6; --cable: #50616E; --on: #5BC8A6; --tail: #8E8CF0;
   --relay: #E6B85C; --off: #55636E; --exit: #8E8CF0; --hl: #F0C94A; --panel: #1B252F; --danger: #F07A63;
   --field: #24303B; --svcline: #4A6D80;
-  --c-net: #6FA8E8; --c-srv: #E07BB8; --c-svc: #4FC3D6; --c-sys: #B5C454;
   --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
 }
 * { box-sizing: border-box; }
@@ -108,8 +107,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .cable.off { stroke: var(--off); stroke-dasharray: 3 4; opacity: .7; }
 .cable.uplink { stroke-dasharray: 2 5; stroke-linecap: round; opacity: .8; }
 .cable.faded { opacity: .15; }
-.tail { fill: none; stroke-width: 1.4; stroke-dasharray: 6 5; opacity: .75; }
-.tail.direct { stroke: var(--tail); } .tail.relay { stroke: var(--relay); } .tail.down { stroke: var(--off); opacity: .45; }
+/* Tailnet: gruplar arası bağlar (Pi'den görünen yol: doğrudan / aktarıcı / bağlantı yok) */
+.ts-link { fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.ts-link.direct { stroke: var(--tail); } .ts-link.relay { stroke: var(--relay); stroke-dasharray: 9 6; }
+.ts-link.down { stroke: var(--off); stroke-dasharray: 2 6; }
+.ts-port rect { fill: var(--card); stroke-width: 1.5; }
+.ts-port text { font: 600 12px var(--sans); }
+.ts-bus-label { font: 700 14px var(--sans); }
+.ts-label text { font: 600 12px var(--sans); }
+.ts-label.direct rect { stroke: var(--tail); } .ts-label.direct text { fill: var(--tail); }
+.ts-label.relay rect { stroke: var(--relay); } .ts-label.relay text { fill: var(--relay); }
+.ts-label.down rect { stroke: var(--off); } .ts-label.down text { fill: var(--muted); }
+.card.ts-dim, .svc-head.ts-dim { opacity: .28; }
 .exit { fill: none; stroke: var(--exit); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .exit-flow { fill: none; stroke: var(--bg); stroke-width: 3; stroke-dasharray: 2 34; stroke-linecap: round; animation: flow 1.8s linear infinite; }
 @keyframes flow { to { stroke-dashoffset: -36; } }
@@ -120,7 +129,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .exit-chip text { font: 600 11px var(--sans); fill: var(--exit); }
 /* servis grubu başlığı: kutu değil, açılıp kapanan küçük bir hap */
 .svc-head { cursor: pointer; outline: none; }
-.svc-head.cat-app { --cat: var(--c-svc); } .svc-head.cat-sys { --cat: var(--c-sys); }
+.svc-head { --cat: var(--muted); }
 .svc-head rect.pill { fill: color-mix(in srgb, var(--cat) 12%, var(--card)); stroke: color-mix(in srgb, var(--cat) 55%, var(--card-line)); stroke-width: 1.2; }
 .svc-head:hover rect.pill { stroke: var(--cat); }
 .svc-head:focus-visible rect.pill { stroke: var(--hl); stroke-width: 2.4; }
@@ -132,9 +141,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .card { cursor: pointer; outline: none; }
 .card rect.box { fill: var(--card); stroke: var(--card-line); stroke-width: 1.2; }
 /* rol rengi: ağ cihazı, sunucu, servis (diğer cihazlar nötr) */
-.card.cat-net { --cat: var(--c-net); } .card.cat-srv { --cat: var(--c-srv); } .card.cat-svc { --cat: var(--c-svc); } .card.cat-sys { --cat: var(--c-sys); }
-.card.cat rect.box { fill: color-mix(in srgb, var(--cat) 10%, var(--card)); stroke: color-mix(in srgb, var(--cat) 55%, var(--card-line)); }
-.card.cat .icon { stroke: var(--cat); }
+.cat-net { --cat: var(--c-net); } .cat-srv { --cat: var(--c-srv); } .cat-pc { --cat: var(--c-pc); }
+.cat-mobile { --cat: var(--c-mobile); } .cat-media { --cat: var(--c-media); } .cat-home { --cat: var(--c-home); }
+.cat-other { --cat: var(--c-other); } .cat-app { --cat: var(--c-app); } .cat-sys { --cat: var(--c-sys); }
+.card.cat rect.box { fill: color-mix(in srgb, var(--cat) 11%, var(--card)); stroke: color-mix(in srgb, var(--cat) 55%, var(--card-line)); }
+/* simge rengi metin rengine doğru karışır: aynı renk açık ve koyu temada okunur kalır */
+.card.cat .icon { stroke: color-mix(in oklab, var(--cat) 78%, var(--text)); }
 .card:hover rect.box { stroke: var(--text); }
 .card.selected rect.box, .card.match rect.box { stroke: var(--hl); stroke-width: 2.4; }
 .card.offline { opacity: .55; }
@@ -166,8 +178,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .svc-card .toggle path { stroke: var(--muted); stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .svc-badge { font: 600 11.5px var(--sans); fill: var(--muted); }
 .svc-icon-sm { width: 22px; height: 22px; border-radius: 6px; flex: none; }
-.hub rect { fill: var(--card); stroke: var(--tail); stroke-width: 1.6; }
-.hub text { font: 700 16px var(--sans); fill: var(--tail); }
+.colors { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 8px 0 4px; }
+.color-row { display: flex; align-items: center; gap: 10px; font-size: 14.5px; }
+.color-row input[type=color] { width: 38px; height: 26px; padding: 0; border: 1px solid var(--card-line); border-radius: 6px; background: none; cursor: pointer; }
+.color-row input[type=color]:disabled { opacity: .35; cursor: default; }
+.color-row .nm { flex: 1; }
+.color-row small { color: var(--muted); }
 .inet rect { fill: var(--text); } .inet text { font: 700 16px var(--sans); fill: var(--bg); }
 .inet .icon { stroke: var(--bg); fill: none; stroke-width: 1.6; }
 
@@ -255,7 +271,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
     <input type="search" id="q" placeholder="Cihaz, IP, MAC ya da servis" aria-label="Ara">
     <span class="sep"></span>
     <button class="btn" id="bFilter" title="Filtrele"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12l-4.5 5.5V13l-3-1.5v-3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="lbl">Filtre</span><span class="badge" id="fCount" hidden></span></button>
-    <button class="btn" id="tTail" aria-pressed="false" title="Tailscale bağlantılarını göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="2" fill="currentColor"/><circle cx="13" cy="3.5" r="2" fill="currentColor"/><circle cx="13" cy="12.5" r="2" fill="currentColor"/><path d="M5 7l6-3M5 9l6 3" stroke="currentColor" stroke-dasharray="2 2" fill="none"/></svg><span class="lbl">Tailnet</span></button>
+    <button class="btn" id="tTail" aria-pressed="false" title="Evler ve bulut arası Tailscale bağlantılarını göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="2" fill="currentColor"/><circle cx="13" cy="3.5" r="2" fill="currentColor"/><circle cx="13" cy="12.5" r="2" fill="currentColor"/><path d="M5 7l6-3M5 9l6 3" stroke="currentColor" stroke-dasharray="2 2" fill="none"/></svg><span class="lbl">Tailnet</span></button>
     <button class="btn" id="tExit" aria-pressed="true" title="Exit node kullanımını göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13L13 3M7 3h6v6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">Exit</span></button>
     <button class="btn" id="tSvc" aria-pressed="true" title="Servisleri göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span class="lbl">Servisler</span></button>
     <button class="btn" id="tOff" aria-pressed="true" title="Şu an görünmeyen cihazları göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="currentColor" stroke-dasharray="2.5 2"/></svg><span class="lbl">Çevrimdışı</span></button>
@@ -268,14 +284,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 <div class="alerts" id="alerts"></div>
 
 <div class="legend" aria-label="Lejant">
-  <span><b style="--c:var(--c-net)"></b>Ağ cihazı</span>
-  <span><b style="--c:var(--c-srv)"></b>Sunucu</span>
-  <span><b style="--c:var(--c-svc)"></b>Uygulama</span>
-  <span><b style="--c:var(--c-sys)"></b>Sistem servisi</span>
+  <span id="lgCats" style="display:contents"></span>
   <span><i style="border-color:var(--cable)"></i>Yerel ağ</span>
   <span><i style="border-color:var(--svcline)"></i>Servis bağı</span>
-  <span><i style="border-color:var(--tail);border-top-style:dashed"></i>Tailscale doğrudan</span>
-  <span><i style="border-color:var(--relay);border-top-style:dashed"></i>Tailscale aktarıcı</span>
+  <span><i style="border-color:var(--tail);border-top-width:3px"></i>Tailnet doğrudan</span>
+  <span><i style="border-color:var(--relay);border-top-width:3px;border-top-style:dashed"></i>Tailnet aktarıcı</span>
   <span><i style="border-color:var(--exit);border-top-width:3px"></i>Exit node trafiği</span>
 </div>
 <div class="zoom surface">
@@ -358,7 +371,29 @@ const VIA_TR = { extender: "extender (MAC-NAT) arkasında", arp: "ARP taraması"
 const ORDER = ["router", "ap", "server", "nas", "cloud-vm", "pc", "laptop", "tv", "console", "speaker", "tablet",
   "phone", "camera", "printer", "iot", "lamp", "vacuum", "device"];
 const MAJOR = new Set(["router", "ap", "server", "nas"]);
-const CAT = { modem: "net", router: "net", ap: "net", server: "srv", nas: "srv", "cloud-vm": "srv" };
+const CAT = { modem: "net", router: "net", ap: "net", server: "srv", nas: "srv", "cloud-vm": "srv", pc: "pc", laptop: "pc",
+  phone: "mobile", tablet: "mobile", tv: "media", console: "media", speaker: "media", iot: "home", lamp: "home",
+  vacuum: "home", camera: "home", printer: "home", device: "other" };
+const CAT_TR = { net: "Ağ cihazı", srv: "Sunucu", pc: "Bilgisayar", mobile: "Telefon / tablet", media: "TV / medya",
+  home: "Akıllı ev", other: "Diğer cihaz", app: "Uygulama", sys: "Sistem servisi" };
+// Hazır temalar (Ayarlar > Renkler). "" = renksiz. Durum renkleri (yeşil, sarı, kırmızı) ve
+// Tailscale moru temalarda kullanılmaz: kart rengi hiçbir zaman bir durumla karışmasın.
+const PALETTES = {
+  "Nodesk": { net: "#3b82d6", srv: "#c2508a", pc: "#8e66d0", mobile: "#e07b53", media: "#d6a03a", home: "#4f9d69", other: "", app: "#1e9ab0", sys: "#8c9440" },
+  "Okyanus": { net: "#1d6fb8", srv: "#0f8f8a", pc: "#4b6cc1", mobile: "#2aa6c9", media: "#5a8fa8", home: "#3f9e86", other: "", app: "#0aa1b5", sys: "#6b8aa3" },
+  "Gün batımı": { net: "#d1495b", srv: "#a23b72", pc: "#8f5ba6", mobile: "#ed8146", media: "#e0a53d", home: "#c97b63", other: "", app: "#e86a5f", sys: "#a8806b" },
+  "Orman": { net: "#3d7d5a", srv: "#7a5c3a", pc: "#5f7f3f", mobile: "#b07a3c", media: "#9a8a2e", home: "#4c9a6a", other: "", app: "#2f8f7a", sys: "#7d8a52" },
+  "Sade": { net: "#4a6fa5", srv: "#7a5c99", pc: "", mobile: "", media: "", home: "", other: "", app: "#5b8e8e", sys: "#8a8a6a" },
+};
+let COLORS = { ...PALETTES.Nodesk };
+function catOf(n) { if (n.placeholder) return null; if (isSvc(n)) return n.source === "system" ? "sys" : "app"; return CAT[n.kind] || null; }
+function applyColors() {
+  COLORS = { ...PALETTES.Nodesk, ...((DATA && DATA.settings && DATA.settings.colors) || {}) };
+  for (const k of Object.keys(CAT_TR)) document.documentElement.style.setProperty("--c-" + k, COLORS[k] || "transparent");
+  const present = new Set(ALL.filter((n) => n.x !== undefined).map(catOf));
+  $("#lgCats").innerHTML = Object.keys(CAT_TR).filter((k) => COLORS[k] && present.has(k))
+    .map((k) => `<span><b style="--c:var(--c-${k})"></b>${esc(CAT_TR[k])}</span>`).join("");
+}
 
 /* ---------------- ölçüler ---------------- */
 const SW = 186, SH = 48, KW = 172, KH = 38;
@@ -371,7 +406,7 @@ const NO_FILTER = () => ({ sites: [], kinds: [], tags: [], status: "", hidden: f
 const prefs = { tail: false, off: true, svc: true, exit: true, collapsed: {}, filters: NO_FILTER(), dismissed: {} };
 try { const p = JSON.parse(localStorage.getItem("nodesk-prefs") || "{}"); Object.assign(prefs, p); prefs.filters = Object.assign(NO_FILTER(), p.filters || {}); } catch (e) {}
 const savePrefs = () => { try { localStorage.setItem("nodesk-prefs", JSON.stringify(prefs)); } catch (e) {} };
-let view = { x: 0, y: 0, k: 1 }, fitted = false, bounds = null, HEADS = [], ROWS = [];
+let view = { x: 0, y: 0, k: 1 }, fitted = false, bounds = null, HEADS = [], BUSES = [];
 
 /* ---------------- yardımcılar ---------------- */
 function el(tag, attrs, parent) {
@@ -508,6 +543,7 @@ function place(n, x, y, edges) {
   if (!n.blocks.length) return;
   const px = n.x + n.cw / 2, pb = n.y + n.ch, busY = pb + GY / 2, top = pb + GY;
   let bx = x + (n.bw - n.rowW) / 2;
+  BUSES.push([bx, bx + n.rowW, busY]);
   for (const b of n.blocks) {
     if (b.type === "node") {
       place(b.node, bx, top, edges);
@@ -577,13 +613,12 @@ function layout() {
     if (!best || k > best.k * 1.02) best = { k, lines, W };
   }
   const edges = [], frames = [];
-  HEADS = []; ROWS = [];
+  HEADS = []; BUSES = [];
   let y = 150;
   for (const line of best.lines) {
     const lw = line.reduce((s, x) => s + x.w, 0) + SITE_GAP * (line.length - 1);
     let x = (best.W - lw) / 2;
     const lh = Math.max(...line.map((s) => s.h));
-    ROWS.push({ y, h: lh, frames: line });
     for (const s of line) {
       s.x = x; s.y = y; frames.push(s);
       let rx = x + (s.w - s.innerW) / 2;
@@ -623,7 +658,7 @@ function render() {
   build(DATA);
   const { frames, edges, W } = layout();
   const gFrames = el("g", {}, world), gUp = el("g", { "pointer-events": "none" }, world), gEdges = el("g", { "pointer-events": "none" }, world);
-  const gTail = el("g", { visibility: prefs.tail ? "visible" : "hidden", "pointer-events": "none" }, world);
+  const gTail = el("g", { "pointer-events": "none" }, world);
   const gExit = el("g", { "pointer-events": "none" }, world), gCards = el("g", {}, world);
   const q = $("#q").value.trim().toLowerCase(), fa = filterActive();
 
@@ -644,50 +679,168 @@ function render() {
     const cx = r.x + r.cw / 2, sx = inet.x + inet.w / 2, sy = inet.y + inet.h;
     el("path", { class: "cable uplink", d: `M${sx},${sy}C${sx},${sy + 60} ${cx},${r.y - 70} ${cx},${r.y}` }, gUp);
   }
-  const tsNodes = ALL.filter((n) => n.tailscale && n.x !== undefined);
-  if (tsNodes.length) {
-    const hub = { x: inet.x + inet.w + 60, y: 44, w: 120, h: 36 };
-    const hg = el("g", { class: "hub" }, gTail);
-    el("rect", { x: hub.x, y: hub.y, width: hub.w, height: hub.h, rx: 18 }, hg);
-    text(hg, hub.x + hub.w / 2, hub.y + 24, "Tailnet", "", { "text-anchor": "middle" });
-    for (const n of tsNodes) {
-      const hx = hub.x + hub.w / 2, hy = hub.y + hub.h, tx = n.x + n.cw - 22, ty = n.y;
-      el("path", { class: "tail " + tsPath(n), d: `M${hx},${hy}C${hx},${hy + 140} ${tx},${ty - 140} ${tx},${ty}` }, gTail);
-    }
-  }
   for (const e of edges) el("path", { class: "cable" + (isSvc(e.to) || e.to.kind === "svchead" ? " svc" : "") + (e.off ? " off" : "") + (fa && e.to.kind !== "svchead" && !passesFilter(e.to) ? " faded" : ""), d: e.d }, gEdges);
   for (const n of ALL) if (n.x !== undefined && n.kind !== "internet") (isSvc(n) ? drawSvcCard : drawCard)(gCards, n, q, fa);
   for (const h of HEADS) drawHead(gCards, h);
+  applyColors();
 
-  if (prefs.exit) drawExits(gExit);
+  const ports = prefs.tail ? tailnetPorts(frames) : [];
+  const router = makeRouter(frames, inet, ports);
+  if (prefs.tail) drawTailnet(gTail, ports, router);
+  if (prefs.exit) drawExits(gExit, router);
   applyView();
 }
-/* Exit node bağları: kartın yanından çerçevenin altına inip çerçeveler arasındaki oluklardan
-   (satır arası ve çerçeve arası boşluklar) ilerler; çerçevelerin ve kartların üstünden geçmez. */
-function exitRoute(a, b, li) {
-  const off = (li % 4) * 4, lane = (li % 4) * 5 - 7;
-  const rowOf = (n) => Math.max(0, ROWS.findIndex((r) => n.y >= r.y && n.y <= r.y + r.h));
-  const gy = (r) => ROWS[r].y + ROWS[r].h + SITE_GAP / 2 + lane;
-  const vgut = (r, x) => {
-    const fs = ROWS[r].frames, xs = [fs[0].x - SITE_GAP / 2, ...fs.map((f) => f.x + f.w + SITE_GAP / 2)];
-    return xs.reduce((m, v) => (Math.abs(v - x) < Math.abs(m - x) ? v : m)) + lane;
-  };
-  const leg = (n) => {   // kartın sağından, yanındaki boşluğa
-    const y = n.y + n.ch / 2, x = n.blocks && n.blocks.length ? n.bx + n.bw + GX / 2 + off - 4 : n.x + n.cw + 9 + off;
-    return [[n.x + n.cw, y], [x, y]];
-  };
-  let A = a, B = b, ra = rowOf(a), rb = rowOf(b);
-  const flip = ra > rb;
-  if (flip) [A, B, ra, rb] = [b, a, rb, ra];
-  const la = leg(A), lb = leg(B), pts = [...la, [la[1][0], gy(ra)]];
-  let x = la[1][0];
-  for (let r = ra + 1; r <= rb; r++) {
-    const xv = vgut(r, r === rb ? lb[1][0] : x);
-    pts.push([xv, gy(r - 1)], [xv, gy(r)]);
-    x = xv;
+/* ---------------- yol bulma ----------------
+   Çizgiler için dik açılı en kısa yol (A*): kartlar, grup başlıkları ve çerçeve başlıkları engel;
+   her dönüş ve başka bir çizginin kullandığı yolu paylaşmak pahalı. İstenirse çerçeve içi de
+   pahalı sayılır (Tailnet bağları gruplar arasındaki boşluklardan gitsin). Izgara: engel
+   kenarları + çerçeve olukları + başlangıç/bitiş noktaları. */
+function makeRouter(frames, inet, extra) {
+  const M = 10, obs = [];
+  const box = (x, y, w, h) => obs.push([x - M, y - M, x + w + M, y + h + M]);
+  for (const n of ALL) if (n.x !== undefined && n.kind !== "internet") box(n.x, n.y, n.cw, n.ch);
+  for (const h of HEADS) box(h.x, h.y, h.cw, h.ch);
+  for (const f of frames) box(f.x + 16, f.y + 16, f.name.length * 15 + 10, 30);
+  box(inet.x, inet.y, inet.w, inet.h);
+  for (const e of extra || []) box(e.x, e.y, e.w, e.h);
+  const xs = [], ys = [];
+  for (const o of obs) xs.push(o[0], o[2]), ys.push(o[1], o[3]);
+  for (const f of frames) xs.push(f.x - SITE_GAP / 2, f.x + f.w + SITE_GAP / 2), ys.push(f.y - SITE_GAP / 2, f.y + f.h + SITE_GAP / 2);
+  const inside = (x, y) => obs.some((o) => x > o[0] + 0.5 && x < o[2] - 0.5 && y > o[1] + 0.5 && y < o[3] - 0.5);
+  const inFrame = (x, y) => frames.some((f) => x > f.x && x < f.x + f.w && y > f.y && y < f.y + f.h);
+  // ağacın yatay bağlantı çizgisine yakın ve paralel gitmek pahalı (karışmasın; kesmek serbest)
+  const nearBus = (x0, x1, y) => BUSES.some((b) => Math.abs(b[2] - y) < 16 && Math.max(x0, x1) > b[0] && Math.min(x0, x1) < b[1]);
+  // çerçeve kenarının üstünden/boyunca gitmek de pahalı (kesip geçmek serbest)
+  const alongFrame = (x0, y0, x1, y1) => frames.some((f) => y0 === y1
+    ? (Math.abs(y0 - f.y) < 8 || Math.abs(y0 - f.y - f.h) < 8) && Math.max(x0, x1) > f.x && Math.min(x0, x1) < f.x + f.w
+    : (Math.abs(x0 - f.x) < 8 || Math.abs(x0 - f.x - f.w) < 8) && Math.max(y0, y1) > f.y && Math.min(y0, y1) < f.y + f.h);
+  const used = new Set();
+  const key = (x1, y1, x2, y2) => x1 < x2 || (x1 === x2 && y1 < y2) ? `${x1},${y1},${x2},${y2}` : `${x2},${y2},${x1},${y1}`;
+  // Kartın yan kenarlarından çıkış noktaları (sol yan pahalı: ağaç çizgileri orada)
+  const ports = (n) => [{ x: n.x + n.cw + M, y: n.y + n.ch / 2, from: [n.x + n.cw, n.y + n.ch / 2], cost: 0 },
+    { x: n.x - M, y: n.y + n.ch / 2, from: [n.x, n.y + n.ch / 2], cost: 60 }];
+  function route(starts, goals, opt = {}) {
+    const X = [...new Set([...xs, ...starts.map((p) => p.x), ...goals.map((p) => p.x)])].sort((a, b) => a - b);
+    const Y = [...new Set([...ys, ...starts.map((p) => p.y), ...goals.map((p) => p.y)])].sort((a, b) => a - b);
+    const nx = X.length, ny = Y.length, xi = new Map(X.map((v, i) => [v, i])), yi = new Map(Y.map((v, i) => [v, i]));
+    const BEND = 30, FR = opt.framePenalty || 1, N = nx * ny;
+    const dist = new Float64Array(N * 4).fill(Infinity), prev = new Int32Array(N * 4).fill(-1);
+    const blocked = new Int8Array(N).fill(-1), segH = new Int8Array(N).fill(-1), segV = new Int8Array(N).fill(-1);
+    const isBlocked = (v) => (blocked[v] < 0 ? (blocked[v] = inside(X[(v / ny) | 0], Y[v % ny]) ? 1 : 0) : blocked[v]);
+    const goalAt = new Map(goals.map((g) => [xi.get(g.x) * ny + yi.get(g.y), g]));
+    const h = (i, j) => Math.min(...goals.map((g) => Math.abs(X[i] - g.x) + Math.abs(Y[j] - g.y)));
+    const heap = [];
+    const push = (f, st) => {
+      heap.push([f, st]);
+      for (let i = heap.length - 1; i;) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; }
+    };
+    const pop = () => {
+      const top = heap[0], last = heap.pop();
+      if (heap.length) {
+        heap[0] = last;
+        for (let i = 0; ;) {
+          const l = 2 * i + 1, r = l + 1; let m = i;
+          if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+          if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+          if (m === i) break;
+          [heap[m], heap[i]] = [heap[i], heap[m]]; i = m;
+        }
+      }
+      return top;
+    };
+    for (const p of starts) {
+      const v = xi.get(p.x) * ny + yi.get(p.y);
+      for (let d = 0; d < 4; d++) if (p.cost < dist[v * 4 + d]) { dist[v * 4 + d] = p.cost; push(p.cost + h(xi.get(p.x), yi.get(p.y)), v * 4 + d); }
+    }
+    let end = -1, guard = 0;
+    while (heap.length && guard++ < 400000) {
+      const [f, st] = pop(), v = st >> 2, d = st & 3, i = (v / ny) | 0, j = v % ny, g = dist[st];
+      if (f - h(i, j) > g + 1e-6) continue;
+      if (goalAt.has(v)) { end = st; break; }
+      for (let nd = 0; nd < 4; nd++) {
+        const ni = i + (nd === 0) - (nd === 1), nj = j + (nd === 2) - (nd === 3);
+        if (ni < 0 || nj < 0 || ni >= nx || nj >= ny) continue;
+        const w = ni * ny + nj;
+        if (isBlocked(w)) continue;
+        const sv = Math.min(v, w), seg = nd < 2 ? segH : segV;
+        if (seg[sv] < 0) seg[sv] = inside((X[i] + X[ni]) / 2, (Y[j] + Y[nj]) / 2) ? 1 : 0;
+        if (seg[sv]) continue;
+        const len = Math.abs(X[ni] - X[i]) + Math.abs(Y[nj] - Y[j]);
+        let c = len * (FR > 1 && inFrame((X[i] + X[ni]) / 2, (Y[j] + Y[nj]) / 2) ? FR : 1);
+        if (nd < 2 && nearBus(X[i], X[ni], Y[j])) c *= 1.4;
+        if (alongFrame(X[i], Y[j], X[ni], Y[nj])) c *= 2.5;
+        if (!opt.shared && used.has(key(X[i], Y[j], X[ni], Y[nj]))) c += len * 1.5 + 20;
+        const ng = g + c + (nd !== d ? BEND : 0), ns = w * 4 + nd;
+        if (ng < dist[ns]) { dist[ns] = ng; prev[ns] = st; push(ng + h(ni, nj), ns); }
+      }
+    }
+    if (end < 0) return null;
+    const pts = [];
+    for (let st = end; st >= 0; st = prev[st]) { const v = st >> 2; pts.push([X[(v / ny) | 0], Y[v % ny]]); }
+    pts.reverse();
+    for (let k = 1; k < pts.length; k++) used.add(key(pts[k - 1][0], pts[k - 1][1], pts[k][0], pts[k][1]));
+    const sp = starts.find((p) => p.x === pts[0][0] && p.y === pts[0][1]), gp = goalAt.get(xi.get(pts[pts.length - 1][0]) * ny + yi.get(pts[pts.length - 1][1]));
+    return [...(sp && sp.from ? [sp.from] : []), ...pts, ...(gp && gp.from ? [gp.from] : [])];
   }
-  pts.push([lb[1][0], gy(rb)], ...lb.reverse());
-  return flip ? pts.reverse() : pts;
+  return { route, ports };
+}
+function drawExits(g, R) {
+  for (const o of DATA.overlay || []) {
+    const a = byId.get(o.from), b = byId.get(o.to);
+    if (!a || !b || a.x === undefined || b.x === undefined) continue;
+    const pts = R.route(R.ports(a), R.ports(b));
+    if (!pts) continue;
+    const d = roundPath(pts), t = el("title", {}, el("path", { class: "exit", d }, g));
+    t.textContent = `${a.label} interneti ${b.label} üzerinden çıkıyor (exit node)`;
+    el("path", { class: "exit-flow", d }, g);   // akış yönü: kullanan cihazdan exit node'a
+    for (const p of pts) bounds.h = Math.max(bounds.h, p[1] + 24);
+  }
+}
+/* Tailnet: çerçevelerin üstünde ortak bir omurga; her grup kendi bağlantı noktasından ona iner.
+   İnişin rengi ve etiketi, o gruptaki cihazlara Pi'den görülen yol:
+   doğrudan / aktarıcı (DERP) / bağlantı yok. Pi'nin kendi grubu "görüş noktası". */
+function tsMembers(site) { return ALL.filter((n) => n.site === site && n.tailscale && !isSvc(n) && n.x !== undefined); }
+function tailnetPorts(frames) {
+  const self = byId.get("self");
+  return frames.filter((f) => tsMembers(f.id).length).map((f) => {
+    const ms = tsMembers(f.id), paths = ms.map(tsPath), hub = !!self && f.id === self.site;
+    const nDir = paths.filter((x) => x === "direct").length, nRel = paths.filter((x) => x === "relay").length, nDown = ms.length - nDir - nRel;
+    const st = hub ? "direct" : nDown === ms.length ? "down" : nRel ? "relay" : "direct";
+    let sum;
+    if (hub) sum = `${ms.length} cihaz · görüş noktası`;
+    else if (ms.length === 1) sum = ms[0].tailscale.path;
+    else sum = [nDir ? `${nDir} doğrudan` : "", nRel ? `${nRel} aktarıcı` : "", nDown ? `${nDown} kapalı` : ""].filter(Boolean).join(" · ");
+    const label = `Tailnet · ${sum}`, w = label.length * 6.5 + 22;
+    const cx = Math.max(f.x + w / 2 + 12, Math.min(f.x + f.w - w / 2 - 12, f.x + f.w / 2 + 130));
+    return { site: f.id, f, st, hub, label, x: cx - w / 2, y: f.y - 10, w, h: 20, cx,
+      tip: (hub ? "Bağlantı durumları bu gruptaki Pi'den görüldüğü gibidir.\n" : "") +
+        ms.map((m) => `${m.label}: ${m.tailscale.path}`).join("\n") };
+  });
+}
+function drawTailnet(g, ports, R) {
+  if (!ports.length) return;
+  const top = Math.min(...ports.map((p) => p.f.y)), busY = top - 38;
+  const gutters = [...new Set(ports.flatMap((p) => [p.cx, p.f.x - SITE_GAP / 2, p.f.x + p.f.w + SITE_GAP / 2]))];
+  const drops = ports.map((p) => {
+    if (p.f.y === top) return [[p.cx, p.y], [p.cx, busY]];
+    // alt satırdaki grup: çerçevelerin arasındaki boşluktan omurgaya çıkar
+    return R.route([{ x: p.cx, y: p.y - 12, from: [p.cx, p.y], cost: 0 }],
+      gutters.map((x) => ({ x, y: busY })), { framePenalty: 6, shared: true }) || [[p.cx, p.y], [p.cx, busY]];
+  });
+  const ends = drops.map((d) => d[d.length - 1][0]);
+  el("path", { class: "ts-link direct", d: `M${Math.min(...ends) - 30},${busY}H${Math.max(...ends) + 30}` }, g);
+  const bt = text(g, Math.min(...ends) - 36, busY + 4, "Tailnet", "ts-bus-label", { "text-anchor": "end" });
+  bt.setAttribute("fill", "var(--tail)");
+  ports.forEach((p, i) => {
+    const path = el("path", { class: `ts-link ${p.st}`, d: roundPath(drops[i]) }, g);
+    const t = el("title", {}, path); t.textContent = p.tip;
+  });
+  for (const p of ports) {
+    const pg = el("g", { class: `ts-port ts-label ${p.st}` }, g);
+    el("rect", { x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }, pg);
+    text(pg, p.cx, p.y + 14, p.label, "", { "text-anchor": "middle" });
+    const t = el("title", {}, pg); t.textContent = p.tip;
+  }
 }
 function roundPath(pts, r = 9) {
   pts = pts.filter((p, i) => !i || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1]);
@@ -700,35 +853,8 @@ function roundPath(pts, r = 9) {
   const z = pts[pts.length - 1];
   return d + `L${z[0]},${z[1]}`;
 }
-function drawExits(g) {
-  const placed = [], gLabels = el("g", {}, g);   // etiketler hep çizgilerin üstünde
-  (DATA.overlay || []).forEach((o, li) => {
-    const a = byId.get(o.from), b = byId.get(o.to);
-    if (!a || !b || a.x === undefined || b.x === undefined) return;
-    const pts = exitRoute(a, b, li), d = roundPath(pts);
-    el("path", { class: "exit", d }, g);
-    el("path", { class: "exit-flow", d }, g);
-    for (const p of pts) bounds.h = Math.max(bounds.h, p[1] + 24);
-    // kısa etiket en uzun yatay parçanın üstünde; başka etiketle çakışırsa kaydır
-    let seg = null;
-    for (let i = 1; i < pts.length; i++) if (pts[i][1] === pts[i - 1][1]) {
-      const len = Math.abs(pts[i][0] - pts[i - 1][0]);
-      if (!seg || len > seg.len) seg = { len, x0: Math.min(pts[i][0], pts[i - 1][0]), y: pts[i][1] };
-    }
-    if (!seg) return;
-    const label = `${a.label} → ${b.label}`, lw = label.length * 6.2 + 20;
-    let lx = seg.x0 + seg.len / 2 - lw / 2;
-    while (placed.some((r) => Math.abs(r.y - seg.y) < 22 && lx < r.x + r.w + 8 && r.x < lx + lw + 8)) lx += lw + 12;
-    placed.push({ x: lx, y: seg.y, w: lw });
-    const lg = el("g", {}, gLabels);
-    el("rect", { class: "exit-label-bg", x: lx, y: seg.y - 10, width: lw, height: 20, rx: 10 }, lg);
-    text(lg, lx + lw / 2, seg.y + 4, label, "exit-label", { "text-anchor": "middle" });
-    const t = el("title", {}, lg); t.textContent = `${a.label} interneti ${b.label} üzerinden çıkıyor (exit node)`;
-  });
-  g.appendChild(gLabels);
-}
 function drawHead(parent, h) {
-  const g = el("g", { class: `svc-head cat-${h.cat}`, transform: `translate(${h.x},${h.y})`, tabindex: 0, role: "button",
+  const g = el("g", { class: "svc-head" + (COLORS[h.cat] ? ` cat-${h.cat}` : "") + (prefs.tail ? " ts-dim" : ""), transform: `translate(${h.x},${h.y})`, tabindex: 0, role: "button",
     "aria-expanded": String(!h.collapsed), "aria-label": `${h.label}, ${h.count} servis, ${h.collapsed ? "kapalı" : "açık"}` }, parent);
   g.dataset.head = h.id;
   el("rect", { class: "pill", width: h.cw, height: h.ch, rx: h.ch / 2 }, g);
@@ -751,7 +877,9 @@ function subnetOf(s) {
 }
 function drawCard(parent, n, q, fa) {
   const cls = ["card"];
-  if (CAT[n.kind]) cls.push("cat", "cat-" + CAT[n.kind]);
+  const cat = catOf(n);
+  if (cat && COLORS[cat]) cls.push("cat", "cat-" + cat);
+  if (prefs.tail && !n.tailscale && !n.placeholder) cls.push("ts-dim");
   if (!n.online && !n.placeholder) cls.push("offline");
   if (selected === n.id) cls.push("selected");
   if (q) cls.push(matches(n, q) ? "match" : "dim");
@@ -801,7 +929,9 @@ function drawIcon(g, n, x, y, size) {
   }
 }
 function drawSvcCard(parent, n, q, fa) {
-  const cls = ["card", "svc-card", "cat", n.source === "system" ? "cat-sys" : "cat-svc"];
+  const cls = ["card", "svc-card"], cat = catOf(n);
+  if (COLORS[cat]) cls.push("cat", "cat-" + cat);
+  if (prefs.tail) cls.push("ts-dim");
   if (n.kind === "container") cls.push("container");
   if (!n.online) cls.push("offline");
   if (selected === n.id) cls.push("selected");
@@ -1125,6 +1255,10 @@ function renderSettings() {
   <h3>Kaynaklar</h3>
   <p class="hint">Hiçbiri port taraması yapmaz.</p>
   ${Object.keys(SOURCE_TR).map((k) => `<label class="check" title="${esc(SOURCE_TR[k][1])}"><input type="checkbox" data-src="${k}"${s.sources[k] ? " checked" : ""}> ${esc(SOURCE_TR[k][0])} ${srcLine(k)}</label>`).join("")}
+  <h3>Renkler</h3>
+  <p class="hint">Kartların rol renkleri. Hazır bir tema seç ya da tek tek değiştir; "renksiz" rol nötr görünür. Tüm cihazlarda aynı görünür.</p>
+  <div class="chips">${Object.keys(PALETTES).map((p) => `<button class="chip" data-pal="${esc(p)}" aria-pressed="${Object.keys(CAT_TR).every((k) => (PALETTES[p][k] || "") === (COLORS[k] || ""))}">${esc(p)}</button>`).join("")}</div>
+  <div class="colors">${Object.entries(CAT_TR).map(([k, l]) => `<div class="color-row"><input type="color" data-col="${k}" value="${COLORS[k] || PALETTES.Nodesk[k] || "#8a96a0"}"${COLORS[k] ? "" : " disabled"} aria-label="${esc(l)} rengi"><span class="nm">${esc(l)}</span><label class="check" style="margin:0"><input type="checkbox" data-coloff="${k}"${COLORS[k] ? "" : " checked"}> <small>renksiz</small></label></div>`).join("")}</div>
   <h3>Ajanlar</h3>
   <p class="hint">Ajanlar 5 dakikada bir kendi verilerini Pi'ye gönderir; Pi hiçbir cihaza bağlanmaz.</p>
   <label class="check"><input type="checkbox" id="sAgentUpd"${s.agent_auto_update !== false ? " checked" : ""}> Ajanlar yeni sürümü Pi'den kendileri alsın <small>SSH gerekmez</small></label>
@@ -1153,6 +1287,15 @@ function renderSettings() {
   $("#sWin").onchange = (e) => put({ online_window_min: +e.target.value });
   $("#sAgentUpd").onchange = (e) => put({ agent_auto_update: e.target.checked });
   $$("[data-src]", $("#sbody")).forEach((c) => c.onchange = () => put({ sources: { [c.dataset.src]: c.checked } }));
+  $$("[data-pal]", $("#sbody")).forEach((b) => b.onclick = () => put({ colors: PALETTES[b.dataset.pal] }));
+  $$("[data-col]", $("#sbody")).forEach((c) => {
+    c.oninput = () => document.documentElement.style.setProperty("--c-" + c.dataset.col, c.value);   // anında önizleme
+    c.onchange = () => put({ colors: { [c.dataset.col]: c.value } });
+  });
+  $$("[data-coloff]", $("#sbody")).forEach((c) => c.onchange = () => {
+    const k = c.dataset.coloff, pick = $(`[data-col="${k}"]`, $("#sbody")).value;
+    put({ colors: { [k]: c.checked ? "" : pick } });
+  });
   $("#sScan").onclick = scanNow;
   $("#sCheck").onclick = async (e) => {
     e.target.disabled = true; e.target.textContent = "Denetleniyor…";

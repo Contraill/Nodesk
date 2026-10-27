@@ -36,6 +36,12 @@ DEFAULT_SETTINGS = {
         "probe": True,        # Ev 1 ad sorgusu: her IP'ye günde bir kez NetBIOS/mDNS/SSDP
     },
 }
+# Kart renkleri (arayüzden değişir). "" = renksiz (nötr kart).
+COLOR_CATEGORIES = ("net", "srv", "pc", "mobile", "media", "home", "other", "app", "sys")
+DEFAULT_SETTINGS["colors"] = {"net": "#3b82d6", "srv": "#c2508a", "pc": "#8e66d0", "mobile": "#e07b53",
+                              "media": "#d6a03a", "home": "#4f9d69", "other": "", "app": "#1e9ab0",
+                              "sys": "#8c9440"}
+HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 INTERVALS = (1, 2, 5, 10, 15, 30, 60)
 DEVICE_TYPES = ("modem", "router", "ap", "server", "cloud-vm", "pc", "laptop", "phone",
                 "tablet", "tv", "console", "iot", "lamp", "vacuum", "camera", "printer",
@@ -107,6 +113,10 @@ class Store:
             for k, v in (patch.get("sources") or {}).items():
                 if k in DEFAULT_SETTINGS["sources"]:
                     cur["sources"][k] = bool(v)
+            for k, v in (patch.get("colors") or {}).items():
+                if k not in COLOR_CATEGORIES or not (v == "" or HEX_COLOR.match(str(v))):
+                    raise ValueError(f"geçersiz renk: {k}={v}")
+                cur["colors"][k] = str(v).lower()
             util.write_json(self.p.settings, cur)
             return cur
 
