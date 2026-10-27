@@ -108,7 +108,12 @@
    "ExitNode": false,
    "ExitNodeOption": false,
    "PrimaryRoutes": null,
-   "LastSeen": "2026-10-27T13:00:00Z"
+   "LastSeen": "2026-10-27T13:00:00Z",
+   "Addrs": [
+    "203.0.113.20:50567",
+    "192.168.44.130:41641",
+    "[fd7a::1]:41641"
+   ]
   },
   "k6": {
    "ID": "nWIN",

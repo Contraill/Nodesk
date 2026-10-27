@@ -1,0 +1,21 @@
+{
+ "192.168.44.4": {
+  "real_mac": "50:ff:20:73:86:18",
+  "last": "2026-10-27T10:40:00+00:00",
+  "dhcp_name": "Keenetic"
+ },
+ "192.168.44.7": {
+  "real_mac": "d8:3a:dd:11:22:33",
+  "last": "2026-10-27T13:57:00+00:00",
+  "dhcp_name": "Galaxy-Tab-A",
+  "dhcp_vendor": "android-dhcp-13"
+ },
+ "192.168.44.9": {
+  "l2_mac": "52:ff:20:53:86:18",
+  "last": "2026-10-27T13:58:00+00:00",
+  "mdns_name": "Mutfak-Hoparlor",
+  "mdns_services": [
+   "_spotify-connect._tcp"
+  ]
+ }
+}

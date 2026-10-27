@@ -10,3 +10,4 @@
 192.168.44.104	72:e2:62:ad:28:9b	(Unknown: locally administered)
 192.168.44.105	38:8c:50:9f:be:1c	LG Electronics
 192.168.44.106	3c:22:fb:11:22:33	Apple, Inc.
+192.168.44.9	52:ff:20:53:86:18	(Unknown: locally administered) (DUP: 3)

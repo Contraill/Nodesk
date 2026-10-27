@@ -96,6 +96,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ---------- harita ---------- */
 .frame rect.body { fill: var(--frame); stroke: var(--frame-line); stroke-width: 1.2; }
 .frame .title { font: 700 30px var(--sans); fill: var(--text); letter-spacing: -.01em; }
+.frame .frame-title { cursor: pointer; }
+.frame .frame-title:hover { fill: var(--tail); }
 .frame .sub { font: 400 14px var(--mono); fill: var(--muted); }
 .cable { fill: none; stroke: var(--cable); stroke-width: 1.6; stroke-linejoin: round; }
 .cable.off { stroke: var(--off); stroke-dasharray: 3 4; opacity: .7; }
@@ -324,7 +326,7 @@ const SOURCE_TR = {
   agents: ["Sunucu ajanları", "Oracle sunucularındaki servisler"],
   health: ["Servis sağlık kontrolü", "Pi'deki servislerin portları yanıt veriyor mu (sadece Pi'nin kendisinde)"],
 };
-const VIA_TR = { arp: "ARP taraması", neigh: "komşu tablosu", passive: "pasif dinleme", self: "bu cihaz",
+const VIA_TR = { extender: "extender (MAC-NAT) arkasında", arp: "ARP taraması", neigh: "komşu tablosu", passive: "pasif dinleme", self: "bu cihaz",
   tailscale: "Tailscale", ajan: "ajan", "router arp": "router ARP", "router dhcp": "router DHCP" };
 const ORDER = ["router", "ap", "server", "nas", "cloud-vm", "pc", "laptop", "tv", "console", "speaker", "tablet",
   "phone", "camera", "printer", "iot", "lamp", "vacuum", "device"];
@@ -548,7 +550,8 @@ function render() {
   for (const s of frames) {
     const g = el("g", { class: "frame" }, gFrames);
     el("rect", { class: "body", x: s.x, y: s.y, width: s.w, height: s.h, rx: 16 }, g);
-    text(g, s.x + 22, s.y + 38, s.name, "title");
+    const ft = text(g, s.x + 22, s.y + 38, s.name, "title frame-title", { "data-site": s.id });
+    const tt = el("title", {}, ft); tt.textContent = "Grubu adlandır";
     const sub = subnetOf(s);
     if (sub) text(g, s.x + s.w - 20, s.y + 34, sub, "sub", { "text-anchor": "end" });
   }
@@ -756,7 +759,35 @@ function renderServiceEditor(n) {
       note: $("#eNote").value.trim(), hidden: $("#eHidden").checked });
   };
 }
+function openSitePanel(id) {
+  const site = (DATA.sites || []).find((x) => x.id === id); if (!site) return;
+  selected = null; editing = false;
+  const root = byId.get(id + "-gw");
+  const members = DATA.nodes.filter((n) => n.site === id && !isSvc(n) && !n.placeholder);
+  const on = members.filter((n) => n.online).length;
+  let html = `<h2>${esc(site.name)}</h2><div class="kind">Grup · ${members.length} cihaz, ${on} çevrimiçi</div>`;
+  if (API_OK) {
+    html += `<form id="siteForm">
+      <div class="field"><label for="sName">Grubun adı</label><input id="sName" maxlength="40" value="${esc(site.name !== site.auto_name ? site.name : "")}" placeholder="${esc(site.auto_name || site.name)}"></div>
+      ${root && root.placeholder ? `<div class="field"><label for="sRoot">Üstteki kartın adı</label><input id="sRoot" maxlength="60" value="${esc((root.override || {}).name || "")}" placeholder="${esc(root.auto_label || root.label)}"></div>` : ""}
+      <div class="actions"><button class="btn primary" type="submit">Kaydet</button></div>
+      <div class="err-msg" id="sErr2"></div></form>
+      <p class="hint">Boş bırakırsan varsayılan ada döner. Ad sadece haritada görünür; ağ ayarlarına dokunmaz.</p>`;
+  } else html += `<p class="hint">Adlandırmak için Nodesk servisine ulaşılamıyor.</p>`;
+  $("#pbody").innerHTML = html;
+  openDrawer("panel");
+  const f = $("#siteForm");
+  if (f) f.onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api("PUT", "/api/site?id=" + encodeURIComponent(id), { name: $("#sName").value.trim() });
+      if ($("#sRoot")) await api("PUT", "/api/device?id=" + encodeURIComponent(id + "-gw"), { name: $("#sRoot").value.trim() });
+      await load(true); openSitePanel(id);
+    } catch (err) { $("#sErr2").textContent = "Kaydedilemedi: " + err.message; }
+  };
+}
 function renderPanel(n) {
+  if (n.placeholder) return openSitePanel(n.site);
   if (isSvc(n)) return renderServicePanel(n);
   if (editing) return renderEditor(n);
   const rows = [];
@@ -780,6 +811,7 @@ function renderPanel(n) {
   html += `<dl>${rows.join("")}</dl>`;
   if (n.note) html += `<p class="note">${esc(n.note)}</p>`;
   if (n.stale) html += `<p class="note">Bu bölgeden son taramada veri alınamadı; gösterilen bilgiler son başarılı taramadan.</p>`;
+  if (n.roam) html += `<p class="note">Tailscale cihazı şu an <b>${esc(siteName(n.site))}</b> ağında. Evden ayrılınca ${esc(siteName("mobile") || "Uzak / Mobil")} grubuna döner.</p>`;
   if (n.agent) html += `<p class="hint">Ajan <b>${esc(n.agent.name)}</b>: son rapor ${esc(ago(n.agent.received))}${n.agent.fresh ? "" : " (eski)"}</p>`;
   if (n.tailscale) {
     const t = n.tailscale, p = tsPath(n), tr = [];
@@ -1079,7 +1111,9 @@ function up(e) {
   svg.classList.remove("dragging");
   if (!moved && downAt && pointers.size === 0) {
     const t = downAt.target, tog = t.closest && t.closest(".toggle"), c = t.closest && t.closest(".card");
-    if (tog && c) toggleNode(c.dataset.id);
+    const ft = t.closest && t.closest(".frame-title");
+    if (ft) openSitePanel(ft.dataset.site);
+    else if (tog && c) toggleNode(c.dataset.id);
     else if (c) openPanel(c.dataset.id);
     else closeDrawers();
   }

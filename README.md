@@ -29,6 +29,9 @@ HomeNet için hafif bir ağ topolojisi haritası. Kapsadığı yerler: iki ev (F
   - otomatik tarama açık/kapalı, sıklık (1–60 dk), kaynakları tek tek açma/kapama, **Şimdi tara**
   - ajan ekleme/silme ve kurulum komutları
   - **güncelleme**
+- **Grup adları:** grubun başlığına (Ev 1, Ev 2, Oracle Cloud…) tıklayınca hem grubu hem üstteki kartı adlandırabilirsin.
+- **Gezgin cihazlar:** Laptop ya da telefon evlerden birinin ağına bağlanınca o evin altında görünür, ayrılınca "Uzak / Mobil"e döner. Bunu Tailscale'in bildirdiği yerel IP'yi ağda canlı görerek anlar; cihaz iki kez görünmez.
+- **Extender arkası:** Keenetic gibi MAC-NAT yapan bir extender'ın arkasındaki cihazlar, extender'ın altında ayrı ayrı görünür. Gerçek MAC'i cihaz ağa yeniden bağlanınca (DHCP) öğrenilir; o zamana kadar mDNS adıyla ya da IP'siyle gösterilir.
 - **Filtre:** grup, tür, etiket ve durum. Eşleşmeyenler soluklaşır.
 - Arama (ad, IP, MAC, servis), Tailnet katmanı, açık/koyu tema, yakınlaştırma.
 

@@ -216,6 +216,10 @@ class Passive:
         self.keep_days = keep_days
         self.lock = threading.Lock()
         self.data = util.read_json(path, {}) or {}
+        # IP başına bilgi: MAC-NAT yapan extender'ların (örn. Keenetic) arkasındaki cihazlar
+        # aynı MAC'le görünür; adlarını IP üzerinden ayırt ederiz.
+        self.ip_path = path[:-5] + "_ip.json" if path.endswith(".json") else path + "_ip"
+        self.ipinfo = util.read_json(self.ip_path, {}) or {}
         self.dirty = False
         self.error = None
         self.running = False
@@ -251,11 +255,32 @@ class Passive:
             for k in ("mdns_services", "mdns_instances"):
                 if obs.get(k):
                     rec[k] = sorted(set(rec.get(k, [])) | set(obs[k]))[:16]
+            if ip:
+                info = self.ipinfo.get(ip) or {}
+                if obs.get("via") == "dhcp":
+                    if info.get("real_mac") != mac:   # IP başka cihaza geçti: eski adları unut
+                        info = {"real_mac": mac}
+                elif info.get("l2_mac") not in (None, mac) and not info.get("real_mac"):
+                    info = {}
+                else:
+                    info["l2_mac"] = mac
+                info["last"] = t
+                for k in ("dhcp_name", "dhcp_vendor", "mdns_name", "friendly", "model", "ssdp_server"):
+                    if obs.get(k):
+                        info[k] = obs[k]
+                for k in ("mdns_services", "mdns_instances"):
+                    if obs.get(k):
+                        info[k] = sorted(set(info.get(k, [])) | set(obs[k]))[:16]
+                self.ipinfo[ip] = info
             self.dirty = True
 
     def snapshot(self):
         with self.lock:
             return {m: {**r, "ips": dict(r["ips"])} for m, r in self.data.items()}
+
+    def snapshot_ip(self):
+        with self.lock:
+            return {ip: dict(v) for ip, v in self.ipinfo.items()}
 
     def prune_and_save(self, force=False):
         now = util.utcnow()
@@ -266,11 +291,18 @@ class Passive:
                 if not last or last.timestamp() < cutoff:
                     del self.data[mac]
                     self.dirty = True
+            for ip in list(self.ipinfo):
+                last = util.parse_iso(self.ipinfo[ip].get("last"))
+                if not last or last.timestamp() < cutoff:
+                    del self.ipinfo[ip]
+                    self.dirty = True
             if not (self.dirty or force):
                 return
             snap = {m: {**r, "ips": dict(r["ips"])} for m, r in self.data.items()}
+            snap_ip = {ip: dict(v) for ip, v in self.ipinfo.items()}
             self.dirty = False
         util.write_json(self.path, snap, indent=None)
+        util.write_json(self.ip_path, snap_ip, indent=None)
 
     # -------------------------------------------------- iş parçacığı
     def start(self):

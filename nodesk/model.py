@@ -21,7 +21,7 @@ TYPE_RULES = [
      r"vestel|roku|fire ?tv|\btv\b", "tv"),
     (r"_ipp|_printer|_pdl-datastream|printer|epson|brother|canon", "printer"),
     (r"playstation|xbox|nintendo", "console"),
-    (r"ipad|galaxy tab|tablet", "tablet"),
+    (r"ipad|galaxy[ _-]?tab|tablet", "tablet"),
     (r"iphone|galaxy|\bsm-|android|redmi|pixel|oneplus|huawei|honor|oppo|vivo|realme|phone", "phone"),
     (r"macbook|laptop|thinkpad|notebook", "laptop"),
     (r"desktop-|msft 5\.0|windows|\bpc\b", "pc"),
@@ -57,6 +57,42 @@ def best_name(names):
     return inst[0] if inst else None
 
 
+NAME_KEYS = ("dhcp_name", "dhcp_vendor", "mdns_name", "friendly", "model", "ssdp_server",
+             "mdns_services", "mdns_instances")
+
+
+def same_oui(a, b):
+    """52:ff:20:.. ile 50:ff:20:.. aynı üretici: biri 'yerel yönetimli' bitli kopya."""
+    try:
+        return a.split(":")[1:3] == b.split(":")[1:3] and (int(a[:2], 16) & 0xFC) == (int(b[:2], 16) & 0xFC)
+    except (ValueError, AttributeError):
+        return False
+
+
+ROUTER_PORTS = {22: ("dropbear", "SSH"), 53: ("dnsmasq", "DNS"), 80: ("uhttpd", "LuCI"),
+                443: ("uhttpd", "LuCI"), 8080: ("uhttpd", "LuCI")}
+
+
+def parse_proc_listen(lines):
+    """/proc/net/tcp(6) 'yerel_adres:port' (onaltılık) -> dışarı açık portlar."""
+    ports = set()
+    for line in lines or []:
+        addr, _, port = line.strip().rpartition(":")
+        try:
+            port = int(port, 16)
+        except ValueError:
+            continue
+        if addr in ("0100007F", "00000000000000000000000001000000") or addr.endswith("7F") and len(addr) == 8:
+            continue   # 127.x / ::1
+        if port < 32768:
+            ports.add(port)
+    by = {}
+    for p in sorted(ports):
+        proc, name = ROUTER_PORTS.get(p, (f"port-{p}", f"Port {p}"))
+        by.setdefault(proc, {"name": name, "proc": proc, "ports": []})["ports"].append(p)
+    return list(by.values())
+
+
 def fallback_label(vendor, mac, ip):
     tail = f" (.{ip.rsplit('.', 1)[-1]})" if ip and "." in ip else ""
     sv = util.short_vendor(vendor)
@@ -85,7 +121,12 @@ def ts_info(node, is_self=False):
         path = f"aktarıcı ({node['Relay']})"
     else:
         path = "bağlantı yok"
-    return {"name": ts_short(node), "ip": v4, "os": node.get("OS"),
+    addrs = []
+    for a in (node.get("Addrs") or []) + [node.get("CurAddr") or ""]:
+        host = a.rpartition(":")[0].strip("[]")
+        if util.is_ipv4(host) and host not in addrs:
+            addrs.append(host)
+    return {"name": ts_short(node), "ip": v4, "os": node.get("OS"), "addrs": addrs,
             "online": bool(node.get("Online")) or is_self, "path": path,
             "exit_offer": bool(node.get("ExitNodeOption")),
             "routes": node.get("PrimaryRoutes") or [], "last_seen": node.get("LastSeen")}
@@ -228,12 +269,16 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         return (ov_apps.get(p, {}).get("name") or cfg_apps.get(p) or
                 (casaos.get(p) or {}).get("title") or p)
 
+    ov_sites = overrides.get("sites", {})
     sites = [
         {"id": "ev1", "name": ev1.get("name", "Ev 1")},
         {"id": "ev2", "name": ev2.get("name", "Ev 2")},
         {"id": "oracle", "name": cfg.get("oracle", {}).get("name", "Oracle Cloud")},
         {"id": "mobile", "name": cfg.get("mobile", {}).get("name", "Uzak / Mobil")},
     ]
+    for st_ in sites:
+        st_["auto_name"] = st_["name"]
+        st_["name"] = (ov_sites.get(st_["id"]) or {}).get("name") or st_["name"]
     seen = {}       # id -> alanlar (bu turda kanıtı olan düğümler)
 
     # ------------------------------------------------ Tailscale
@@ -264,7 +309,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
 
     def ob(mac):
         return obs.setdefault(mac, {"ips": {}, "vendor": None, "online": False,
-                                    "via": set(), "names": {}})
+                                    "via": set(), "names": {}, "live": set()})
 
     for e in raw.get("arp") or []:
         if e["mac"] in self_macs or (subnet and not util.in_net(e["ip"], subnet)):
@@ -272,6 +317,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         o = ob(e["mac"])
         o["ips"][e["ip"]] = util.iso(now)
         o["online"] = True
+        o["live"].add(e["ip"])
         o["via"].add("arp")
         o["vendor"] = o["vendor"] or e.get("vendor")
     for e in raw.get("neigh") or []:
@@ -283,6 +329,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         o["via"].add("neigh")
         if e.get("state") in ("REACHABLE", "DELAY", "PROBE"):
             o["online"] = True
+            o["live"].add(e["ip"])
     for mac, rec in (raw.get("passive") or {}).items():
         if mac in self_macs:
             continue
@@ -295,6 +342,9 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         o["via"].add("passive")
         for ip, t in ips.items():
             o["ips"][ip] = max(filter(None, [o["ips"].get(ip), t]), default=None)
+            pt = util.parse_iso(t)
+            if pt and now - pt <= dt.timedelta(minutes=window):
+                o["live"].add(ip)
         if last and now - last <= dt.timedelta(minutes=window):
             o["online"] = True
         o["passive_last"] = rec.get("last")
@@ -302,6 +352,56 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                   "mdns_services", "mdns_instances"):
             if rec.get(k):
                 o["names"][k] = rec[k]
+
+    # ---- MAC-NAT yapan extender'lar (örn. Keenetic tekrarlayıcı modu): arkasındaki cihazlar
+    # extender'ın MAC'iyle görünür. Her IP'yi ayrı cihaza çevir; gerçek MAC'i DHCP'den
+    # (pasif dinleme) biliniyorsa onu kullan, bilinmiyorsa IP'ye göre geçici bir cihaz yap.
+    ipinfo = raw.get("passive_ip") or {}
+    pseudo = {}
+
+    def bridge_type(mac, o):
+        conf, ov = cfg_dev.get(mac, {}), ov_dev.get(f"mac:{mac}", {})
+        return ov.get("type") or conf.get("type") or guess_type(o["vendor"] or util.vendor_for(mac, oui), mac)
+
+    bridges = [m for m, o in obs.items() if len(o["ips"]) >= 2 and bridge_type(m, o) == "ap"]
+    owner = {ip: m for m, o in obs.items() if m not in bridges for ip in o["ips"]}
+    for b in bridges:
+        o = obs[b]
+        own = ov_dev.get(f"mac:{b}", {}).get("ip") or cfg_dev.get(b, {}).get("ip")
+        if not own:
+            own = next((ip for ip in o["ips"] if same_oui((ipinfo.get(ip) or {}).get("real_mac") or "", b)),
+                       None)
+        if own not in o["ips"]:
+            own = min(o["ips"], key=util.ip_sort_key)
+        for ip in [i for i in list(o["ips"]) if i != own]:
+            t, live = o["ips"].pop(ip), ip in o["live"]
+            o["live"].discard(ip)
+            info = ipinfo.get(ip) or {}
+            real = owner.get(ip) or info.get("real_mac")
+            if real in (b, None) or real in self_macs or same_oui(real, b):
+                real = None
+            if real:
+                r = ob(real)
+                r["ips"][ip] = max(filter(None, [r["ips"].get(ip), t]), default=None)
+                if live:
+                    r["online"] = True
+                    r["live"].add(ip)
+                r["via"].add("extender")
+                r["bridge"] = b
+                for k in NAME_KEYS:
+                    if info.get(k) and not r["names"].get(k):
+                        r["names"][k] = info[k]
+            else:
+                pseudo[ip] = {"t": t, "live": live, "bridge": b,
+                              "names": {k: info[k] for k in NAME_KEYS if info.get(k)}}
+        # Extender'ın topladığı adlar aslında arkasındakilerin olabilir: sadece kendi IP'sininkiler
+        o["names"] = {k: v for k, v in (ipinfo.get(own) or {}).items() if k in NAME_KEYS}
+    for ip, p in pseudo.items():
+        seen[f"ip:{ip}"] = dict(
+            ips=[ip], site="ev1", parent_hint=f"mac:{p['bridge']}", online=p["live"],
+            via=["extender"], names=p["names"], vendor=None,
+            note="Extender (MAC-NAT) üzerinden bağlı; gerçek MAC adresi cihaz ağa yeniden "
+                 "bağlandığında (DHCP) öğrenilir ve kalıcı kimliğe geçer.")
 
     # Aynı MAC'in en güncel IP'leri önce
     for mac, o in obs.items():
@@ -316,8 +416,8 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             mac=mac, vendor=vendor, ips=sorted(ips, key=util.ip_sort_key), site="ev1",
             kind="modem" if is_gw else None,
             label=ev1.get("modem_name") if is_gw else None,
-            parent_hint=None if is_gw else "ev1-gw", is_root=is_gw,
-            online=o["online"], via=sorted(o["via"]), names=o["names"])
+            parent_hint=None if is_gw else (f"mac:{o['bridge']}" if o.get("bridge") else "ev1-gw"),
+            is_root=is_gw, online=o["online"], via=sorted(o["via"]), names=o["names"])
 
     ev1_failed = raw.get("arp") is None and raw.get("passive") is None
     if raw.get("arp") is None and settings["sources"].get("arp"):
@@ -387,6 +487,8 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 via=["router dhcp"] + (["router arp"] if d.get("reachable") else []),
                 note=None if d.get("reachable") else
                 "DHCP kirası var ama şu an router'ın ARP tablosunda yok")
+        if router_sec.get("LISTEN") is not None:
+            router_kw["services"] = system_services(parse_proc_listen(router_sec.get("LISTEN")))
         ex = ((router_sec.get("EXITNODE") or [""])[0] or "").strip()
         if ex and ex in ts_by_id:
             overlay.append({"from": "router", "to_ts": ts_by_id[ex], "kind": "exit"})
@@ -410,14 +512,30 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         int(router_script["installed"] or 0) >= 3
 
     # ------------------------------------------------ Tailscale düğümleri
+    lan_by_ip = {}
+    for nid, kw in seen.items():
+        if (nid.startswith("mac:") or nid.startswith("ip:")) and kw.get("online") and not kw.get("is_root"):
+            for ip in kw.get("ips") or []:
+                lan_by_ip.setdefault(ip, nid)
     for name, info in ts_nodes.items():
         if name in (ts_self, router_ts_name):
             continue
         site = site_of.get(name, "mobile")
+        kind = ("cloud-vm" if site == "oracle" else
+                "laptop" if info.get("os") in ("linux", "windows", "macOS") else "phone")
+        lan_id = next((lan_by_ip[a] for a in info.get("addrs") or [] if a in lan_by_ip), None)
+        if info["online"] and lan_id and lan_id in seen and site == "mobile":
+            # Tailscale'in bildirdiği yerel IP şu an evlerimizden birinde canlı: cihaz evde.
+            # Aynı cihaz iki kez görünmesin: yerel kaydı tailnet cihazıyla birleştir.
+            lan = seen.pop(lan_id)
+            state.pop(lan_id, None)
+            seen[f"ts:{name}"] = {**lan, "label": name, "kind": kind, "tailscale": info,
+                                  "ips": (lan.get("ips") or []) + ([info["ip"]] if info.get("ip") else []),
+                                  "via": sorted(set(lan.get("via") or []) | {"tailscale"}),
+                                  "online": True, "roam": lan_id, "is_root": False}
+            continue
         seen[f"ts:{name}"] = dict(
-            label=name, site=site, ips=[info["ip"]] if info.get("ip") else [],
-            kind="cloud-vm" if site == "oracle" else
-            ("laptop" if info.get("os") in ("linux", "windows", "macOS") else "phone"),
+            label=name, site=site, ips=[info["ip"]] if info.get("ip") else [], kind=kind,
             tailscale=info, parent_hint=f"{site}-gw", online=info["online"], via=["tailscale"])
 
     # ------------------------------------------------ diğer ajanlar (sunucular)
@@ -469,7 +587,8 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
     for nid in list(state):
         st = state[nid]
         last = util.parse_iso(st.get("last_seen") or st.get("first_seen"))
-        if nid not in seen and (not last or last < cutoff):
+        if nid not in seen and (not last or last < cutoff or
+                                (nid.startswith("ip:") and now - last > dt.timedelta(hours=24))):
             del state[nid]
 
     # ------------------------------------------------ düğümler
@@ -493,13 +612,18 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
     for gw, kw in placeholders.items():
         if gw.split("-")[0] in sites_present and gw not in roots:
             roots[gw] = gw
+            ovg = ov_dev.get(gw, {})
             nodes[gw] = {"id": gw, "parent": "internet", "online": True, "services": [],
-                         "placeholder": True, **kw}
+                         "placeholder": True, **kw, "auto_label": kw["label"],
+                         "override": ovg or None, "edited": bool(ovg)}
+            if ovg.get("name"):
+                nodes[gw]["label"] = ovg["name"]
 
     for nid, st in state.items():
         snap = dict(st["snapshot"])
         mac = snap.get("mac")
-        conf = cfg.get("devices", {}).get("self", {}) if nid == "self" else (cfg_dev.get(mac, {}) if mac else {})
+        conf = cfg.get("devices", {}).get("self", {}) if nid == "self" else \
+            ({} if snap.get("roam") else (cfg_dev.get(mac, {}) if mac else {}))
         ov = ov_dev.get(nid, {})
         names = snap.pop("names", None) or {}
         hint = snap.pop("parent_hint", None)

@@ -6,7 +6,7 @@
 # İlk kurulum (bir kez) Laptop'tan; sonraki sürümleri ajan Pi'den kendisi alır:
 #   ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh
 
-TOPO_VERSION=3
+TOPO_VERSION=4
 
 echo "#VERSION"
 echo "$TOPO_VERSION"
@@ -24,6 +24,12 @@ echo "#ARPSCAN_WAN"
 # H3600P ağı: router'ın WAN arayüzü bu ağa doğrudan bağlı (L2).
 # ~256 ARP paketi, ~2 saniye. Bağlantı tablosuna kayıt açmaz.
 arp-scan -I wan --localnet --quiet --plain --retry=2 2>/dev/null
+
+echo "#LISTEN"
+# Router'ın dinlediği TCP portları (LuCI, DNS, SSH...): sadece yerel adres:port, onaltılık
+for f in /proc/net/tcp /proc/net/tcp6; do
+    [ -r "$f" ] && awk 'NR > 1 && $4 == "0A" { print $2 }' "$f"
+done 2>/dev/null
 
 echo "#EXITNODE"
 tailscale debug prefs 2>/dev/null | sed -n 's/.*"ExitNodeID": "\([^"]*\)".*/\1/p'

@@ -53,6 +53,7 @@ class App:
                                        self.cfg.get("general", {}).get("forget_after_days", 14))
         if fixtures and os.path.exists(os.path.join(fixtures, "passive.json")):
             self.passive.data = util.read_json(os.path.join(fixtures, "passive.json"), {})
+            self.passive.ipinfo = util.read_json(os.path.join(fixtures, "passive_ip.json"), {}) or {}
         self.update_info = util.read_json(self.paths.update, {}) or {}
         self.updating = False
         self.icons_path = os.path.join(self.paths.data, "icons.json")
@@ -153,6 +154,7 @@ class App:
         raw = dict(raw)
         src = settings["sources"]
         raw["passive"] = self.passive.snapshot() if src["passive"] else None
+        raw["passive_ip"] = self.passive.snapshot_ip() if src["passive"] else {}
         reports = self.store.reports()
         if not src["router"]:
             reports.pop("router", None)
@@ -406,6 +408,10 @@ class Handler(BaseHTTPRequestHandler):
                 res = app.store.set_device(nid, self.json_body())
                 app.rebuild()
                 return self.send_json({"id": nid, "override": res})
+            if method == "PUT" and path == "/api/site":
+                res = app.store.set_site(q.get("id", ""), self.json_body())
+                app.rebuild()
+                return self.send_json({"id": q.get("id"), "override": res})
             if method == "PUT" and path == "/api/app":
                 aid = q.get("id") or ""
                 if not aid or len(aid) > 80:

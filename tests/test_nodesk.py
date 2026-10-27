@@ -128,6 +128,35 @@ class CollectTest(unittest.TestCase):
         self.assertFalse(stopped["online"])
         self.assertEqual(self.ids["svc:ts:cloud-arm:edge"]["parent"], "ts:cloud-arm")
 
+    def test_extender_clients_split(self):
+        k = self.ids["mac:52:ff:20:53:86:18"]
+        self.assertEqual(k["ips"], ["192.168.44.4"], "extender'ın sadece kendi IP'si")
+        tab = self.ids["mac:d8:3a:dd:11:22:33"]
+        self.assertEqual(tab["parent"], "mac:52:ff:20:53:86:18")
+        self.assertEqual(tab["label"], "Galaxy-Tab-A")
+        self.assertEqual(tab["kind"], "tablet")
+        self.assertTrue(tab["online"])
+        spk = self.ids["ip:192.168.44.9"]
+        self.assertEqual(spk["parent"], "mac:52:ff:20:53:86:18")
+        self.assertEqual(spk["label"], "Mutfak-Hoparlor")
+        self.assertEqual(spk["kind"], "speaker")
+
+    def test_roaming_device_moves_home(self):
+        tuf = self.ids["ts:laptop"]
+        self.assertEqual(tuf["site"], "ev1", "Tailscale'in bildirdiği yerel IP Ev 1'de canlı")
+        self.assertEqual(tuf["parent"], "mac:6c:11:ba:f9:55:ab")
+        self.assertIn("192.168.44.130", tuf["ips"])
+        self.assertEqual(tuf["label"], "laptop")
+        self.assertNotIn("mac:3c:7c:3f:12:34:56", self.ids, "aynı cihaz iki kez görünmez")
+        self.assertEqual(self.ids["ts:nothing"]["site"], "mobile", "evde olmayan mobilde kalır")
+
+    def test_router_services(self):
+        by = {n["label"]: n for n in self.data["nodes"] if n["kind"] == "service" and n["parent"] == "router"}
+        self.assertEqual(by["LuCI"]["ports"], [80, 443])
+        self.assertEqual(by["DNS"]["ports"], [53])
+        self.assertEqual(by["SSH"]["ports"], [22])
+        self.assertNotIn("Port 8009", by, "127.0.0.1 dinleyenler dışarıda")
+
     def test_sources_status(self):
         for k in ("tailscale", "arp", "neigh", "docker", "host_ports"):
             self.assertTrue(self.data["sources"][k]["ok"], k)
@@ -335,7 +364,7 @@ class ApiTest(unittest.TestCase):
 
     def test_ingest_asks_old_agent_to_update(self):
         token = store.Store(store.Paths(self.home)).agents()["agents"]["router"]["token"]
-        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n3", "#VERSION\n2", 1)
+        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n4", "#VERSION\n2", 1)
         st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=old.encode(), ctype="text/plain")
         self.assertEqual((st, body.strip()), (200, "ok update"))
         cur = open(os.path.join(FIX, "router.txt")).read()
@@ -352,6 +381,20 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(st, 400)
         self.call("PUT", "/api/device?id=svc:self:media-app", {})
 
+    def test_rename_site_and_root(self):
+        st, _ = self.call("PUT", "/api/site?id=ev1", {"name": "Ana ev"})
+        self.assertEqual(st, 200)
+        st, _ = self.call("PUT", "/api/device?id=oracle-gw", {"name": "Frankfurt"})
+        self.assertEqual(st, 200)
+        with open(os.path.join(self.home, "www", "data.json"), encoding="utf-8") as f:
+            d = json.load(f)
+        self.assertEqual(next(x for x in d["sites"] if x["id"] == "ev1")["name"], "Ana ev")
+        self.assertEqual(next(n for n in d["nodes"] if n["id"] == "oracle-gw")["label"], "Frankfurt")
+        st, _ = self.call("PUT", "/api/site?id=uzay", {"name": "x"})
+        self.assertEqual(st, 400)
+        self.call("PUT", "/api/site?id=ev1", {})
+        self.call("PUT", "/api/device?id=oracle-gw", {})
+
     def test_scan_now(self):
         st, body = self.call("POST", "/api/scan", {})
         self.assertEqual(st, 200)
@@ -363,7 +406,7 @@ class ScriptsTest(unittest.TestCase):
             s = agents.installer(kind, "http://100.64.0.1:8088", "x", "tok")
             r = subprocess.run(["sh", "-n"], input=s, text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(agents.topo_version(), "3")
+        self.assertEqual(agents.topo_version(), "4")
 
     def test_router_installer_sandbox(self):
         """Router kurulum scriptini sahte kök dizinde BusyBox ile iki kez çalıştır."""

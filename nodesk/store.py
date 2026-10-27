@@ -115,6 +115,7 @@ class Store:
             o = util.read_json(self.p.overrides, {}) or {}
             o.setdefault("devices", {})
             o.setdefault("apps", {})
+            o.setdefault("sites", {})
             return o
 
     def set_device(self, node_id, patch):
@@ -164,6 +165,19 @@ class Store:
                 o["devices"].pop(node_id, None)
             util.write_json(self.p.overrides, o)
             return clean
+
+    def set_site(self, site_id, patch):
+        if site_id not in ("ev1", "ev2", "oracle", "mobile"):
+            raise ValueError("bilinmeyen grup")
+        with self.lock:
+            o = self.overrides()
+            name = str(patch.get("name") or "").strip()[:40]
+            if name:
+                o["sites"][site_id] = {"name": name}
+            else:
+                o["sites"].pop(site_id, None)
+            util.write_json(self.p.overrides, o)
+            return o["sites"].get(site_id, {})
 
     def set_app(self, app_id, patch):
         with self.lock:
