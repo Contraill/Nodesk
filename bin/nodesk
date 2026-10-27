@@ -38,11 +38,11 @@ app_rev() { git -C "$APP" rev-parse --short HEAD 2>/dev/null || echo "?"; }
 pi_ip() { tailscale ip -4 2>/dev/null | head -1 || true; }
 render() { sed "s#@NODESK_HOME@#$NODESK_HOME#g" "$1"; }
 py() { PYTHONPATH="$APP" NODESK_HOME="$NODESK_HOME" python3 "$@"; }
-api() { curl -fsS -m 15 "$@"; }
+api() { curl -fsS -m 5 "$@" 2>/dev/null; }
 api_json() {
     local m="$1" p="$2" body="${3:-}"
     [ -n "$body" ] || body='{}'
-    curl -fsS -m 15 -X "$m" -H 'Content-Type: application/json' -d "$body" "$API$p"
+    curl -fsS -m 5 -X "$m" -H 'Content-Type: application/json' -d "$body" "$API$p" 2>/dev/null
 }
 
 # ------------------------------------------------------------------ kontroller
@@ -223,14 +223,20 @@ print(r["received"] if r and r.get("received") else "")' 2>/dev/null || true)
     fi
 }
 
+# 0: tarama bitti, 1: süre doldu, 2: servis yanıt vermiyor
 scan_and_wait() {
-    local before
-    before=$(api "$API/api/state" | py -c 'import json,sys; print(json.load(sys.stdin)["scan"].get("last_end") or "")')
+    local before state fails=0 _
+    before=$(api "$API/api/state" | py -c 'import json,sys; print(json.load(sys.stdin)["scan"].get("last_end") or "")' 2>/dev/null) || before=""
     api_json POST /api/scan >/dev/null || true
-    local _
     for _ in $(seq 1 120); do
         sleep 1
-        if api "$API/api/state" | py -c '
+        if ! state=$(api "$API/api/state"); then
+            fails=$((fails + 1))
+            [ $fails -ge 6 ] && return 2
+            continue
+        fi
+        fails=0
+        if printf '%s' "$state" | py -c '
 import json, sys
 s = json.load(sys.stdin)["scan"]
 sys.exit(0 if not s["running"] and (s.get("last_end") or "") != sys.argv[1] else 1)' "$before" 2>/dev/null; then
@@ -271,8 +277,16 @@ PY
 
 first_run() {
     step "Tarama"
-    if scan_and_wait; then ok "tarama tamamlandı"; summary_lines
-    else warn "tarama 2 dakikada bitmedi: sudo nodesk logs"; fi
+    local rc=0
+    scan_and_wait || rc=$?
+    case $rc in
+        0) ok "tarama tamamlandı"; summary_lines ;;
+        2) warn "servis yanıt vermiyor; durduruluyor (Pi'yi yormasın)"
+           systemctl stop nodesk.service || true
+           journalctl -u nodesk.service -n 15 --no-pager -o cat || true
+           die "Kurulum yarım kaldı. Yukarıdaki çıktıyı geliştiriciye ilet." ;;
+        *) warn "tarama 2 dakikada bitmedi: sudo nodesk logs" ;;
+    esac
 }
 
 summary() {
@@ -361,7 +375,13 @@ cmd_run() {
     need_root run
     api "$API/api/state" >/dev/null 2>&1 || die "Servis çalışmıyor: sudo systemctl status nodesk"
     echo "Taranıyor…"
-    scan_and_wait && summary_lines || warn "tarama 2 dakikada bitmedi"
+    local rc=0
+    scan_and_wait || rc=$?
+    case $rc in
+        0) summary_lines ;;
+        2) die "Servis yanıt vermiyor: sudo nodesk logs" ;;
+        *) warn "tarama 2 dakikada bitmedi" ;;
+    esac
 }
 
 cmd_logs() { journalctl -u nodesk.service -n "${1:-50}" --no-pager -o cat; }

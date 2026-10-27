@@ -235,6 +235,46 @@ def parse_docker_ps_json(lines):
     return res
 
 
+def casaos_title(text):
+    """Compose dosyasındaki en üst seviye x-casaos -> title değerini satır satır okur.
+
+    Bilerek regex kullanılmaz: girintili uzun dosyalarda geri izleme (backtracking)
+    dakikalarca sürebilir ve tüm süreci kilitler (0.2.0'daki hata).
+    """
+    in_top, child_indent, title_indent, cand = False, None, None, {}
+    for line in text.splitlines()[:2000]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" \t"))
+        if indent == 0:
+            if in_top and (title_indent is not None or cand):
+                break
+            in_top, child_indent, title_indent = stripped == "x-casaos:", None, None
+            continue
+        if not in_top:
+            continue
+        if child_indent is None:
+            child_indent = indent
+        if title_indent is not None:
+            if indent > title_indent:
+                k, _, v = stripped.partition(":")
+                v = v.strip().strip("'\"")
+                if v:
+                    cand[k.strip().lower()] = v
+                continue
+            title_indent = None
+        if indent == child_indent and stripped.startswith("title:"):
+            v = stripped[6:].strip().strip("'\"")
+            if v:
+                return v[:40]
+            title_indent = indent
+    for k in ("custom", "en_us", "en_gb", "tr_tr"):
+        if cand.get(k):
+            return cand[k][:40]
+    return next(iter(cand.values()), None)
+
+
 def casaos_titles(r, projects, base="/var/lib/casaos/apps"):
     """CasaOS uygulama başlıkları: compose dosyasındaki x-casaos title."""
     out = {}
@@ -244,14 +284,18 @@ def casaos_titles(r, projects, base="/var/lib/casaos/apps"):
         if r.fixtures:
             text = r.fixture(os.path.join("casaos_apps", p, "docker-compose.yml"))
         else:
-            text = util.read_text(os.path.join(base, p, "docker-compose.yml"), "") or None
+            path = os.path.join(base, p, "docker-compose.yml")
+            try:
+                if os.path.getsize(path) > 512 * 1024:
+                    continue
+            except OSError:
+                continue
+            text = util.read_text(path, "") or None
         if not text:
             continue
-        # x-casaos:\n  title:\n    en_us: Orbis  (en üst seviyedeki ilk title)
-        m = re.search(r"^x-casaos:\s*$(?:\n[ \t]+.*)*?\n[ \t]+title:\s*\n[ \t]+\w+:\s*(.+)$",
-                      text, flags=re.M)
-        if m:
-            out[p] = m.group(1).strip().strip("'\"")[:40]
+        title = casaos_title(text)
+        if title:
+            out[p] = title
     return out
 
 

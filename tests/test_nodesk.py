@@ -114,6 +114,26 @@ class CollectTest(unittest.TestCase):
             self.assertTrue(self.data["sources"][k]["ok"], k)
 
 
+class CasaosTitleTest(unittest.TestCase):
+    def test_pathological_compose_is_fast(self):
+        """0.2.0'da regex bu biçimde dakikalarca takılıp tüm servisi kilitliyordu."""
+        body = "\n".join(f"        key{i}: value" for i in range(400))
+        text = "name: media-app\nservices:\n  web:\n    image: x\nx-casaos:\n" + body + "\n    title: plain\n"
+        t0 = time.monotonic()
+        sources.casaos_title(text)
+        self.assertLess(time.monotonic() - t0, 0.2)
+
+    def test_forms(self):
+        f = sources.casaos_title
+        self.assertEqual(f("x-casaos:\n  main: web\n  title:\n    en_us: Gitea\n"), "Gitea")
+        self.assertEqual(f("x-casaos:\n  title:\n    en_us: media-app\n    custom: Orbis\n"), "Orbis")
+        self.assertEqual(f("x-casaos:\n  title: 'Düz Başlık'\n"), "Düz Başlık")
+        self.assertIsNone(f("services:\n  web:\n    x-casaos:\n      title:\n        en_us: İçteki\n"))
+        self.assertIsNone(f("x-casaos:\n  tips:\n    title:\n      en_us: Derindeki\n"))
+        self.assertEqual(f("services:\n  a:\n    x-casaos:\n      title:\n        en_us: İç\nx-casaos:\n  title:\n    en_US: Dış\n"), "Dış")
+        self.assertIsNone(f(""))
+
+
 class PassiveTest(unittest.TestCase):
     def eth(self, src, dst, etype, payload):
         mac = lambda s: bytes(int(x, 16) for x in s.split(":"))
