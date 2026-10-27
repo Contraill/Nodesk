@@ -1,0 +1,77 @@
+# nodesk ayarları
+#
+# Kurulumda bu dosya /DATA/AppData/nodesk/config.toml olarak kopyalanır.
+# Güncellemeler o kopyaya DOKUNMAZ; isimlerin ve ayarların korunur.
+# Değişiklikten sonra yeniden başlatma gerekmez: sonraki turda (en geç 5 dk)
+# harita güncellenir. Hemen görmek için:  sudo nodesk run
+
+[general]
+oui_file = "/usr/share/arp-scan/ieee-oui.txt"
+# Depoda yeni sürüm var mı diye kaç saatte bir bakılsın (0 = hiç bakma)
+update_check_hours = 6
+# Bu kadar gün görülmeyen cihaz haritadan silinir (uyuyan cihazlar bu sürede gri görünür)
+forget_after_days = 14
+
+[ev1]
+name = "Ev 1"
+interface = "eth0"
+gateway_ip = "192.168.44.1"
+modem_name = "F1611A modem"
+server_name = "home-pi"
+
+[ev2]
+name = "Ev 2"
+modem_ip = "192.168.1.1"
+modem_name = "H3600P modem"
+router_name = "home-router"
+router_ts_name = "home-router"
+lan_dev = "br-lan"
+
+[router]
+host = "192.168.77.1"
+user = "root"
+
+[oracle]
+name = "Oracle Cloud"
+
+[mobile]
+name = "Uzak / Mobil"
+root_name = "Gezgin cihazlar"
+
+# Tailscale cihazlarının hangi gruba ait olduğu (listede olmayanlar "mobile")
+[tailscale.site_of]
+home-pi = "ev1"
+home-router = "ev2"
+cloud-arm = "oracle"
+cloud-amd-1 = "oracle"
+cloud-amd-2 = "oracle"
+
+# ---------------------------------------------------------------------------
+# Cihaz adları: MAC adresine göre (IP değişse de isim kalır).
+#   name   = haritada görünen ad
+#   type   = simge: modem, router, ap, server, laptop, pc, phone, tv, iot,
+#            lamp, vacuum, camera, printer, console, device
+#   parent = bu cihazı başka bir cihazın altına çiz (o cihazın MAC'i).
+#            Örn. extender'a bağlı cihazlar için Keenetic'in MAC'i.
+# Telefonlar her Wi-Fi ağı için rastgele MAC kullanır; aynı telefonun iki
+# MAC'i görünürse ikisini de aynı adla yazabilirsin.
+# ---------------------------------------------------------------------------
+[devices]
+"self"              = { name = "home-pi", type = "server" }
+
+# Ev 1 (F1611A, 192.168.44.0/24)
+"6c:11:ba:f9:55:ab" = { name = "F1611A modem", type = "modem" }
+"52:ff:20:53:86:18" = { name = "Keenetic-0000 extender", type = "ap" }
+"70:54:b4:5a:b6:4e" = { name = "Toshiba TV", type = "tv" }
+"b4:e6:2a:c2:32:4a" = { name = "LG TV 1", type = "tv" }
+"38:8c:50:9f:be:1c" = { name = "LG TV 2", type = "tv" }
+"b0:4a:39:04:a7:c3" = { name = "Roborock", type = "vacuum" }
+"54:48:e6:2b:68:ef" = { name = "Yeelight lamba", type = "lamp" }
+"d2:61:e5:6d:9a:c3" = { name = "S24", type = "phone" }
+"a6:8e:da:14:ea:d0" = { name = "S24", type = "phone" }
+"72:e2:62:ad:28:9b" = { name = "A51", type = "phone" }
+"7e:ba:4d:0f:b1:10" = { name = "A51", type = "phone" }
+
+# Ev 2 (H3600P, 192.168.1.0/24 ve router arkası 192.168.77.0/24)
+"c0:49:43:1c:cc:12" = { name = "H3600P modem", type = "modem" }
+"1c:af:4a:55:4b:2c" = { name = "Samsung", type = "phone" }

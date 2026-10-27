@@ -1,0 +1,148 @@
+{
+ "Self": {
+  "ID": "nEXAMPLE7CNTRL",
+  "HostName": "Home-Pi",
+  "DNSName": "home-pi.tail1234.ts.net.",
+  "TailscaleIPs": [
+   "100.64.0.1",
+   "fd7a:115c:a1e0::1"
+  ],
+  "OS": "linux",
+  "Online": true,
+  "CurAddr": "",
+  "Relay": "",
+  "ExitNode": false,
+  "ExitNodeOption": false,
+  "PrimaryRoutes": [
+   "192.168.44.0/24",
+   "0.0.0.0/0"
+  ],
+  "LastSeen": "2026-10-27T13:00:00Z"
+ },
+ "Peer": {
+  "k1": {
+   "ID": "nR1",
+   "HostName": "home-router",
+   "DNSName": "home-router.tail1234.ts.net.",
+   "TailscaleIPs": [
+    "100.64.0.2",
+    "fd7a:115c:a1e0::1"
+   ],
+   "OS": "linux",
+   "Online": true,
+   "CurAddr": "203.0.113.10:41641",
+   "Relay": "",
+   "ExitNode": false,
+   "ExitNodeOption": false,
+   "PrimaryRoutes": [
+    "192.168.77.0/24",
+    "192.168.1.0/24"
+   ],
+   "LastSeen": "2026-10-27T13:00:00Z"
+  },
+  "k2": {
+   "ID": "nA1",
+   "HostName": "cloud-amd-1",
+   "DNSName": "cloud-amd-1.tail1234.ts.net.",
+   "TailscaleIPs": [
+    "100.64.0.7",
+    "fd7a:115c:a1e0::1"
+   ],
+   "OS": "linux",
+   "Online": true,
+   "CurAddr": "",
+   "Relay": "fra",
+   "ExitNode": false,
+   "ExitNodeOption": false,
+   "PrimaryRoutes": null,
+   "LastSeen": "2026-10-27T13:00:00Z"
+  },
+  "k3": {
+   "ID": "nA2",
+   "HostName": "cloud-amd-2",
+   "DNSName": "cloud-amd-2.tail1234.ts.net.",
+   "TailscaleIPs": [
+    "100.64.0.8",
+    "fd7a:115c:a1e0::1"
+   ],
+   "OS": "linux",
+   "Online": true,
+   "CurAddr": "",
+   "Relay": "fra",
+   "ExitNode": false,
+   "ExitNodeOption": false,
+   "PrimaryRoutes": null,
+   "LastSeen": "2026-10-27T13:00:00Z"
+  },
+  "k4": {
+   "ID": "nARM",
+   "HostName": "cloud-arm",
+   "DNSName": "cloud-arm.tail1234.ts.net.",
+   "TailscaleIPs": [
+    "100.64.0.6",
+    "fd7a:115c:a1e0::1"
+   ],
+   "OS": "linux",
+   "Online": true,
+   "CurAddr": "203.0.113.30:41641",
+   "Relay": "",
+   "ExitNode": false,
+   "ExitNodeOption": true,
+   "PrimaryRoutes": [
+    "10.77.0.0/16"
+   ],
+   "LastSeen": "2026-10-27T13:00:00Z"
+  },
+  "k5": {
+   "ID": "nTUF",
+   "HostName": "laptop",
+   "DNSName": "laptop.tail1234.ts.net.",
+   "TailscaleIPs": [
+    "100.64.0.4",
+    "fd7a:115c:a1e0::1"
+   ],
+   "OS": "linux",
+   "Online": true,
+   "CurAddr": "203.0.113.20:50567",
+   "Relay": "",
+   "ExitNode": false,
+   "ExitNodeOption": false,
+   "PrimaryRoutes": null,
+   "LastSeen": "2026-10-27T13:00:00Z"
+  },
+  "k6": {
+   "ID": "nWIN",
+   "HostName": "laptop-old",
+   "DNSName": "laptop-old.tail1234.ts.net.",
+   "TailscaleIPs": [
+    "100.64.0.5",
+    "fd7a:115c:a1e0::1"
+   ],
+   "OS": "windows",
+   "Online": false,
+   "CurAddr": "",
+   "Relay": "",
+   "ExitNode": false,
+   "ExitNodeOption": false,
+   "PrimaryRoutes": null,
+   "LastSeen": "2026-10-25T10:00:00Z"
+  },
+  "k7": {
+   "ID": "nNOT",
+   "HostName": "nothing",
+   "DNSName": "nothing.tail1234.ts.net.",
+   "TailscaleIPs": [
+    "100.64.0.3",
+    "fd7a:115c:a1e0::1"
+   ],
+   "OS": "android",
+   "Online": true,
+   "CurAddr": "",
+   "Relay": "nue",
+   "ExitNode": false,
+   "ExitNodeOption": false,
+   "PrimaryRoutes": null,
+   "LastSeen": "2026-10-27T13:00:00Z"
+  }
+ }
+}

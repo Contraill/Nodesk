@@ -1,0 +1,45 @@
+# nodesk web arayüzü. Kurulum ve güncellemede `nodesk` aracı bu
+# dosyadaki @NODESK_HOME@ yer tutucusunu doldurup CasaOS'a uygular.
+# Elle CasaOS'a içe aktarma GEREKMEZ.
+#
+# Uygulama kimliği bilerek "nodesk-web": CasaOS'tan kaldırılırsa
+# /DATA/AppData/nodesk-web silinir, asıl veri klasörü değil.
+name: nodesk-web
+services:
+  web:
+    image: nginx:1.27-alpine
+    container_name: nodesk-web
+    restart: unless-stopped
+    ports:
+      - "8088:80"
+    volumes:
+      - @NODESK_HOME@/app/web:/usr/share/nginx/html:ro
+      - @NODESK_HOME@/www:/usr/share/nginx/html/live:ro
+      - @NODESK_HOME@/app/deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    mem_limit: 32m
+    x-casaos:
+      envs: []
+      ports:
+        - container: "80"
+          description:
+            en_us: Web UI
+      volumes:
+        - container: /usr/share/nginx/html
+          description:
+            en_us: nodesk web files (git)
+x-casaos:
+  architectures: [arm64, arm, amd64]
+  main: web
+  author: nodesk
+  developer: nodesk
+  category: Network
+  icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/nginx.png
+  tagline:
+    en_us: Network topology map
+  description:
+    en_us: HomeNet network topology map
+  title:
+    en_us: Nodesk
+  index: /
+  port_map: "8088"
+  scheme: http

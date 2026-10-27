@@ -1,0 +1,13 @@
+[Unit]
+Description=nodesk: ag topolojisi verisini topla
+After=network-online.target tailscaled.service docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=NODESK_HOME=@NODESK_HOME@
+WorkingDirectory=@NODESK_HOME@
+ExecStart=/usr/bin/python3 @NODESK_HOME@/app/collector/collect.py
+TimeoutStartSec=150
+Nice=10
+IOSchedulingClass=idle

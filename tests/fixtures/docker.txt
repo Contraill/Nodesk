@@ -1,0 +1,5 @@
+media-app-frontend	media-app-frontend:latest	0.0.0.0:3000->80/tcp, [::]:3000->80/tcp
+media-app-backend	media-app-backend:latest	0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+big-bear-gitea-mirror	ghcr.io/raylabshq/gitea-mirror:v3.36.2	0.0.0.0:4321->4321/tcp, [::]:4321->4321/tcp
+gitea	gitea/gitea:1.27.3	0.0.0.0:2222->22/tcp, [::]:2222->22/tcp, 0.0.0.0:3002->3000/tcp, [::]:3002->3000/tcp
+nodesk	nginx:1.27-alpine	0.0.0.0:8088->80/tcp

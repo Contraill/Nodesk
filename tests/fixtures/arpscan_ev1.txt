@@ -1,0 +1,12 @@
+192.168.44.1	6c:11:ba:f9:55:ab	(Unknown)
+192.168.44.4	52:ff:20:53:86:18	(Unknown: locally administered)
+192.168.44.5	88:a2:9e:35:f8:bc	(Unknown)
+192.168.44.6	70:54:b4:5a:b6:4e	Vestel Elektronik San ve Tic. A.S.
+192.168.44.7	52:ff:20:53:86:18	(Unknown: locally administered) (DUP: 2)
+192.168.44.8	d2:61:e5:6d:9a:c3	(Unknown: locally administered)
+192.168.44.101	b4:e6:2a:c2:32:4a	LG Innotek
+192.168.44.102	b0:4a:39:04:a7:c3	Beijing Roborock Technology Co., Ltd.
+192.168.44.103	54:48:e6:2b:68:ef	Beijing Xiaomi Mobile Software Co., Ltd
+192.168.44.104	72:e2:62:ad:28:9b	(Unknown: locally administered)
+192.168.44.105	38:8c:50:9f:be:1c	LG Electronics
+192.168.44.106	3c:22:fb:11:22:33	Apple, Inc.

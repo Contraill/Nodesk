@@ -1,0 +1,5 @@
+[{"ifindex":1,"ifname":"lo","address":"00:00:00:00:00:00","addr_info":[{"family":"inet","local":"127.0.0.1","prefixlen":8}]},
+{"ifindex":2,"ifname":"eth0","address":"88:a2:9e:35:f8:b1","addr_info":[{"family":"inet","local":"192.168.44.2","prefixlen":24}]},
+{"ifindex":3,"ifname":"wlan0","address":"88:a2:9e:35:f8:bc","addr_info":[{"family":"inet","local":"192.168.44.5","prefixlen":24}]},
+{"ifindex":4,"ifname":"tailscale0","address":"","addr_info":[{"family":"inet","local":"100.64.0.1","prefixlen":32}]},
+{"ifindex":5,"ifname":"docker0","address":"02:42:aa:bb:cc:dd","addr_info":[{"family":"inet","local":"172.17.0.1","prefixlen":16}]}]

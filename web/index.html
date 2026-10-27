@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nodesk</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141C24'/%3E%3Cpath d='M8 22h16M11 22V12h10v10M16 12V7' stroke='%235BC8A6' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #EEF1EC;
+  --grid: #DCE2DC;
+  --frame: #F8FAF6;
+  --frame-line: #C3CCC6;
+  --card: #FFFFFF;
+  --card-line: #C9D2CD;
+  --text: #17222B;
+  --muted: #5E6C76;
+  --cable: #8C9AA3;
+  --on: #1F9C78;
+  --tail: #5B57D6;
+  --relay: #B7801C;
+  --off: #A3ADB3;
+  --exit: #5B57D6;
+  --hl: #F0C94A;
+  --panel: #FFFFFF;
+  --shadow: 0 1px 0 rgba(23,34,43,.06), 0 6px 18px rgba(23,34,43,.07);
+  --sans: "Barlow Semi Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141C24; --grid: #1A242E; --frame: #18222B; --frame-line: #2E3B47;
+    --card: #1F2A34; --card-line: #33424F; --text: #DCE4E8; --muted: #8B9AA6;
+    --cable: #50616E; --on: #5BC8A6; --tail: #8E8CF0; --relay: #E6B85C; --off: #55636E;
+    --exit: #8E8CF0; --hl: #F0C94A; --panel: #1B252F;
+    --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141C24; --grid: #1A242E; --frame: #18222B; --frame-line: #2E3B47;
+  --card: #1F2A34; --card-line: #33424F; --text: #DCE4E8; --muted: #8B9AA6;
+  --cable: #50616E; --on: #5BC8A6; --tail: #8E8CF0; --relay: #E6B85C; --off: #55636E;
+  --exit: #8E8CF0; --hl: #F0C94A; --panel: #1B252F;
+  --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--text); font-family: var(--sans);
+  font-size: 15px; overflow: hidden; -webkit-font-smoothing: antialiased;
+}
+#map { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; display: block; }
+#map.dragging { cursor: grabbing; }
+
+/* ---------- üst çubuk ---------- */
+.bar {
+  position: fixed; top: max(12px, env(safe-area-inset-top)); left: 16px; right: 16px;
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; pointer-events: none; z-index: 5;
+}
+.bar > * { pointer-events: auto; }
+.brand {
+  display: flex; align-items: baseline; gap: 10px; background: var(--panel);
+  border: 1px solid var(--card-line); border-radius: 10px; padding: 7px 12px 7px 12px; box-shadow: var(--shadow);
+}
+.brand h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.01em; line-height: 1; }
+.brand .meta { color: var(--muted); font-size: 14px; white-space: nowrap; }
+.brand .meta b { color: var(--on); font-weight: 600; }
+.tools {
+  display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--card-line);
+  border-radius: 10px; padding: 4px; box-shadow: var(--shadow); align-items: center;
+}
+.tools input[type=search] {
+  font: inherit; font-size: 15px; color: var(--text); background: transparent; border: 0;
+  width: 170px; padding: 5px 8px; outline: none;
+}
+.tools input[type=search]::placeholder { color: var(--muted); }
+.btn {
+  font: inherit; font-size: 14px; font-weight: 500; color: var(--text); background: transparent;
+  border: 1px solid transparent; border-radius: 7px; padding: 5px 9px; cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.btn[aria-pressed="true"] { border-color: var(--card-line); background: color-mix(in srgb, var(--tail) 14%, transparent); }
+.btn:focus-visible, .tools input:focus-visible, .card:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
+.sep { width: 1px; align-self: stretch; background: var(--card-line); margin: 3px 2px; }
+.errors {
+  max-width: 560px; background: color-mix(in srgb, var(--relay) 16%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--relay) 50%, transparent); border-radius: 10px;
+  padding: 8px 12px; font-size: 14px; line-height: 1.4; box-shadow: var(--shadow);
+}
+.alerts {
+  position: fixed; top: 70px; left: 16px; right: 16px; z-index: 5; pointer-events: none;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+}
+.alerts > * { pointer-events: auto; }
+.notice {
+  max-width: 560px; background: color-mix(in srgb, var(--tail) 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--tail) 45%, transparent); border-radius: 10px;
+  padding: 8px 12px; font-size: 14px; line-height: 1.4; box-shadow: var(--shadow);
+}
+.errors ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* ---------- lejant ---------- */
+.legend {
+  position: fixed; left: 16px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 4;
+  display: flex; gap: 14px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--card-line);
+  border-radius: 10px; padding: 7px 12px; max-width: calc(100% - 32px);
+}
+.legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.legend i { display: inline-block; width: 22px; height: 0; border-top: 2px solid; }
+
+/* ---------- harita öğeleri ---------- */
+.frame rect.body { fill: var(--frame); stroke: var(--frame-line); stroke-width: 1.2; }
+.frame .tab { fill: var(--frame); stroke: var(--frame-line); stroke-width: 1.2; }
+.frame .title { font: 700 30px var(--sans); fill: var(--text); letter-spacing: -.01em; }
+.frame .sub { font: 400 14px var(--mono); fill: var(--muted); }
+.cable { fill: none; stroke: var(--cable); stroke-width: 1.6; stroke-linejoin: round; }
+.cable.off { stroke: var(--off); stroke-dasharray: 3 4; opacity: .7; }
+.cable.uplink { stroke-dasharray: 2 5; stroke-linecap: round; opacity: .8; }
+.tail { fill: none; stroke-width: 1.4; stroke-dasharray: 6 5; opacity: .75; }
+.tail.direct { stroke: var(--tail); }
+.tail.relay { stroke: var(--relay); }
+.tail.down { stroke: var(--off); opacity: .45; }
+.exit { fill: none; stroke: var(--exit); stroke-width: 3; stroke-linecap: round; }
+.exit-flow { fill: none; stroke: var(--bg); stroke-width: 3; stroke-dasharray: 2 34; stroke-linecap: round; animation: flow 1.8s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -36; } }
+@media (prefers-reduced-motion: reduce) { .exit-flow { animation: none; } }
+.exit-label { font: 600 13px var(--sans); fill: var(--exit); }
+.exit-label-bg { fill: var(--bg); }
+
+.card { cursor: pointer; outline: none; }
+.card rect.box { fill: var(--card); stroke: var(--card-line); stroke-width: 1.2; }
+.card:hover rect.box { stroke: var(--text); }
+.card.selected rect.box { stroke: var(--hl); stroke-width: 2.4; }
+.card.match rect.box { stroke: var(--hl); stroke-width: 2.4; }
+.card.dim { opacity: .25; }
+.card.offline { opacity: .55; }
+.card.offline rect.box { stroke-dasharray: 4 3; }
+.card .name { font: 600 16px var(--sans); fill: var(--text); }
+.card .ip { font: 400 12.5px var(--mono); fill: var(--muted); }
+.card .icon { fill: none; stroke: var(--text); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.card .led { stroke: var(--card); stroke-width: 2; }
+.card .svc { font: 500 13px var(--sans); fill: var(--text); }
+.card .svc-port { font: 400 12px var(--mono); fill: var(--muted); }
+.card .svc-row { fill: color-mix(in srgb, var(--text) 5%, transparent); }
+.card .ts-badge { font: 600 11px var(--sans); }
+.hub rect { fill: var(--card); stroke: var(--tail); stroke-width: 1.6; }
+.hub text { font: 700 16px var(--sans); fill: var(--tail); }
+.inet rect { fill: var(--text); }
+.inet text { font: 700 16px var(--sans); fill: var(--bg); }
+.inet .icon { stroke: var(--bg); fill: none; stroke-width: 1.6; }
+
+/* ---------- ayrıntı paneli ---------- */
+.panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100%); z-index: 10;
+  background: var(--panel); border-left: 1px solid var(--card-line); box-shadow: -8px 0 30px rgba(0,0,0,.18);
+  transform: translateX(105%); transition: transform .22s ease; overflow-y: auto;
+  padding: 18px 20px max(24px, env(safe-area-inset-bottom));
+}
+.panel.open { transform: none; }
+@media (prefers-reduced-motion: reduce) { .panel { transition: none; } }
+.panel h2 { margin: 2px 40px 2px 0; font-size: 28px; line-height: 1.1; font-weight: 700; letter-spacing: -.01em; }
+.panel .kind { color: var(--muted); font-size: 15px; margin-bottom: 14px; }
+.panel .close { position: absolute; top: 12px; right: 12px; font-size: 22px; line-height: 1; padding: 6px 10px; }
+.panel dl { display: grid; grid-template-columns: 112px 1fr; gap: 7px 12px; margin: 0 0 16px; font-size: 15px; }
+.panel dt { color: var(--muted); }
+.panel dd { margin: 0; overflow-wrap: anywhere; }
+.panel .mono { font-family: var(--mono); font-size: 13.5px; }
+.panel h3 { font-size: 17px; margin: 18px 0 8px; font-weight: 600; }
+.panel .svc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.panel .svc-list a, .panel .svc-list span.s {
+  display: flex; justify-content: space-between; gap: 10px; padding: 7px 10px; border-radius: 7px;
+  border: 1px solid var(--card-line); color: var(--text); text-decoration: none; font-size: 15px;
+}
+.panel .svc-list a:hover { border-color: var(--on); }
+.panel .svc-list small { color: var(--muted); font-family: var(--mono); font-size: 12.5px; }
+.panel .note { font-size: 14.5px; line-height: 1.45; color: var(--muted); background: color-mix(in srgb, var(--text) 5%, transparent); border-radius: 8px; padding: 9px 11px; }
+.panel pre {
+  font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere;
+  background: color-mix(in srgb, var(--text) 7%, transparent); border-radius: 8px; padding: 10px 11px; margin: 6px 0;
+}
+.status { display: inline-flex; align-items: center; gap: 7px; }
+.status::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--off); }
+.status.on::before { background: var(--on); }
+.status.relay::before { background: var(--relay); }
+
+@media (max-width: 640px) {
+  .brand h1 { font-size: 19px; }
+  .tools input[type=search] { width: 110px; }
+  .btn .lbl { display: none; }
+  .legend { font-size: 12.5px; gap: 10px; }
+  .panel { top: auto; width: 100%; max-height: 72vh; border-left: 0; border-top: 1px solid var(--card-line);
+    border-radius: 16px 16px 0 0; transform: translateY(105%); }
+}
+</style>
+</head>
+<body>
+<svg id="map" role="img" aria-label="Ağ topolojisi haritası"><g id="world"></g></svg>
+
+<div class="bar">
+  <div class="brand"><h1>HomeNet</h1><span class="meta" id="meta">yükleniyor…</span></div>
+  <div class="tools">
+    <input type="search" id="q" placeholder="Cihaz, IP ya da MAC ara" aria-label="Cihaz ara">
+    <span class="sep"></span>
+    <button class="btn" id="tTail" aria-pressed="true" title="Tailscale bağlantılarını göster">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="2" fill="currentColor"/><circle cx="13" cy="3.5" r="2" fill="currentColor"/><circle cx="13" cy="12.5" r="2" fill="currentColor"/><path d="M5 7l6-3M5 9l6 3" stroke="currentColor" stroke-dasharray="2 2" fill="none"/></svg><span class="lbl">Tailnet</span></button>
+    <button class="btn" id="tOff" aria-pressed="true" title="Şu an görünmeyen cihazları göster">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="currentColor" stroke-dasharray="2.5 2"/></svg><span class="lbl">Çevrimdışı</span></button>
+    <button class="btn" id="fit" title="Haritayı ekrana sığdır">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.6" fill="none"/></svg><span class="lbl">Sığdır</span></button>
+    <button class="btn" id="theme" title="Açık / koyu tema">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg></button>
+  </div>
+</div>
+<div class="alerts" id="alerts">
+  <div class="errors" id="errors" hidden></div>
+  <div class="notice" id="notice" hidden></div>
+</div>
+
+<div class="legend" aria-label="Lejant">
+  <span><i style="border-color:var(--cable)"></i>Yerel ağ</span>
+  <span><i style="border-color:var(--tail);border-top-style:dashed"></i>Tailscale doğrudan</span>
+  <span><i style="border-color:var(--relay);border-top-style:dashed"></i>Tailscale aktarıcı</span>
+  <span><i style="border-color:var(--exit);border-top-width:3px"></i>Exit node trafiği</span>
+</div>
+
+<aside class="panel" id="panel" aria-live="polite" aria-label="Cihaz ayrıntıları">
+  <button class="btn close" id="pclose" aria-label="Paneli kapat">×</button>
+  <div id="pbody"></div>
+</aside>
+
+<script>
+"use strict";
+const NS = "http://www.w3.org/2000/svg";
+const $ = (s) => document.querySelector(s);
+const svg = $("#map"), world = $("#world");
+
+/* ---------------- simgeler (24x24, çizgi) ---------------- */
+const ICONS = {
+  modem:   "M3 15h18v5H3zM7 17.5h.01M11 17.5h.01M8 15l-2-7M16 15l2-7",
+  router:  "M3 14h18v6H3zM7 17h.01M11 17h.01M12 14V8M8.5 6.5a5 5 0 0 1 7 0M6 4a8.5 8.5 0 0 1 12 0",
+  ap:      "M12 19h.01M8.5 15.5a5 5 0 0 1 7 0M5.5 12.5a9 9 0 0 1 13 0M2.5 9.5a13 13 0 0 1 19 0",
+  server:  "M4 3h16v7H4zM4 14h16v7H4zM8 6.5h.01M8 17.5h.01M12 6.5h5M12 17.5h5",
+  "cloud-vm": "M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01",
+  pc:      "M3 4h18v12H3zM8 20h8M12 16v4",
+  laptop:  "M5 5h14v10H5zM2 19h20l-2-4H4z",
+  phone:   "M7 2h10v20H7zM11 18h2",
+  tv:      "M2 5h20v12H2zM8 21h8M12 17v4",
+  iot:     "M7 7h10v10H7zM10 10h4v4h-4zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4",
+  lamp:    "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z",
+  vacuum:  "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8M8 5.5l1.5 2.5",
+  camera:  "M3 7h4l2-3h6l2 3h4v13H3zM12 10a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7",
+  printer: "M6 9V3h12v6M6 18H3v-9h18v9h-3M6 14h12v7H6z",
+  console: "M6 8h12a4 4 0 0 1 4 4v1a4 4 0 0 1-7 2.6H9A4 4 0 0 1 2 13v-1a4 4 0 0 1 4-4zM7 11v3M5.5 12.5h3M16 12h.01M18 13.5h.01",
+  cloud:   "M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19.5 10 4 4 0 0 1 18 18z",
+  roam:    "M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21zM12 7a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5",
+  internet:"M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9M12 3c-2.5 2.6-3.8 5.6-3.8 9s1.3 6.4 3.8 9",
+  device:  "M5 4h14v16H5zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6M12 16.5h.01",
+};
+const KIND_TR = {
+  modem: "Modem", router: "Router", ap: "Erişim noktası / extender", server: "Sunucu",
+  "cloud-vm": "Bulut sunucu", pc: "Masaüstü bilgisayar", laptop: "Dizüstü bilgisayar",
+  phone: "Telefon / tablet", tv: "Televizyon", iot: "Akıllı cihaz", lamp: "Akıllı lamba",
+  vacuum: "Robot süpürge", camera: "Kamera", printer: "Yazıcı", console: "Oyun konsolu",
+  cloud: "Bulut", roam: "Gezgin cihazlar", internet: "İnternet", device: "Tanımlanmamış cihaz",
+};
+const ORDER = ["router", "ap", "server", "cloud-vm", "pc", "laptop", "tv", "console", "phone",
+               "camera", "printer", "iot", "lamp", "vacuum", "device"];
+const MAJOR = new Set(["router", "ap", "server"]);
+
+/* ---------------- ölçüler ---------------- */
+const CW = 200, CH = 52, GX = 22, GY = 46, SPINE = 18, ROWGAP = 10, MAXROWS = 6;
+const SVC_H = 22, FRAME_PAD = 26, FRAME_TOP = 58, SITE_GAP = 46;
+
+/* ---------------- durum ---------------- */
+let DATA = null, byId = new Map(), selected = null;
+const prefs = { tail: false, off: true };
+try { Object.assign(prefs, JSON.parse(localStorage.getItem("nodesk-prefs") || "{}")); } catch (e) {}
+const savePrefs = () => { try { localStorage.setItem("nodesk-prefs", JSON.stringify(prefs)); } catch (e) {} };
+let view = { x: 0, y: 0, k: 1 }, fitted = false, bounds = null;
+
+function el(tag, attrs, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs || {}) if (attrs[k] !== undefined && attrs[k] !== null) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function text(parent, x, y, str, cls, extra) {
+  const t = el("text", Object.assign({ x, y, class: cls }, extra || {}), parent);
+  t.textContent = str; return t;
+}
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function clip(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+function ago(iso) {
+  if (!iso) return "—";
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 90) return "az önce";
+  if (s < 3600) return Math.round(s / 60) + " dk önce";
+  if (s < 86400 * 2) return Math.round(s / 3600) + " sa önce";
+  return Math.round(s / 86400) + " gün önce";
+}
+function fmtTime(iso) {
+  if (!iso) return "—";
+  try { return new Date(iso).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" }); } catch (e) { return iso; }
+}
+function tsPath(n) {
+  const t = n.tailscale; if (!t) return null;
+  if (!t.online) return "down";
+  if ((t.path || "").startsWith("aktarıcı")) return "relay";
+  return "direct";
+}
+function hostBase() { return location.hostname || "192.168.44.2"; }
+
+/* ---------------- yerleşim ---------------- */
+function cardH(n) { return n.kind === "server" && n.services && n.services.length ? CH + 8 + n.services.length * SVC_H : CH; }
+function visibleKids(n) {
+  return (n.kids || []).filter((k) => prefs.off || k.online || k.kids.some((c) => c.online) || MAJOR.has(k.kind));
+}
+function kidSort(a, b) {
+  const oa = ORDER.indexOf(a.kind), ob = ORDER.indexOf(b.kind);
+  if (oa !== ob) return (oa < 0 ? 99 : oa) - (ob < 0 ? 99 : ob);
+  if (a.online !== b.online) return a.online ? -1 : 1;
+  return ipNum(a.ips[0]) - ipNum(b.ips[0]);
+}
+function ipNum(ip) { if (!ip) return 1e12; return ip.split(".").reduce((a, b) => a * 256 + (+b || 0), 0); }
+
+function measure(n) {
+  n.cw = CW; n.ch = cardH(n);
+  const kids = visibleKids(n).sort(kidSort);
+  n.blocks = [];
+  if (!kids.length) { n.bw = n.cw; n.bh = n.ch; return; }
+  const big = kids.filter((k) => visibleKids(k).length || MAJOR.has(k.kind));
+  const small = kids.filter((k) => !big.includes(k));
+  for (const k of big) { measure(k); n.blocks.push({ type: "node", node: k, w: k.bw, h: k.bh }); }
+  for (let i = 0; i < small.length; i += MAXROWS) {
+    const items = small.slice(i, i + MAXROWS);
+    items.forEach((k) => { k.cw = CW; k.ch = cardH(k); k.blocks = []; });
+    const h = items.reduce((s, k) => s + k.ch, 0) + ROWGAP * (items.length - 1);
+    n.blocks.push({ type: "col", items, w: CW + SPINE, h });
+  }
+  n.rowW = n.blocks.reduce((s, b) => s + b.w, 0) + GX * (n.blocks.length - 1);
+  n.bw = Math.max(n.cw, n.rowW);
+  n.bh = n.ch + GY + Math.max(...n.blocks.map((b) => b.h));
+}
+
+function place(n, x, y, edges) {
+  n.x = x + (n.bw - n.cw) / 2; n.y = y; n.bx = x;
+  if (!n.blocks.length) return;
+  const px = n.x + n.cw / 2, pb = n.y + n.ch, busY = pb + GY / 2, top = pb + GY;
+  let bx = x + (n.bw - n.rowW) / 2;
+  for (const b of n.blocks) {
+    if (b.type === "node") {
+      place(b.node, bx, top, edges);
+      const cx = b.node.x + b.node.cw / 2;
+      edges.push({ d: `M${px},${pb}V${busY}H${cx}V${top}`, off: !b.node.online });
+    } else {
+      const sx = bx + 7;
+      let yy = top;
+      for (const k of b.items) {
+        k.x = bx + SPINE; k.y = yy;
+        const my = yy + Math.min(k.ch, CH) / 2;
+        const r = 6;
+        edges.push({ d: `M${px},${pb}V${busY}H${sx}V${my - r}Q${sx},${my} ${sx + r},${my}H${k.x}`, off: !k.online });
+        yy += k.ch + ROWGAP;
+      }
+    }
+    bx += b.w + GX;
+  }
+}
+
+function build(data) {
+  byId = new Map();
+  for (const n of data.nodes) { n.kids = []; byId.set(n.id, n); }
+  for (const n of data.nodes) { const p = byId.get(n.parent); if (p && p !== n) p.kids.push(n); }
+}
+
+function layout() {
+  const sites = DATA.sites.map((s) => {
+    const roots = DATA.nodes.filter((n) => n.site === s.id && n.parent === "internet");
+    return { ...s, roots };
+  }).filter((s) => s.roots.length);
+
+  for (const s of sites) {
+    let w = 0, h = 0;
+    for (const r of s.roots) { measure(r); w += r.bw; h = Math.max(h, r.bh); }
+    w += GX * (s.roots.length - 1);
+    s.w = Math.max(w + FRAME_PAD * 2, 260); s.h = h + FRAME_TOP + FRAME_PAD; s.innerW = w;
+  }
+  // Ekrana en iyi sığan satır sayısını seç
+  const vw = svg.clientWidth || 1200, vh = (svg.clientHeight || 800) - 90;
+  let best = null;
+  for (let rows = 1; rows <= Math.min(4, sites.length); rows++) {
+    const per = Math.ceil(sites.length / rows), lines = [];
+    for (let i = 0; i < sites.length; i += per) lines.push(sites.slice(i, i + per));
+    const W = Math.max(...lines.map((l) => l.reduce((s, x) => s + x.w, 0) + SITE_GAP * (l.length - 1)));
+    const H = lines.reduce((s, l) => s + Math.max(...l.map((x) => x.h)), 0) + SITE_GAP * (lines.length - 1) + 150;
+    const k = Math.min(vw / W, vh / H);
+    if (!best || k > best.k * 1.02) best = { k, lines, W, H };
+  }
+  const edges = [], frames = [];
+  let y = 150;
+  for (const line of best.lines) {
+    const lw = line.reduce((s, x) => s + x.w, 0) + SITE_GAP * (line.length - 1);
+    let x = (best.W - lw) / 2;
+    const lh = Math.max(...line.map((s) => s.h));
+    for (const s of line) {
+      s.x = x; s.y = y; frames.push(s);
+      let rx = x + (s.w - s.innerW) / 2;
+      for (const r of s.roots) { place(r, rx, y + FRAME_TOP, edges); rx += r.bw + GX; }
+      x += s.w + SITE_GAP;
+    }
+    y += lh + SITE_GAP;
+  }
+  bounds = { w: best.W, h: y - SITE_GAP };
+  return { frames, edges, W: best.W };
+}
+
+/* ---------------- çizim ---------------- */
+function render() {
+  world.textContent = "";
+  if (!DATA) return;
+  build(DATA);
+  const { frames, edges, W } = layout();
+
+  const gFrames = el("g", {}, world), gUp = el("g", { "pointer-events": "none" }, world), gEdges = el("g", { "pointer-events": "none" }, world);
+  const gTail = el("g", { visibility: prefs.tail ? "visible" : "hidden", "pointer-events": "none" }, world);
+  const gExit = el("g", { "pointer-events": "none" }, world), gCards = el("g", {}, world);
+
+  // Site çerçeveleri
+  for (const s of frames) {
+    const g = el("g", { class: "frame" }, gFrames);
+    el("rect", { class: "body", x: s.x, y: s.y, width: s.w, height: s.h, rx: 16 }, g);
+    text(g, s.x + 22, s.y + 38, s.name, "title");
+    const roots = s.roots, sub = subnetOf(s);
+    if (sub) text(g, s.x + s.w - 20, s.y + 34, sub, "sub", { "text-anchor": "end" });
+  }
+
+  // İnternet düğümü + Tailnet merkezi
+  const inet = { x: W / 2 - 70, y: 40, w: 140, h: 44 };
+  const ig = el("g", { class: "inet" }, gCards);
+  el("rect", { x: inet.x, y: inet.y, width: inet.w, height: inet.h, rx: 22 }, ig);
+  el("path", { class: "icon", d: ICONS.internet, transform: `translate(${inet.x + 18},${inet.y + 10}) scale(1)` }, ig);
+  text(ig, inet.x + 50, inet.y + 28, "İnternet", "");
+  for (const s of frames.filter((f) => f.y === frames[0].y)) for (const r of s.roots) {
+    const cx = r.x + r.cw / 2, sx = inet.x + inet.w / 2, sy = inet.y + inet.h;
+    el("path", { class: "cable uplink", d: `M${sx},${sy}C${sx},${sy + 60} ${cx},${r.y - 70} ${cx},${r.y}` }, gUp);
+  }
+  const hub = { x: inet.x + inet.w + 60, y: 44, w: 120, h: 36 };
+  const tsNodes = DATA.nodes.filter((n) => n.tailscale && byId.has(n.id) && n.x !== undefined);
+  if (tsNodes.length) {
+    const hg = el("g", { class: "hub" }, gTail);
+    el("rect", { x: hub.x, y: hub.y, width: hub.w, height: hub.h, rx: 18 }, hg);
+    text(hg, hub.x + hub.w / 2, hub.y + 24, "Tailnet", "", { "text-anchor": "middle" });
+    for (const n of tsNodes) {
+      const hx = hub.x + hub.w / 2, hy = hub.y + hub.h, tx = n.x + n.cw - 22, ty = n.y;
+      el("path", { class: "tail " + tsPath(n), d: `M${hx},${hy}C${hx},${hy + 140} ${tx},${ty - 140} ${tx},${ty}` }, gTail);
+    }
+  }
+
+  for (const e of edges) el("path", { class: "cable" + (e.off ? " off" : ""), d: e.d }, gEdges);
+
+  // Kartlar
+  const q = $("#q").value.trim().toLowerCase();
+  for (const n of DATA.nodes) {
+    if (n.x === undefined || n.kind === "internet") continue;
+    drawCard(gCards, n, q);
+  }
+
+  // Exit node bağlantısı (overlay)
+  for (const o of DATA.overlay || []) {
+    const a = byId.get(o.from), b = byId.get(o.to);
+    if (!a || !b || a.x === undefined || b.x === undefined) continue;
+    // Kartların arasından değil, blokların kenarından ve site çerçevelerinin altından geçir.
+    const fa = frames.find((f) => f.id === a.site), fb = frames.find((f) => f.id === b.site);
+    const lane = Math.max(fa ? fa.y + fa.h : 0, fb ? fb.y + fb.h : 0) + SITE_GAP / 2;
+    const leg = (n) => n.blocks && n.blocks.length
+      ? { pts: [[n.x + n.cw, n.y + CH / 2], [n.bx + n.bw + GX / 2, n.y + CH / 2]], x: n.bx + n.bw + GX / 2 }
+      : { pts: [[n.x + n.cw / 2, n.y + n.ch]], x: n.x + n.cw / 2 };
+    const la = leg(a), lb = leg(b);
+    const pts = [...la.pts, [la.x, lane], [lb.x, lane], ...lb.pts.reverse()];
+    const d = "M" + pts.map((p) => p.join(",")).join("L");
+    el("path", { class: "exit", d }, gExit);
+    el("path", { class: "exit-flow", d }, gExit);
+    const mx = (la.x + lb.x) / 2, my = lane;
+    const label = `${a.label} interneti ${b.label} üzerinden çıkıyor`;
+    const lw = label.length * 6.6 + 24;
+    el("rect", { class: "exit-label-bg", x: mx - lw / 2, y: my - 12, width: lw, height: 24, rx: 12, stroke: "var(--exit)", "stroke-width": 1.4 }, gExit);
+    text(gExit, mx, my + 4.5, label, "exit-label", { "text-anchor": "middle" });
+  }
+
+  bounds.h = Math.max(bounds.h, ...DATA.overlay.map(() => 0));
+  applyView();
+}
+
+function subnetOf(s) {
+  const r = s.roots[0];
+  if (!r || !r.ips || !r.ips[0] || r.ips[0].startsWith("100.")) return null;
+  const parts = r.ips[0].split("."); parts[3] = "0"; return parts.join(".") + "/24";
+}
+
+function drawCard(parent, n, q) {
+  const cls = ["card"];
+  if (!n.online) cls.push("offline");
+  if (selected === n.id) cls.push("selected");
+  if (q) cls.push(matches(n, q) ? "match" : "dim");
+  const g = el("g", { class: cls.join(" "), transform: `translate(${n.x},${n.y})`, tabindex: 0, role: "button",
+                      "aria-label": `${n.label}, ${KIND_TR[n.kind] || n.kind}, ${n.online ? "çevrimiçi" : "çevrimdışı"}` }, parent);
+  g.dataset.id = n.id;
+  el("rect", { class: "box", width: n.cw, height: n.ch, rx: n.kind === "modem" || n.kind === "router" ? 6 : 10 }, g);
+  el("path", { class: "icon", d: ICONS[n.kind] || ICONS.device, transform: "translate(12,14) scale(1)" }, g);
+  el("circle", { class: "led", cx: 33, cy: 15, r: 5, fill: n.online ? "var(--on)" : n.stale ? "var(--relay)" : "var(--off)" }, g);
+  text(g, 46, 23, clip(n.label, 21), "name");
+  const lan = (n.ips || []).filter((i) => !i.startsWith("100."));
+  const ipLine = lan.length ? lan[0] + (lan.length > 1 ? `  +${lan.length - 1}` : "") : "";
+  const tip = n.tailscale ? n.tailscale.ip : "";
+  text(g, 46, 41, clip(ipLine || tip || (n.random_mac ? "rastgele MAC" : n.mac || ""), 26), "ip");
+  if (n.tailscale) {
+    const p = tsPath(n);
+    const col = p === "direct" ? "var(--tail)" : p === "relay" ? "var(--relay)" : "var(--off)";
+    el("rect", { x: n.cw - 30, y: -8, width: 22, height: 16, rx: 8, fill: "var(--card)", stroke: col, "stroke-width": 1.4 }, g);
+    text(g, n.cw - 19, 4, "ts", "ts-badge", { "text-anchor": "middle", fill: col });
+  }
+  if (n.kind === "server" && n.services && n.services.length) {
+    n.services.forEach((s, i) => {
+      const yy = CH + 4 + i * SVC_H;
+      el("rect", { class: "svc-row", x: 8, y: yy, width: n.cw - 16, height: SVC_H - 3, rx: 5 }, g);
+      text(g, 15, yy + 14, clip(s.name, 19), "svc");
+      if (s.ports && s.ports.length) text(g, n.cw - 15, yy + 14, ":" + s.ports[0], "svc-port", { "text-anchor": "end" });
+    });
+  }
+  const t = el("title", {}, g); t.textContent = n.label;
+}
+
+function matches(n, q) {
+  const hay = [n.label, n.mac, n.vendor, n.hostname, ...(n.ips || []), n.tailscale && n.tailscale.ip,
+               ...(n.services || []).map((s) => s.name)].join(" ").toLowerCase();
+  return hay.includes(q);
+}
+
+/* ---------------- ayrıntı paneli ---------------- */
+function openPanel(id) {
+  const n = byId.get(id); if (!n) return;
+  selected = id;
+  const rows = [];
+  const add = (k, v, mono) => { if (v !== undefined && v !== null && v !== "") rows.push(`<dt>${k}</dt><dd${mono ? ' class="mono"' : ""}>${v}</dd>`); };
+  add("Durum", `<span class="status ${n.online ? "on" : ""}">${n.online ? "Çevrimiçi" : "Görünmüyor"}</span>`);
+  add("Yerel IP", (n.ips || []).filter((i) => !i.startsWith("100.")).map(esc).join("<br>"), true);
+  add("MAC", n.mac ? esc(n.mac) + (n.random_mac ? "<br><small>rastgele (gizlilik) MAC</small>" : "") : (n.macs || []).map(esc).join("<br>"), true);
+  add("Üretici", esc(n.vendor || (n.mac ? (n.random_mac ? "gizli (rastgele MAC)" : "bilinmiyor") : "")));
+  add("Ağ adı", esc(n.hostname || ""));
+  if (n.ifaces) add("Arayüzler", n.ifaces.map(esc).join("<br>"), true);
+  add("İlk görülme", n.first_seen ? fmtTime(n.first_seen) : "");
+  add("Son görülme", n.last_seen ? `${ago(n.last_seen)} <small>(${fmtTime(n.last_seen)})</small>` : (n.mac ? "henüz çevrimiçi görülmedi" : ""));
+  let html = `<h2>${esc(n.label)}</h2><div class="kind">${esc(KIND_TR[n.kind] || n.kind)}${siteName(n.site) ? " · " + esc(siteName(n.site)) : ""}</div><dl>${rows.join("")}</dl>`;
+  if (n.note) html += `<p class="note">${esc(n.note)}</p>`;
+  if (n.stale) html += `<p class="note">Bu bölgeden son turda veri alınamadı; gösterilen bilgiler son başarılı turdan.</p>`;
+
+  if (n.tailscale) {
+    const t = n.tailscale, p = tsPath(n);
+    const tr = [];
+    const a2 = (k, v, m) => { if (v) tr.push(`<dt>${k}</dt><dd${m ? ' class="mono"' : ""}>${v}</dd>`); };
+    a2("Tailscale IP", esc(t.ip), true);
+    a2("Bağlantı", `<span class="status ${p === "direct" ? "on" : p === "relay" ? "relay" : ""}">${esc(t.path)}</span>`);
+    a2("İşletim sist.", esc(t.os));
+    a2("Yönlendirilen", (t.routes || []).filter((r) => !r.includes("/0")).map(esc).join("<br>"), true);
+    a2("Exit node", t.exit_offer || (t.routes || []).includes("0.0.0.0/0") ? "sunuyor" : "");
+    if (!t.online && t.last_seen) a2("Son bağlantı", ago(t.last_seen));
+    html += `<h3>Tailscale</h3><dl>${tr.join("")}</dl>`;
+  }
+  if (n.services && n.services.length) {
+    html += `<h3>Servisler</h3><ul class="svc-list">` + n.services.map((s) => {
+      const port = s.ports && s.ports[0];
+      const inner = `<span>${esc(s.name)}</span><small>${port ? ":" + esc(port) : esc(s.image)}</small>`;
+      return port && port !== "22"
+        ? `<li><a href="http://${esc(hostBase())}:${esc(port)}/" target="_blank" rel="noopener">${inner}</a></li>`
+        : `<li><span class="s">${inner}</span></li>`;
+    }).join("") + `</ul>`;
+  }
+  if (n.mac && !n.tailscale) {
+    html += `<h3>Adlandır</h3><p class="note">Pi'de <span class="mono">/DATA/AppData/nodesk/config.toml</span> dosyasındaki [devices] bölümüne şu satırı ekle. Ad MAC adresine bağlı kalır, IP değişse de kaybolmaz.</p>
+      <pre>"${esc(n.mac)}" = { name = "${esc(n.label)}", type = "${esc(n.kind)}" }</pre>
+      <button class="btn" id="copyCfg" style="border-color:var(--card-line)">Satırı kopyala</button>`;
+  }
+  $("#pbody").innerHTML = html;
+  const cb = $("#copyCfg");
+  if (cb) cb.onclick = async () => {
+    try { await navigator.clipboard.writeText($("#pbody pre").textContent); cb.textContent = "Kopyalandı"; }
+    catch (e) { const r = document.createRange(); r.selectNodeContents($("#pbody pre")); getSelection().removeAllRanges(); getSelection().addRange(r); cb.textContent = "Seçildi, Ctrl+C ile kopyala"; }
+  };
+  $("#panel").classList.add("open");
+  document.querySelectorAll(".card.selected").forEach((c) => c.classList.remove("selected"));
+  const c = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`); if (c) c.classList.add("selected");
+}
+function closePanel() {
+  selected = null; $("#panel").classList.remove("open");
+  document.querySelectorAll(".card.selected").forEach((c) => c.classList.remove("selected"));
+}
+function siteName(id) { const s = (DATA.sites || []).find((x) => x.id === id); return s ? s.name : ""; }
+
+/* ---------------- kaydırma / yakınlaştırma ---------------- */
+function applyView() { world.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`); }
+function fit() {
+  if (!bounds) return;
+  const vw = svg.clientWidth, vh = svg.clientHeight, top = 70, bottom = 50;
+  const k = Math.min((vw - 32) / bounds.w, (vh - top - bottom) / bounds.h, 1.4);
+  view = { k, x: (vw - bounds.w * k) / 2, y: top + (vh - top - bottom - bounds.h * k) / 2 };
+  applyView();
+}
+function zoomAt(f, cx, cy) {
+  const k = Math.min(4, Math.max(0.15, view.k * f)); f = k / view.k;
+  view.x = cx - (cx - view.x) * f; view.y = cy - (cy - view.y) * f; view.k = k; applyView();
+}
+const pointers = new Map(); let pinch = null, moved = false, downAt = null;
+svg.addEventListener("pointerdown", (e) => {
+  svg.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  moved = false; downAt = { x: e.clientX, y: e.clientY, target: e.target };
+  if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) }; }
+});
+svg.addEventListener("pointermove", (e) => {
+  const p = pointers.get(e.pointerId); if (!p) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  p.x = e.clientX; p.y = e.clientY;
+  if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5) { moved = true; svg.classList.add("dragging"); }
+  if (pointers.size === 2 && pinch) {
+    const [a, b] = [...pointers.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
+    zoomAt(d / pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2); pinch.d = d;
+  } else if (pointers.size === 1 && moved) { view.x += dx; view.y += dy; applyView(); }
+});
+function up(e) {
+  pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null;
+  svg.classList.remove("dragging");
+  if (!moved && downAt && pointers.size === 0) {
+    const c = downAt.target.closest && downAt.target.closest(".card");
+    if (c) openPanel(c.dataset.id); else closePanel();
+  }
+  if (pointers.size === 0) downAt = null;
+}
+svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", up);
+svg.addEventListener("wheel", (e) => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
+svg.addEventListener("keydown", (e) => {
+  const c = e.target.closest && e.target.closest(".card");
+  if (c && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openPanel(c.dataset.id); }
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePanel(); });
+
+/* ---------------- kontroller ---------------- */
+function syncButtons() { $("#tTail").setAttribute("aria-pressed", prefs.tail); $("#tOff").setAttribute("aria-pressed", prefs.off); }
+$("#tTail").onclick = () => { prefs.tail = !prefs.tail; savePrefs(); syncButtons(); render(); };
+$("#tOff").onclick = () => { prefs.off = !prefs.off; savePrefs(); syncButtons(); render(); fit(); };
+$("#fit").onclick = fit;
+$("#pclose").onclick = closePanel;
+$("#theme").onclick = () => {
+  const cur = document.documentElement.dataset.theme ||
+    (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("nodesk-theme", next); } catch (e) {}
+};
+try { const t = localStorage.getItem("nodesk-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+$("#q").addEventListener("input", () => render());
+$("#q").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const q = e.target.value.trim().toLowerCase(); if (!q) return;
+  const n = DATA.nodes.find((x) => x.x !== undefined && x.kind !== "internet" && matches(x, q));
+  if (!n) return;
+  const k = Math.max(view.k, 1);
+  view = { k, x: svg.clientWidth / 2 - (n.x + n.cw / 2) * k, y: svg.clientHeight / 2 - (n.y + n.ch / 2) * k };
+  applyView(); openPanel(n.id);
+});
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { render(); fit(); placeAlerts(); }, 150); });
+syncButtons();
+
+/* ---------------- veri ---------------- */
+function placeAlerts() {
+  $("#alerts").style.top = Math.round($(".bar").getBoundingClientRect().bottom + 8) + "px";
+}
+function updateMeta() {
+  const nodes = DATA.nodes.filter((n) => !["internet", "cloud", "roam"].includes(n.kind));
+  const on = nodes.filter((n) => n.online).length;
+  $("#meta").innerHTML = `<b>${on}</b> / ${nodes.length} çevrimiçi · ${esc(ago(DATA.generated))} güncellendi`;
+  const app = DATA.app || {};
+  $("#meta").title = `Son toplama: ${fmtTime(DATA.generated)}\nSürüm: ${app.version || "?"}${app.rev ? " (" + app.rev + ")" : ""}`;
+  const errs = DATA.errors || [];
+  const age = (Date.now() - new Date(DATA.generated).getTime()) / 60000;
+  const box = $("#errors");
+  const items = errs.map(esc);
+  if (age > 15) items.unshift(`Harita ${Math.round(age)} dakikadır güncellenmedi. Pi'de <span style="font-family:var(--mono)">sudo nodesk status</span> ile kontrol et.`);
+  const mono = (t) => `<span style="font-family:var(--mono)">${esc(t)}</span>`;
+  const rs = DATA.router_script || {};
+  if (rs.ok === false) items.push(`Router'daki toplama scripti eski (kurulu: ${esc(rs.installed)}, gereken: ${esc(rs.expected)}). Laptop'tan: ${mono("ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh")}`);
+  const notes = [];
+  if (app.update) notes.push(`Yeni sürüm var: ${esc(app.update.latest)} (şu an ${esc(app.version)}). Pi'de ${mono("sudo nodesk update")}`);
+  const nb = $("#notice");
+  nb.hidden = !notes.length; nb.innerHTML = notes.join("<br>");
+  placeAlerts();
+  box.hidden = !items.length;
+  box.innerHTML = items.length ? `<b>Dikkat</b><ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul>` : "";
+}
+async function load() {
+  try {
+    const r = await fetch("live/data.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    const changed = !DATA || d.generated !== DATA.generated;
+    DATA = d;
+    if (changed) { render(); if (!fitted) { fit(); fitted = true; } if (selected && byId.has(selected)) openPanel(selected); }
+    updateMeta();
+  } catch (e) {
+    $("#meta").textContent = "veri okunamadı";
+    const box = $("#errors"); box.hidden = false;
+    box.innerHTML = `<b>data.json okunamadı</b> (${esc(e.message)}). Toplayıcı henüz hiç çalışmamış olabilir: Pi'de <span style="font-family:var(--mono)">sudo nodesk run</span> komutunu çalıştır.`;
+  }
+}
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>
