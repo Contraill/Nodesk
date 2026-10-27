@@ -160,6 +160,21 @@ RESP=$(mktemp)
     echo "#DOCKER"
     command -v docker >/dev/null 2>&1 && docker ps -a --format '{{json .}}' 2>/dev/null
     echo "#PORTS"; ss -ltnpH 2>/dev/null
+    echo "#EXITNODE"
+    command -v tailscale >/dev/null 2>&1 && tailscale status --json 2>/dev/null | tr -d ' \n' |
+        sed -n 's/.*"ExitNodeStatus":{"ID":"\([^"]*\)".*/\1/p'
+    echo "#EXITCLIENTS"
+    # Son 10 dakikada bu sunucu üzerinden internete çıkan tailnet cihazları (exit node kullananlar).
+    # Aynı süzgeç router/topo-collect'te.
+    { cat /proc/net/nf_conntrack 2>/dev/null || conntrack -L 2>/dev/null; } | awk -v est="$(cat /proc/sys/net/netfilter/nf_conntrack_tcp_timeout_established 2>/dev/null || echo 432000)" '
+{ p = 0; for (i = 1; i <= NF; i++) if ($i ~ /^(tcp|udp|icmp|udplite|sctp|gre)$/) { p = i; break }
+  if (!p) next
+  t = $(p + 2); s = ""; d = ""
+  for (i = p + 3; i <= NF; i++) { if (s == "" && $i ~ /^src=/) s = substr($i, 5); else if (d == "" && $i ~ /^dst=/) d = substr($i, 5) }
+  if (s ~ /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./ && d ~ /^[0-9.]+$/ &&
+      d !~ /^(10|127|0|100|169\.254|192\.168|172\.(1[6-9]|2[0-9]|3[01])|22[4-9]|23[0-9]|24[0-9]|25[0-5])\./ &&
+      (t <= 600 || t >= est - 600)) n[s]++ }
+END { for (k in n) print k, n[k] }'
     echo "#END"
 } > "$OUT"
 curl -fsS -m 25 -H 'Content-Type: text/plain' --data-binary "@$OUT" -o "$RESP" "$NODESK_URL"
@@ -234,7 +249,7 @@ def topo_version():
     return None
 
 
-LINUX_AGENT_VERSION = "2"   # LINUX_INSTALLER değişince artır
+LINUX_AGENT_VERSION = "3"   # LINUX_INSTALLER değişince artır
 
 
 def expected_version(kind):

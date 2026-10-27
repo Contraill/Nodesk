@@ -5,10 +5,12 @@ NODESK_FIXTURES ayarlıysa komutlar yerine o klasördeki dosyalar okunur (testle
 """
 
 import http.client
+import ipaddress
 import json
 import os
 import re
 import socket
+import struct
 import subprocess
 
 from . import util
@@ -138,6 +140,81 @@ def neigh(r):
             res.append({"ip": e["dst"], "mac": mac, "dev": e.get("dev"),
                         "state": states[0] if states else ""})
     r.mark("neigh", True, count=len(res))
+    return res
+
+
+# ---------------------------------------------------------------- exit node istemcileri
+
+def _nla(buf, off, end):
+    """netlink öznitelikleri -> {tür: veri}"""
+    out = {}
+    while off + 4 <= end:
+        ln, typ = struct.unpack_from("=HH", buf, off)
+        if ln < 4:
+            break
+        out[typ & 0x3FFF] = buf[off + 4:off + ln]
+        off += (ln + 3) & ~3
+    return out
+
+
+def conntrack_v4():
+    """Çekirdeğin bağlantı tablosu (netlink, salt okunur) -> [(kaynak, hedef, proto, kalan_sn)]"""
+    s = socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, 12)   # NETLINK_NETFILTER
+    s.settimeout(5)
+    try:
+        # IPCTNL_MSG_CT_GET (ctnetlink alt sistemi), NLM_F_REQUEST | NLM_F_DUMP
+        s.send(struct.pack("=IHHII", 20, (1 << 8) | 1, 0x301, 1, 0) + struct.pack("=BBH", socket.AF_INET, 0, 0))
+        out = []
+        while True:
+            data = s.recv(1 << 20)
+            off = 0
+            while off + 16 <= len(data):
+                ln, typ = struct.unpack_from("=IH", data, off)
+                if typ == 3 or ln < 16:              # NLMSG_DONE
+                    return out
+                if typ == 2:                         # NLMSG_ERROR
+                    raise OSError("conntrack okunamadı")
+                a = _nla(data, off + 20, off + ln)
+                tup = _nla(a.get(1, b""), 0, len(a.get(1, b"")))           # CTA_TUPLE_ORIG
+                ip = _nla(tup.get(1, b""), 0, len(tup.get(1, b"")))        # CTA_TUPLE_IP
+                pr = _nla(tup.get(2, b""), 0, len(tup.get(2, b"")))        # CTA_TUPLE_PROTO
+                if len(ip.get(1, b"")) == 4 and len(ip.get(2, b"")) == 4 and len(a.get(7, b"")) == 4:
+                    out.append((socket.inet_ntoa(ip[1]), socket.inet_ntoa(ip[2]),
+                                pr.get(1, b"\0")[0], struct.unpack("!I", a[7])[0]))
+                off += (ln + 3) & ~3
+    finally:
+        s.close()
+
+
+def is_tailnet(ip):
+    return util.in_net(ip, "100.64.0.0/10")
+
+
+def exit_clients_from(entries, est=432000):
+    """Son 10 dakikada bu cihaz üzerinden internete çıkan tailnet cihazları -> {IP: bağlantı}.
+    Kalan süre kısaysa (UDP, kapanan TCP) ya da kurulu TCP yeni paket görmüşse yakın zamanda."""
+    out = {}
+    for src, dst, _proto, left in entries:
+        if not is_tailnet(src) or not util.is_ipv4(dst) or is_tailnet(dst):
+            continue
+        a = ipaddress.ip_address(dst)
+        if a.is_private or a.is_multicast or a.is_loopback or a.is_link_local:
+            continue
+        if left <= 600 or left >= est - 600:
+            out[src] = out.get(src, 0) + 1
+    return out
+
+
+def exit_clients(r):
+    if r.fixtures:
+        raw = r.fixture("exit_clients.json")
+        return json.loads(raw) if raw else None
+    try:
+        est = int(util.read_text("/proc/sys/net/netfilter/nf_conntrack_tcp_timeout_established", "432000"))
+        res = exit_clients_from(conntrack_v4(), est)
+    except (OSError, ValueError) as e:
+        r.mark("exit", False, error=str(e)[:200])
+        return None
     return res
 
 

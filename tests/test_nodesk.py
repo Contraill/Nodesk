@@ -160,6 +160,22 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(robo["names"]["dhcp_name"], "roborock-vacuum-a27", "router'ın duyduğu DHCP isteği")
         self.assertEqual(robo["kind"], "vacuum")
 
+    def test_exit_node_links(self):
+        links = {(o["from"], o["to"]) for o in self.data["overlay"]}
+        self.assertIn(("router", "self"), links, "router'ın kendi seçimi")
+        self.assertIn(("ts:nothing", "self"), links, "Pi'nin bağlantı tablosu: telefon Pi'den çıkıyor")
+        self.assertIn(("ts:laptop", "router"), links, "router'ın bağlantı tablosu")
+        self.assertNotIn(("router", "router"), links, "kendi trafiği sayılmaz")
+
+    def test_exit_clients_filter(self):
+        e = [("100.64.0.3", "142.250.1.1", 6, 431990),    # kurulu TCP, az önce paket görmüş
+             ("100.64.0.3", "1.1.1.1", 6, 300000),          # saatlerdir boşta
+             ("100.64.0.4", "8.8.8.8", 17, 50),            # UDP: hep yakın zamanlı
+             ("100.64.0.4", "192.168.1.1", 17, 50),         # yerel hedef: exit değil
+             ("100.64.0.4", "100.64.0.1", 6, 431999),   # tailnet içi
+             ("192.168.44.8", "8.8.8.8", 17, 50)]              # tailnet dışı kaynak
+        self.assertEqual(sources.exit_clients_from(e), {"100.64.0.3": 1, "100.64.0.4": 1})
+
     def test_router_services(self):
         by = {n["label"]: n for n in self.data["nodes"] if n["kind"] == "service" and n["parent"] == "router"}
         self.assertEqual(by["LuCI"]["ports"], [80, 443])
@@ -290,13 +306,25 @@ class DuplicateTest(unittest.TestCase):
         ids, _ = self.s24(overrides={"devices": {"mac:d2:61:e5:6d:9a:c3": {"not_same": "mac:a6:8e:da:14:ea:d0"}}})
         self.assertNotIn("same_hint", ids["mac:d2:61:e5:6d:9a:c3"], "reddedilen öneri tekrar gelmez")
 
-    def test_same_dhcp_name_merges_only_when_not_both_online(self):
+    def test_same_dhcp_name_merge_and_apart_memory(self):
         snap = lambda mac, name: {"snapshot": {"mac": mac, "names": {"dhcp_name": name}}}
-        state = {"mac:02:00:00:00:00:01": snap("02:00:00:00:00:01", "Galaxy-S24"),
-                 "mac:02:00:00:00:00:02": snap("02:00:00:00:00:02", "Galaxy-S24")}
-        self.assertEqual(model.same_device_groups(state, lambda n: n.endswith("1"), {}, {}),
-                         [["mac:02:00:00:00:00:01", "mac:02:00:00:00:00:02"]])
-        self.assertEqual(model.same_device_groups(state, lambda n: True, {}, {}), [], "aynı anda açık: iki cihaz")
+        A, B = "mac:02:00:00:00:00:01", "mac:02:00:00:00:00:02"
+        state = {A: snap(A[4:], "Ali-adli-kisiye-ait-S24"), B: snap(B[4:], "Ali-adli-kisiye-ait-S24")}
+        self.assertEqual(model.same_device_groups(state, lambda n: n == A, {}, {}), ([[A, B]], []))
+        self.assertEqual(model.same_device_groups(state, lambda n: True, {}, {}), ([], [(A, B)]),
+                         "aynı ARP taramasında ikisi birden: iki ayrı cihaz")
+        state[A]["apart"] = [B]
+        self.assertEqual(model.same_device_groups(state, lambda n: False, {}, {}), ([], []),
+                         "bir kez ayrı görülen bir daha adla birleşmez")
+
+    def test_factory_names_never_merge(self):
+        snap = lambda mac, name: {"snapshot": {"mac": mac, "names": {"dhcp_name": name}}}
+        for name in ("Galaxy-S24", "iPhone", "Redmi-Note-12", "Pixel-8", "SM-S921B"):
+            state = {"mac:02:00:00:00:00:01": snap("02:00:00:00:00:01", name),
+                     "mac:02:00:00:00:00:02": snap("02:00:00:00:00:02", name)}
+            self.assertEqual(model.same_device_groups(state, lambda n: False, {}, {}), ([], []), name)
+        self.assertFalse(model.is_generic_name("android-1a2b3c4d5e6f7a8b"), "cihaza özgü kimlik")
+        self.assertFalse(model.is_generic_name("Ali-adli-kisiye-ait-S24"))
 
     def test_different_names_not_merged(self):
         self.assertFalse(model.twin_mac("50:ff:20:73:86:18", "50:ff:20:11:22:33"), "iki ayrı Keenetic")
@@ -540,7 +568,7 @@ class ApiTest(unittest.TestCase):
 
     def test_ingest_asks_old_agent_to_update(self):
         token = store.Store(store.Paths(self.home)).agents()["agents"]["router"]["token"]
-        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n6", "#VERSION\n2", 1)
+        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n7", "#VERSION\n2", 1)
         st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=old.encode(), ctype="text/plain")
         self.assertEqual((st, body.strip()), (200, "ok update"))
         cur = open(os.path.join(FIX, "router.txt")).read()
@@ -582,7 +610,7 @@ class ScriptsTest(unittest.TestCase):
             s = agents.installer(kind, "http://100.64.0.1:8088", "x", "tok")
             r = subprocess.run(["sh", "-n"], input=s, text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(agents.topo_version(), "6")
+        self.assertEqual(agents.topo_version(), "7")
 
     def test_router_installer_sandbox(self):
         """Router kurulum scriptini sahte kök dizinde BusyBox ile iki kez çalıştır."""

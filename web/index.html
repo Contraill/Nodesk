@@ -604,14 +604,17 @@ function render() {
   for (const e of edges) el("path", { class: "cable" + (isSvc(e.to) ? " svc" : "") + (e.off ? " off" : "") + (fa && !passesFilter(e.to) ? " faded" : ""), d: e.d }, gEdges);
   for (const n of ALL) if (n.x !== undefined && n.kind !== "internet") (isSvc(n) ? drawSvcCard : drawCard)(gCards, n, q, fa);
 
+  let li = 0;   // her exit node bağı kendi şeridinde (aynı anda birden çok cihaz kullanabilir)
   for (const o of DATA.overlay || []) {
     const a = byId.get(o.from), b = byId.get(o.to);
     if (!a || !b || a.x === undefined || b.x === undefined) continue;
     const fA = frames.find((f) => f.id === a.site), fB = frames.find((f) => f.id === b.site);
-    const lane = Math.max(fA ? fA.y + fA.h : 0, fB ? fB.y + fB.h : 0) + SITE_GAP / 2;
+    const off = li * 8, lane = Math.max(fA ? fA.y + fA.h : 0, fB ? fB.y + fB.h : 0) + SITE_GAP / 2 + li * 34;
+    li++;
+    bounds.h = Math.max(bounds.h, lane + 20);
     const leg = (n) => n.blocks && n.blocks.length
-      ? { pts: [[n.x + n.cw, n.y + CH / 2], [n.bx + n.bw + GX / 2, n.y + CH / 2]], x: n.bx + n.bw + GX / 2 }
-      : { pts: [[n.x + n.cw / 2, n.y + n.ch]], x: n.x + n.cw / 2 };
+      ? { pts: [[n.x + n.cw, n.y + CH / 2 + off], [n.bx + n.bw + GX / 2 + off, n.y + CH / 2 + off]], x: n.bx + n.bw + GX / 2 + off }
+      : { pts: [[n.x + n.cw / 2 + off, n.y + n.ch]], x: n.x + n.cw / 2 + off };
     const la = leg(a), lb = leg(b);
     const d = "M" + [...la.pts, [la.x, lane], [lb.x, lane], ...lb.pts.reverse()].map((p) => p.join(",")).join("L");
     el("path", { class: "exit", d }, gExit);

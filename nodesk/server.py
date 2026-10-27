@@ -140,6 +140,7 @@ class App:
                     self.passive.set_subnet(f"{i['ip']}/{i['prefix']}")
         raw["arp"] = sources.arpscan(r, iface) if src["arp"] else None
         raw["neigh"] = sources.neigh(r) if src["neigh"] else None
+        raw["exit_clients"] = sources.exit_clients(r) if src["tailscale"] else None
         if src.get("probe", True) and raw["arp"] and not self.fixtures:
             self.probe_names(r, raw, iface)
         raw["docker"] = sources.docker_containers(r) if src["docker"] else None
