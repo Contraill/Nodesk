@@ -24,7 +24,7 @@ os.environ["NODESK_NOW"] = NOW
 os.environ["NODESK_OUI"] = os.path.join(FIX, "ieee-oui.txt")
 os.environ["NODESK_CONFIG"] = os.path.join(ROOT, "config.example.toml")
 
-from nodesk import agents, passive, server, sources, store, util  # noqa: E402
+from nodesk import agents, model, passive, probe, server, sources, store, util  # noqa: E402
 
 
 def make_home():
@@ -160,6 +160,133 @@ class CollectTest(unittest.TestCase):
     def test_sources_status(self):
         for k in ("tailscale", "arp", "neigh", "docker", "host_ports"):
             self.assertTrue(self.data["sources"][k]["ok"], k)
+
+
+class DuplicateTest(unittest.TestCase):
+    """27 Ekim'de Pi'den alınan gerçek veri: 3 Keenetic ve 2 LG TV görünüyordu."""
+    T = "2026-10-27T18:26:00+00:00"
+    PASSIVE = {
+        "52:ff:20:53:86:18": {"ips": {"192.168.44.4": "2026-10-27T17:21:56+00:00",
+                                      "192.168.44.7": "2026-10-27T17:21:56+00:00",
+                                      "192.168.44.6": "2026-10-27T15:13:03+00:00",
+                                      "192.168.44.14": "2026-10-27T18:26:26+00:00"},
+                              "last": "2026-10-27T18:26:26+00:00", "mdns_name": "Keenetic-0000"},
+        "38:8c:50:9f:be:1c": {"ips": {"192.168.44.11": "2026-10-27T18:26:15+00:00",
+                                      "192.168.44.12": "2026-10-27T18:23:50+00:00"},
+                              "last": "2026-10-27T18:26:15+00:00", "dhcp_name": "LGwebOSTV"},
+        "b4:e6:2a:c2:32:4a": {"ips": {"192.168.44.12": "2026-10-27T15:50:55+00:00"},
+                              "last": "2026-10-27T15:50:55+00:00", "dhcp_name": "LGwebOSTV"},
+        "50:ff:20:73:86:18": {"ips": {"192.168.44.4": "2026-10-27T17:21:57+00:00",
+                                      "192.168.44.14": "2026-10-27T17:23:09+00:00"},
+                              "last": "2026-10-27T17:23:09+00:00", "dhcp_name": "Keenetic-0000"},
+    }
+    PASSIVE_IP = {
+        "192.168.44.4": {"real_mac": "50:ff:20:73:86:18", "last": "2026-10-27T17:21:57+00:00"},
+        "192.168.44.7": {"l2_mac": "52:ff:20:53:86:18", "last": "2026-10-27T17:21:56+00:00"},
+        "192.168.44.11": {"real_mac": "38:8c:50:9f:be:1c", "l2_mac": "38:8c:50:9f:be:1c",
+                          "dhcp_name": "LGwebOSTV", "last": "2026-10-27T18:26:15+00:00"},
+        "192.168.44.12": {"real_mac": "b4:e6:2a:c2:32:4a", "l2_mac": "38:8c:50:9f:be:1c",
+                          "dhcp_name": "LGwebOSTV", "last": "2026-10-27T18:23:50+00:00"},
+        "192.168.44.14": {"real_mac": "50:ff:20:73:86:18", "l2_mac": "52:ff:20:53:86:18",
+                          "dhcp_name": "Keenetic-0000", "mdns_name": "Keenetic-0000",
+                          "last": "2026-10-27T18:26:26+00:00"},
+    }
+    ARP = [("192.168.44.11", "38:8c:50:9f:be:1c"), ("192.168.44.12", "38:8c:50:9f:be:1c"),
+           ("192.168.44.14", "52:ff:20:53:86:18")]
+    CFG = {"ev1": {"interface": "eth0"}, "devices": {
+        "52:ff:20:53:86:18": {"name": "Keenetic-0000 extender", "type": "ap"},
+        "70:54:b4:5a:b6:4e": {"name": "Toshiba TV", "type": "tv"},
+        "b4:e6:2a:c2:32:4a": {"name": "LG TV 1", "type": "tv"},
+        "38:8c:50:9f:be:1c": {"name": "LG TV 2", "type": "tv"}}}
+
+    def build(self, state, keenetic=None):
+        raw = {"ifaces": [{"ifname": "eth0", "ip": "192.168.44.2", "prefix": 24, "mac": "88:a2:9e:35:f8:b1"}],
+               "arp": [{"ip": ip, "mac": m, "vendor": None} for ip, m in self.ARP], "neigh": [],
+               "passive": self.PASSIVE, "passive_ip": self.PASSIVE_IP, "keenetic": keenetic}
+        settings = json.loads(json.dumps(store.DEFAULT_SETTINGS))
+        settings["sources"]["router"] = False
+        data, state = model.build(raw, self.CFG, settings, {}, state, {}, util.parse_iso(self.T))
+        return {n["id"]: n for n in data["nodes"]}, state
+
+    def old_state(self):
+        snap = lambda ips, **kw: {"first_seen": "2026-10-27T15:00:00+00:00",
+                                  "last_seen": "2026-10-27T17:37:00+00:00",
+                                  "snapshot": {"site": "ev1", "ips": ips, **kw}}
+        return {"mac:50:ff:20:73:86:18": snap(["192.168.44.4"], mac="50:ff:20:73:86:18"),
+                "ip:192.168.44.4": snap(["192.168.44.4"], parent_hint="mac:52:ff:20:53:86:18"),
+                "ip:192.168.44.14": snap(["192.168.44.14"], parent_hint="mac:50:ff:20:73:86:18"),
+                "mac:70:54:b4:5a:b6:4e": snap(["192.168.44.6"], mac="70:54:b4:5a:b6:4e")}
+
+    def test_one_keenetic(self):
+        ids, state = self.build(self.old_state())
+        kn = [n for n in ids.values() if "keenetic" in (n["label"] + json.dumps(n.get("names"))).lower()]
+        self.assertEqual([n["id"] for n in kn], ["mac:52:ff:20:53:86:18"])
+        self.assertEqual(kn[0]["ips"], ["192.168.44.14"])
+        self.assertEqual(kn[0]["aliases"], ["50:ff:20:73:86:18"])
+        for gone in ("mac:50:ff:20:73:86:18", "ip:192.168.44.4", "ip:192.168.44.14"):
+            self.assertNotIn(gone, ids)
+            self.assertNotIn(gone, state, "eski kayıt da silinir, geri gelmez")
+
+    def test_one_lg_tv(self):
+        ids, _ = self.build({})
+        tvs = [n for n in ids.values() if n.get("names", {}).get("dhcp_name") == "LGwebOSTV"]
+        self.assertEqual(len(tvs), 1)
+        self.assertEqual(tvs[0]["ips"], ["192.168.44.11", "192.168.44.12"])
+        self.assertEqual(tvs[0]["aliases"], ["b4:e6:2a:c2:32:4a"])
+        self.assertTrue(tvs[0]["online"])
+
+    def test_extender_ip_keeps_last_owner(self):
+        ids, _ = self.build(self.old_state())
+        self.assertNotIn("ip:192.168.44.6", ids)
+        self.assertEqual(ids["mac:70:54:b4:5a:b6:4e"]["parent"], "mac:52:ff:20:53:86:18")
+
+    def test_keenetic_names_device_behind_it(self):
+        ids, _ = self.build({}, keenetic=[{"mac": "d8:3a:dd:11:22:33", "ip": "192.168.44.7",
+                                          "name": "Annemin tableti", "hostname": "Galaxy-Tab", "active": True}])
+        self.assertNotIn("ip:192.168.44.7", ids)
+        tab = ids["mac:d8:3a:dd:11:22:33"]
+        self.assertEqual(tab["label"], "Annemin tableti")
+        self.assertEqual(tab["parent"], "mac:52:ff:20:53:86:18")
+        self.assertTrue(tab["online"])
+
+    def test_different_names_not_merged(self):
+        self.assertFalse(model.twin_mac("50:ff:20:73:86:18", "50:ff:20:11:22:33"), "iki ayrı Keenetic")
+        self.assertTrue(model.twin_mac("50:ff:20:73:86:18", "52:ff:20:53:86:18"))
+
+
+class ProbeTest(unittest.TestCase):
+    def name(self, n):
+        return b"".join(bytes([len(p)]) + p.encode() for p in n.split(".")) + b"\x00"
+
+    def test_nbstat(self):
+        q = probe.nbstat_query(7)
+        self.assertEqual(len(q), 50)
+        entries = b"WORKGROUP      \x00\x84\x00" + b"DESKTOP-K7Q2   \x00\x04\x00"
+        rdata = bytes([2]) + entries + b"\0" * 46
+        resp = (struct.pack("!HHHHHH", 7, 0x8400, 0, 1, 0, 0) + q[12:12 + 34]
+                + struct.pack("!HHIH", 0x21, 1, 0, len(rdata)) + rdata)
+        self.assertEqual(probe.parse_nbstat(resp), "DESKTOP-K7Q2", "grup adı atlanır")
+
+    def test_mdns_reverse_and_services(self):
+        q = probe.mdns_query("192.168.44.7", 3)
+        self.assertIn(self.name("7.44.168.192.in-addr.arpa"), q)
+        ptr = lambda owner, target: (self.name(owner) + struct.pack("!HHIH", 12, 1, 120, len(self.name(target)))
+                                     + self.name(target))
+        resp = (struct.pack("!HHHHHH", 3, 0x8400, 0, 2, 0, 0)
+                + ptr("7.44.168.192.in-addr.arpa", "Salon-TV.local")
+                + ptr("_services._dns-sd._udp.local", "_googlecast._tcp.local"))
+        obs = passive.mdns_obs(resp, {"ip": "192.168.44.7"})
+        self.assertEqual(obs["mdns_name"], "Salon-TV")
+        self.assertEqual(obs["mdns_services"], ["_googlecast._tcp"])
+
+    def test_upnp_fields(self):
+        xml = "<root><device><friendlyName>[LG] webOS TV &amp; Salon</friendlyName><modelName>OLED55</modelName>"
+        self.assertEqual(probe.xml_tag(xml, "friendlyName"), "[LG] webOS TV & Salon")
+        self.assertIsNone(probe.xml_tag(xml, "manufacturer"))
+        self.assertEqual(probe.ssdp_location(b"HTTP/1.1 200 OK\r\nLocation: http://192.168.44.11:1880/\r\n\r\n"),
+                         "http://192.168.44.11:1880/")
+        self.assertEqual(probe.upnp_description("http://10.0.0.9/x.xml", "192.168.44.11"), {},
+                         "başka adrese gitmez")
 
 
 class CasaosTitleTest(unittest.TestCase):

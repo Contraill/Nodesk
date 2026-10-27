@@ -19,7 +19,7 @@ import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agents, model, passive, sources, store, util
+from . import agents, model, passive, probe, sources, store, util
 
 API_HOST = "127.0.0.1"
 API_PORT = int(os.environ.get("NODESK_API_PORT", "8089"))
@@ -62,6 +62,7 @@ class App:
             if v.get("file") and os.path.exists(os.path.join(self.paths.www, "icons", v["file"])):
                 self.icon_files[url] = "live/icons/" + v["file"]
         self.icon_thread = None
+        self.probed = {}         # IP -> son ad sorgusu (time.monotonic)
 
     # ------------------------------------------------------------ sürüm
     def version(self):
@@ -135,6 +136,11 @@ class App:
                     self.passive.set_subnet(f"{i['ip']}/{i['prefix']}")
         raw["arp"] = sources.arpscan(r, iface) if src["arp"] else None
         raw["neigh"] = sources.neigh(r) if src["neigh"] else None
+        if src.get("probe", True) and raw["arp"] and not self.fixtures:
+            self.probe_names(r, raw, iface)
+        cred = util.read_text(os.path.join(self.paths.keys, "keenetic")).strip()
+        raw["keenetic"] = (sources.keenetic(r, self.keenetic_host(), cred)
+                           if src.get("keenetic", True) and (cred or self.fixtures) else None)
         raw["docker"] = sources.docker_containers(r) if src["docker"] else None
         projects = {c["project"] for c in raw["docker"] or [] if c.get("project")}
         raw["casaos"] = sources.casaos_titles(r, projects)
@@ -148,6 +154,31 @@ class App:
         raw["health"] = sources.check_ports(r, ports, hosts) if src.get("health", True) else {}
         raw["status"] = r.status
         return raw
+
+    def probe_names(self, r, raw, iface):
+        """Ev 1'de ARP'ye yanıt veren her IP'ye günde en fazla bir kez ad sorgusu (probe.py)."""
+        local = next((i["ip"] for i in raw["ifaces"] if i["ifname"] == iface), None)
+        mine = {i["ip"] for i in raw["ifaces"]}
+        now = time.monotonic()
+        targets = {e["ip"]: e["mac"] for e in raw["arp"]
+                   if e["ip"] not in mine and now - self.probed.get(e["ip"], -1e9) > 86400}
+        if not local or not targets:
+            return
+        self.probed.update((ip, now) for ip in targets)
+        try:
+            found = probe.run(targets, local)
+        except OSError as e:
+            r.mark("probe", False, error=str(e)[:200])
+            return
+        for obs in found:
+            self.passive.observe(obs)
+        r.mark("probe", True, count=len(found))
+
+    def keenetic_host(self):
+        """Keenetic'in güncel IP'si: kendini 'Keenetic-...' diye tanıtan en son IP."""
+        cands = [(v.get("last") or "", ip) for ip, v in self.passive.snapshot_ip().items()
+                 if "keenetic" in f"{v.get('dhcp_name', '')} {v.get('mdns_name', '')}".lower()]
+        return max(cands)[1] if cands else None
 
     def attach_live(self, raw, settings):
         """Her yeniden hesaplamada güncel olan kaynaklar: pasif dinleme ve ajan raporları."""

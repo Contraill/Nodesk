@@ -4,12 +4,16 @@ Her fonksiyon başarısızlıkta None döner ve hatayı Runner.status'a yazar.
 NODESK_FIXTURES ayarlıysa komutlar yerine o klasördeki dosyalar okunur (testler).
 """
 
+import hashlib
 import http.client
+import http.cookiejar
 import json
 import os
 import re
 import socket
 import subprocess
+import urllib.error
+import urllib.request
 
 from . import util
 
@@ -138,6 +142,60 @@ def neigh(r):
             res.append({"ip": e["dst"], "mac": mac, "dev": e.get("dev"),
                         "state": states[0] if states else ""})
     r.mark("neigh", True, count=len(res))
+    return res
+
+
+# ---------------------------------------------------------------- Keenetic
+
+def keenetic_login(host, user, password, timeout=8):
+    """Keenetic HTTP API (RCI) oturumu: X-NDM challenge'ına md5/sha256 yanıtı. -> opener"""
+    op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    try:
+        op.open(f"http://{host}/auth", timeout=timeout).close()
+        return op
+    except urllib.error.HTTPError as e:
+        if e.code != 401:
+            raise
+        realm, challenge = e.headers.get("X-NDM-Realm"), e.headers.get("X-NDM-Challenge")
+    if not realm or not challenge:
+        raise ValueError("Keenetic challenge başlığı yok")
+    md5 = hashlib.md5(f"{user}:{realm}:{password}".encode()).hexdigest()
+    body = json.dumps({"login": user,
+                       "password": hashlib.sha256((challenge + md5).encode()).hexdigest()}).encode()
+    op.open(urllib.request.Request(f"http://{host}/auth", body, {"Content-Type": "application/json"}),
+            timeout=timeout).close()
+    return op
+
+
+def keenetic(r, host, cred):
+    """Keenetic'in bildiği cihazlar (show ip hotspot): gerçek MAC, IP, ad. Salt okunur."""
+    if r.fixtures:
+        raw = r.fixture("keenetic_hotspot.json")
+    elif not host:
+        r.mark("keenetic", False, error="Keenetic'in IP'si bilinmiyor (pasif dinleme henüz görmedi)")
+        return None
+    else:
+        user, _, password = cred.partition(":")
+        try:
+            op = keenetic_login(host, user, password)
+            with op.open(f"http://{host}/rci/show/ip/hotspot", timeout=8) as resp:
+                raw = resp.read(1024 * 1024).decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            r.mark("keenetic", False, error="giriş reddedildi (kullanıcı/şifre?)" if e.code in (401, 403)
+                   else f"{host}: HTTP {e.code}")
+            return None
+        except (OSError, ValueError) as e:
+            r.mark("keenetic", False, error=f"{host}: {e}"[:200])
+            return None
+    try:
+        hosts = (json.loads(raw or "{}") or {}).get("host") or []
+    except json.JSONDecodeError:
+        r.mark("keenetic", False, error="yanıt JSON değil")
+        return None
+    res = [{"mac": util.norm_mac(h.get("mac")), "ip": h.get("ip"), "name": h.get("name"),
+            "hostname": h.get("hostname"), "active": bool(h.get("active"))}
+           for h in hosts if isinstance(h, dict) and util.norm_mac(h.get("mac"))]
+    r.mark("keenetic", True, count=len(res))
     return res
 
 

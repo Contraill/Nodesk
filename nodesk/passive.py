@@ -22,6 +22,8 @@ from . import util
 ETH_P_ALL = 0x0003
 SO_ATTACH_FILTER = 26
 PACKET_OUTGOING = 4
+NAME_FIELDS = ("dhcp_name", "dhcp_vendor", "mdns_name", "friendly", "model", "ssdp_server", "nb_name")
+LIST_FIELDS = ("mdns_services", "mdns_instances")
 
 # tcpdump -dd 'arp or (ip and udp and (port 67 or port 68 or port 5353 or port 1900))'
 BPF = [
@@ -97,9 +99,15 @@ def parse_mdns(payload):
             out["a"][name[:-6]] = _ip(rdata)
         elif rtype == 12:  # PTR: _googlecast._tcp.local -> "Salon TV._googlecast._tcp.local"
             target, _ = _dns_name(payload, off)
-            if name.startswith("_") and ("._tcp" in name or "._udp" in name):
+            if name.endswith(".in-addr.arpa") and target.endswith(".local"):   # ters sorgu yanıtı
+                ip = ".".join(reversed(name[:-13].split(".")))
+                if util.is_ipv4(ip):
+                    out["a"][target[:-6]] = ip
+            elif name.startswith("_") and ("._tcp" in name or "._udp" in name):
                 svc = name.replace(".local", "")
-                if not svc.startswith("_services"):
+                if svc.startswith("_services"):   # _services._dns-sd: hedef bir servis türü
+                    out["services"].add(target.replace(".local", ""))
+                else:
                     out["services"].add(svc)
                 inst = target.split("._", 1)[0]
                 if inst and not inst.startswith("_"):
@@ -116,6 +124,26 @@ def parse_mdns(payload):
                         out["txt"][k] = v
         off += rdlen
     return out
+
+
+def mdns_obs(payload, obs):
+    """mDNS yanıtındaki adları gözleme ekler (obs["ip"] yanıtı gönderenin IP'si)."""
+    try:
+        m = parse_mdns(payload)
+    except (ValueError, struct.error, IndexError):
+        return obs
+    for name, ip in m["a"].items():
+        if ip == obs["ip"]:
+            obs["mdns_name"] = _clean(name)
+    if m["services"]:
+        obs["mdns_services"] = sorted(m["services"])[:12]
+    if m["instances"]:
+        obs["mdns_instances"] = sorted(_clean(i) for i in m["instances"] if _clean(i))[:6]
+    if m["txt"].get("fn"):
+        obs["friendly"] = _clean(m["txt"]["fn"])
+    if m["txt"].get("md") or m["txt"].get("model") or m["txt"].get("am"):
+        obs["model"] = _clean(m["txt"].get("md") or m["txt"].get("model") or m["txt"].get("am"))
+    return obs
 
 
 # ---------------------------------------------------------------- çerçeve ayrıştırma
@@ -146,23 +174,7 @@ def parse_frame(pkt):
     if {sport, dport} & {67, 68} and len(payload) >= 240 and payload[236:240] == b"\x63\x82\x53\x63":
         return _parse_dhcp(payload)
     if dport == 5353 or sport == 5353:
-        obs = {"mac": src_mac, "ip": src_ip, "via": "mdns"}
-        try:
-            m = parse_mdns(payload)
-        except (ValueError, struct.error, IndexError):
-            return [obs]
-        for name, ip in m["a"].items():
-            if ip == src_ip:
-                obs["mdns_name"] = _clean(name)
-        if m["services"]:
-            obs["mdns_services"] = sorted(m["services"])[:12]
-        if m["instances"]:
-            obs["mdns_instances"] = sorted(_clean(i) for i in m["instances"] if _clean(i))[:6]
-        if m["txt"].get("fn"):
-            obs["friendly"] = _clean(m["txt"]["fn"])
-        if m["txt"].get("md") or m["txt"].get("model") or m["txt"].get("am"):
-            obs["model"] = _clean(m["txt"].get("md") or m["txt"].get("model") or m["txt"].get("am"))
-        return [obs]
+        return [mdns_obs(payload, {"mac": src_mac, "ip": src_ip, "via": "mdns"})]
     if dport == 1900 or sport == 1900:
         obs = {"mac": src_mac, "ip": src_ip, "via": "ssdp"}
         text = payload[:1500].decode("utf-8", "replace")
@@ -249,10 +261,10 @@ class Passive:
             rec["last"] = t
             if ip:
                 rec["ips"][ip] = t
-            for k in ("dhcp_name", "dhcp_vendor", "mdns_name", "friendly", "model", "ssdp_server"):
+            for k in NAME_FIELDS:
                 if obs.get(k):
                     rec[k] = obs[k]
-            for k in ("mdns_services", "mdns_instances"):
+            for k in LIST_FIELDS:
                 if obs.get(k):
                     rec[k] = sorted(set(rec.get(k, [])) | set(obs[k]))[:16]
             if ip:
@@ -265,10 +277,10 @@ class Passive:
                 else:
                     info["l2_mac"] = mac
                 info["last"] = t
-                for k in ("dhcp_name", "dhcp_vendor", "mdns_name", "friendly", "model", "ssdp_server"):
+                for k in NAME_FIELDS:
                     if obs.get(k):
                         info[k] = obs[k]
-                for k in ("mdns_services", "mdns_instances"):
+                for k in LIST_FIELDS:
                     if obs.get(k):
                         info[k] = sorted(set(info.get(k, [])) | set(obs[k]))[:16]
                 self.ipinfo[ip] = info

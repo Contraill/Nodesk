@@ -325,6 +325,8 @@ const SOURCE_TR = {
   router: ["Router ajanı", "Ev 2: DHCP, ARP ve H3600P ağı (router 5 dk'da bir gönderir)"],
   agents: ["Sunucu ajanları", "Oracle sunucularındaki servisler"],
   health: ["Servis sağlık kontrolü", "Pi'deki servislerin portları yanıt veriyor mu (sadece Pi'nin kendisinde)"],
+  probe: ["Ev 1 ad sorgusu", "her cihaza günde bir kez NetBIOS/mDNS ad sorusu ve tek SSDP araması; router'a uğramaz"],
+  keenetic: ["Keenetic cihaz listesi", "extender arkasındaki cihazların gerçek MAC'i ve adı (Pi'de keys/keenetic gerekir)"],
 };
 const VIA_TR = { extender: "extender (MAC-NAT) arkasında", arp: "ARP taraması", neigh: "komşu tablosu", passive: "pasif dinleme", self: "bu cihaz",
   tailscale: "Tailscale", ajan: "ajan", "router arp": "router ARP", "router dhcp": "router DHCP" };
@@ -795,10 +797,10 @@ function renderPanel(n) {
   const st = n.online ? `<span class="status on">Çevrimiçi</span>` : n.stale ? `<span class="status warn">Veri alınamadı</span>` : `<span class="status">Görünmüyor</span>`;
   add("Durum", st);
   add("Yerel IP", (n.ips || []).filter((i) => !i.startsWith("100.")).map(esc).join("<br>"), true);
-  add("MAC", n.mac ? esc(n.mac) + (n.random_mac ? "<br><small>rastgele (gizlilik) MAC</small>" : "") : (n.macs || []).map(esc).join("<br>"), true);
+  add("MAC", n.mac ? [n.mac, ...(n.aliases || [])].map(esc).join("<br>") + (n.random_mac ? "<br><small>rastgele (gizlilik) MAC</small>" : "") : (n.macs || []).map(esc).join("<br>"), true);
   add("Üretici", esc(n.vendor || (n.mac ? (n.random_mac ? "gizli (rastgele MAC)" : "bilinmiyor") : "")));
   const nm = n.names || {};
-  add("Kendi adı", esc([nm.dhcp_name, nm.mdns_name].filter(Boolean).join(" · ")));
+  add("Kendi adı", esc([...new Set([nm.dhcp_name, nm.mdns_name, nm.nb_name].filter(Boolean))].join(" · ")));
   add("Model", esc([nm.friendly, nm.model].filter(Boolean).join(" · ")));
   if (nm.ssdp_server) add("UPnP", esc(nm.ssdp_server));
   if (nm.mdns_services) add("Yayınladığı", esc(nm.mdns_services.map((s) => s.replace(/^_|\._(tcp|udp)$/g, "")).join(", ")));

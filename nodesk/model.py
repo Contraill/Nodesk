@@ -8,7 +8,7 @@ import datetime as dt
 import ipaddress
 import re
 
-from . import sources, util
+from . import passive, sources, util
 
 ROUTER_FRESH_MIN = 15      # router ajanı 5 dakikada bir rapor verir
 AGENT_FRESH_MIN = 20
@@ -39,7 +39,8 @@ def guess_type(vendor, mac, names=None):
     text = " ".join(str(x) for x in [
         vendor or "", names.get("dhcp_name", ""), names.get("mdns_name", ""),
         names.get("friendly", ""), names.get("model", ""), names.get("ssdp_server", ""),
-        names.get("dhcp_vendor", ""), " ".join(names.get("mdns_services", []))]).lower()
+        names.get("dhcp_vendor", ""), names.get("nb_name", ""),
+        " ".join(names.get("mdns_services", []))]).lower()
     for pat, kind in TYPE_RULES:
         if re.search(pat, text):
             return kind
@@ -49,7 +50,7 @@ def guess_type(vendor, mac, names=None):
 
 
 def best_name(names):
-    for k in ("friendly", "dhcp_name", "mdns_name"):
+    for k in ("friendly", "dhcp_name", "mdns_name", "nb_name"):
         v = names.get(k)
         if v and v.lower() not in ("localhost", "android", "*"):
             return v
@@ -57,14 +58,16 @@ def best_name(names):
     return inst[0] if inst else None
 
 
-NAME_KEYS = ("dhcp_name", "dhcp_vendor", "mdns_name", "friendly", "model", "ssdp_server",
-             "mdns_services", "mdns_instances")
+NAME_KEYS = passive.NAME_FIELDS + passive.LIST_FIELDS
 
 
-def same_oui(a, b):
-    """52:ff:20:.. ile 50:ff:20:.. aynı üretici: biri 'yerel yönetimli' bitli kopya."""
+def twin_mac(a, b):
+    """50:ff:20:73:86:18 ve 52:ff:20:53:86:18: aynı cihazın ikinci ('yerel yönetimli') MAC'i.
+    Keenetic tekrarlayıcı modunda DHCP'de birini, ARP'de öbürünü kullanır."""
     try:
-        return a.split(":")[1:3] == b.split(":")[1:3] and (int(a[:2], 16) & 0xFC) == (int(b[:2], 16) & 0xFC)
+        x, y = a.split(":"), b.split(":")
+        return (a != b and len(x) == len(y) == 6 and x[1:3] == y[1:3] and x[4:] == y[4:]
+                and (int(x[0], 16) & 0xFC) == (int(y[0], 16) & 0xFC))
     except (ValueError, AttributeError):
         return False
 
@@ -348,37 +351,87 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         if last and now - last <= dt.timedelta(minutes=window):
             o["online"] = True
         o["passive_last"] = rec.get("last")
-        for k in ("dhcp_name", "dhcp_vendor", "mdns_name", "friendly", "model", "ssdp_server",
-                  "mdns_services", "mdns_instances"):
+        for k in NAME_KEYS:
             if rec.get(k):
                 o["names"][k] = rec[k]
 
-    # ---- MAC-NAT yapan extender'lar (örn. Keenetic tekrarlayıcı modu): arkasındaki cihazlar
-    # extender'ın MAC'iyle görünür. Her IP'yi ayrı cihaza çevir; gerçek MAC'i DHCP'den
-    # (pasif dinleme) biliniyorsa onu kullan, bilinmiyorsa IP'ye göre geçici bir cihaz yap.
-    ipinfo = raw.get("passive_ip") or {}
-    pseudo = {}
+    # ---- Keenetic'in kendi cihaz listesi (RCI): arkasındaki cihazların gerçek MAC'i ve adı
+    ipinfo = {ip: dict(v) for ip, v in (raw.get("passive_ip") or {}).items()}
+    for h in raw.get("keenetic") or []:
+        names = {k: v for k, v in (("friendly", h.get("name")), ("dhcp_name", h.get("hostname")))
+                 if v and v != h["mac"]}
+        if h["mac"] in obs:
+            for k, v in names.items():
+                obs[h["mac"]]["names"].setdefault(k, v)
+        if h.get("ip") and subnet and util.in_net(h["ip"], subnet):
+            info = ipinfo.setdefault(h["ip"], {})
+            if info.get("real_mac") != h["mac"]:
+                info.clear()
+            info.update(real_mac=h["mac"], **names)
+            if h.get("active"):
+                info["active"] = True
 
     def bridge_type(mac, o):
         conf, ov = cfg_dev.get(mac, {}), ov_dev.get(f"mac:{mac}", {})
         return ov.get("type") or conf.get("type") or guess_type(o["vendor"] or util.vendor_for(mac, oui), mac)
 
+    # ---- Aynı cihazın ikinci MAC'i (haritada iki kez görünmesin). ARP'de bir IP'ye yanıt veren
+    # MAC, o IP'yi DHCP'den başka bir MAC'le almışsa:
+    #   * ikiz MAC (twin_mac): extender'ın iki arayüzü (Keenetic 50:ff:.. / 52:ff:..)
+    #   * aynı DHCP adı: hem kablolu hem Wi-Fi bağlı cihaz (LG TV); Linux iki IP'nin ARP'sine de
+    #     tek kartla yanıt verir. Farklı adlı cihazlar extender (MAC-NAT) arkasıdır, aşağıda ayrılır.
+    alias = {}
+    for mac, o in obs.items():
+        for ip in o["ips"]:
+            real = (ipinfo.get(ip) or {}).get("real_mac")
+            if (not real or real == mac or real not in obs or real in alias or mac in alias
+                    or real in alias.values()):
+                continue
+            dn = o["names"].get("dhcp_name")
+            if twin_mac(real, mac) or (dn and dn == obs[real]["names"].get("dhcp_name")
+                                       and bridge_type(mac, o) != "ap"):
+                alias[real] = mac
+    for a, m in alias.items():
+        o, src = obs[m], obs.pop(a)
+        for ip, t in src["ips"].items():
+            o["ips"][ip] = max(filter(None, [o["ips"].get(ip), t]), default=None)
+        o["live"] |= src["live"]
+        o["via"] |= src["via"]
+        o["online"] = o["online"] or src["online"]
+        o["vendor"] = o["vendor"] or src["vendor"]
+        for k, v in src["names"].items():
+            o["names"].setdefault(k, v)
+        o.setdefault("aliases", []).append(a)
+        state.pop(f"mac:{a}", None)
+
+    # ---- MAC-NAT yapan extender'lar (örn. Keenetic tekrarlayıcı modu): arkasındaki cihazlar
+    # extender'ın MAC'iyle görünür. Her IP'yi ayrı cihaza çevir; gerçek MAC'i DHCP'den
+    # (pasif dinleme) biliniyorsa onu kullan, bilinmiyorsa IP'ye göre geçici bir cihaz yap.
+    pseudo, retired = {}, set()
+    # IP'nin son bilinen sahibi (geçmiş turlar): extender arkasına geçen cihazın kimliği kalsın
+    hist = {ip: nid[4:] for nid, st in state.items() if nid.startswith("mac:") and nid[4:] not in obs
+            and (st.get("snapshot") or {}).get("site") == "ev1"
+            for ip in (st.get("snapshot") or {}).get("ips") or []}
     bridges = [m for m, o in obs.items() if len(o["ips"]) >= 2 and bridge_type(m, o) == "ap"]
     owner = {ip: m for m, o in obs.items() if m not in bridges for ip in o["ips"]}
     for b in bridges:
         o = obs[b]
+        mine = [ip for ip in o["ips"] if twin_mac((ipinfo.get(ip) or {}).get("real_mac") or "", b)]
         own = ov_dev.get(f"mac:{b}", {}).get("ip") or cfg_dev.get(b, {}).get("ip")
         if not own:
-            own = next((ip for ip in o["ips"] if same_oui((ipinfo.get(ip) or {}).get("real_mac") or "", b)),
-                       None)
+            own = max(mine, key=lambda ip: o["ips"][ip] or "", default=None)
         if own not in o["ips"]:
             own = min(o["ips"], key=util.ip_sort_key)
         for ip in [i for i in list(o["ips"]) if i != own]:
             t, live = o["ips"].pop(ip), ip in o["live"]
             o["live"].discard(ip)
+            if ip in mine:       # extender'ın kendi eski IP'si
+                retired.add(ip)
+                continue
             info = ipinfo.get(ip) or {}
-            real = owner.get(ip) or info.get("real_mac")
-            if real in (b, None) or real in self_macs or same_oui(real, b):
+            live = live or bool(info.get("active"))
+            real = owner.get(ip) or info.get("real_mac") or hist.get(ip)
+            if real in (b, None) or real in self_macs or twin_mac(real, b):
                 real = None
             if real:
                 r = ob(real)
@@ -417,7 +470,12 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             kind="modem" if is_gw else None,
             label=ev1.get("modem_name") if is_gw else None,
             parent_hint=None if is_gw else (f"mac:{o['bridge']}" if o.get("bridge") else "ev1-gw"),
-            is_root=is_gw, online=o["online"], via=sorted(o["via"]), names=o["names"])
+            is_root=is_gw, online=o["online"], via=sorted(o["via"]), names=o["names"],
+            aliases=o.get("aliases"))
+    # Artık bir MAC'e bağlanan IP'lerin geçici (ip:) kayıtları kopya olarak kalmasın
+    taken = retired | {ip for nid, kw in seen.items() if nid.startswith("mac:") for ip in kw["ips"]}
+    for nid in [n for n in state if n.startswith("ip:") and n not in seen and n[3:] in taken]:
+        del state[nid]
 
     ev1_failed = raw.get("arp") is None and raw.get("passive") is None
     if raw.get("arp") is None and settings["sources"].get("arp"):
@@ -623,7 +681,8 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         snap = dict(st["snapshot"])
         mac = snap.get("mac")
         conf = cfg.get("devices", {}).get("self", {}) if nid == "self" else \
-            ({} if snap.get("roam") else (cfg_dev.get(mac, {}) if mac else {}))
+            ({} if snap.get("roam") else (cfg_dev.get(mac) or next(
+                (cfg_dev[a] for a in snap.get("aliases") or [] if a in cfg_dev), {}) if mac else {}))
         ov = ov_dev.get(nid, {})
         names = snap.pop("names", None) or {}
         hint = snap.pop("parent_hint", None)
