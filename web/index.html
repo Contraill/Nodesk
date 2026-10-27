@@ -684,10 +684,9 @@ function render() {
   for (const h of HEADS) drawHead(gCards, h);
   applyColors();
 
-  const ports = prefs.tail ? tailnetPorts(frames) : [];
-  const router = makeRouter(frames, inet, ports);
-  if (prefs.tail) drawTailnet(gTail, ports, router);
-  if (prefs.exit) drawExits(gExit, router);
+  // Exit yolları Tailnet açık/kapalıdan bağımsız: ayrı yol bulucu, aynı engeller
+  const exitRoutes = prefs.exit ? drawExits(gExit, makeRouter(frames, inet, [])) : [];
+  if (prefs.tail) { const ports = tailnetPorts(frames); drawTailnet(gTail, ports, makeRouter(frames, inet, ports), inet, exitRoutes); }
   applyView();
 }
 /* ---------------- yol bulma ----------------
@@ -696,24 +695,41 @@ function render() {
    pahalı sayılır (Tailnet bağları gruplar arasındaki boşluklardan gitsin). Izgara: engel
    kenarları + çerçeve olukları + başlangıç/bitiş noktaları. */
 function makeRouter(frames, inet, extra) {
-  const M = 10, obs = [];
-  const box = (x, y, w, h) => obs.push([x - M, y - M, x + w + M, y + h + M]);
+  const M = 8, obs = [], raw = [], bx = [], by = [];
+  const box = (x, y, w, h) => { obs.push([x - M, y - M, x + w + M, y + h + M]); raw.push([x, y, x + w, y + h]); bx.push(x, x + w); by.push(y, y + h); };
   for (const n of ALL) if (n.x !== undefined && n.kind !== "internet") box(n.x, n.y, n.cw, n.ch);
   for (const h of HEADS) box(h.x, h.y, h.cw, h.ch);
   for (const f of frames) box(f.x + 16, f.y + 16, f.name.length * 15 + 10, 30);
   box(inet.x, inet.y, inet.w, inet.h);
   for (const e of extra || []) box(e.x, e.y, e.w, e.h);
-  const xs = [], ys = [];
-  for (const o of obs) xs.push(o[0], o[2]), ys.push(o[1], o[3]);
-  for (const f of frames) xs.push(f.x - SITE_GAP / 2, f.x + f.w + SITE_GAP / 2), ys.push(f.y - SITE_GAP / 2, f.y + f.h + SITE_GAP / 2);
+  // Izgara boşlukların ORTASINDAN geçer: çizgi kartlara, çerçevelere hep eşit uzaklıkta kalır
+  for (const f of frames) bx.push(f.x, f.x + f.w), by.push(f.y, f.y + f.h);
+  const mids = (v) => {
+    const u = [...new Set(v)].sort((a, b) => a - b), out = [u[0] - 40, u[u.length - 1] + 40];
+    for (let i = 1; i < u.length; i++) out.push((u[i - 1] + u[i]) / 2);
+    return out;
+  };
+  const xs = mids(bx), ys = mids(by);
   const inside = (x, y) => obs.some((o) => x > o[0] + 0.5 && x < o[2] - 0.5 && y > o[1] + 0.5 && y < o[3] - 0.5);
   const inFrame = (x, y) => frames.some((f) => x > f.x && x < f.x + f.w && y > f.y && y < f.y + f.h);
   // ağacın yatay bağlantı çizgisine yakın ve paralel gitmek pahalı (karışmasın; kesmek serbest)
-  const nearBus = (x0, x1, y) => BUSES.some((b) => Math.abs(b[2] - y) < 16 && Math.max(x0, x1) > b[0] && Math.min(x0, x1) < b[1]);
+  const nearBus = (x0, x1, y) => BUSES.some((b) => Math.abs(b[2] - y) < 12 && Math.max(x0, x1) > b[0] && Math.min(x0, x1) < b[1]);
   // çerçeve kenarının üstünden/boyunca gitmek de pahalı (kesip geçmek serbest)
   const alongFrame = (x0, y0, x1, y1) => frames.some((f) => y0 === y1
-    ? (Math.abs(y0 - f.y) < 8 || Math.abs(y0 - f.y - f.h) < 8) && Math.max(x0, x1) > f.x && Math.min(x0, x1) < f.x + f.w
-    : (Math.abs(x0 - f.x) < 8 || Math.abs(x0 - f.x - f.w) < 8) && Math.max(y0, y1) > f.y && Math.min(y0, y1) < f.y + f.h);
+    ? (Math.abs(y0 - f.y) < 15 || Math.abs(y0 - f.y - f.h) < 15) && Math.max(x0, x1) > f.x && Math.min(x0, x1) < f.x + f.w
+    : (Math.abs(x0 - f.x) < 15 || Math.abs(x0 - f.x - f.w) < 15) && Math.max(y0, y1) > f.y && Math.min(y0, y1) < f.y + f.h);
+  // açıklık: parçanın en yakın karta uzaklığı; dar geçiş pahalı -> çizgi kanalın ortasından gider
+  const CLR = 22;
+  const clearance = (x0, y0, x1, y1) => {
+    let m = CLR;
+    for (const r of raw) {
+      const d = y0 === y1
+        ? (Math.max(x0, x1) > r[0] && Math.min(x0, x1) < r[2] ? Math.max(r[1] - y0, y0 - r[3]) : CLR)
+        : (Math.max(y0, y1) > r[1] && Math.min(y0, y1) < r[3] ? Math.max(r[0] - x0, x0 - r[2]) : CLR);
+      if (d < m) m = d;
+    }
+    return m;
+  };
   const used = new Set();
   const key = (x1, y1, x2, y2) => x1 < x2 || (x1 === x2 && y1 < y2) ? `${x1},${y1},${x2},${y2}` : `${x2},${y2},${x1},${y1}`;
   // Kartın yan kenarlarından çıkış noktaları (sol yan pahalı: ağaç çizgileri orada)
@@ -723,7 +739,7 @@ function makeRouter(frames, inet, extra) {
     const X = [...new Set([...xs, ...starts.map((p) => p.x), ...goals.map((p) => p.x)])].sort((a, b) => a - b);
     const Y = [...new Set([...ys, ...starts.map((p) => p.y), ...goals.map((p) => p.y)])].sort((a, b) => a - b);
     const nx = X.length, ny = Y.length, xi = new Map(X.map((v, i) => [v, i])), yi = new Map(Y.map((v, i) => [v, i]));
-    const BEND = 30, FR = opt.framePenalty || 1, N = nx * ny;
+    const BEND = 60, FR = opt.framePenalty || 1, N = nx * ny;
     const dist = new Float64Array(N * 4).fill(Infinity), prev = new Int32Array(N * 4).fill(-1);
     const blocked = new Int8Array(N).fill(-1), segH = new Int8Array(N).fill(-1), segV = new Int8Array(N).fill(-1);
     const isBlocked = (v) => (blocked[v] < 0 ? (blocked[v] = inside(X[(v / ny) | 0], Y[v % ny]) ? 1 : 0) : blocked[v]);
@@ -767,9 +783,10 @@ function makeRouter(frames, inet, extra) {
         if (seg[sv]) continue;
         const len = Math.abs(X[ni] - X[i]) + Math.abs(Y[nj] - Y[j]);
         let c = len * (FR > 1 && inFrame((X[i] + X[ni]) / 2, (Y[j] + Y[nj]) / 2) ? FR : 1);
-        if (nd < 2 && nearBus(X[i], X[ni], Y[j])) c *= 1.4;
-        if (alongFrame(X[i], Y[j], X[ni], Y[nj])) c *= 2.5;
-        if (!opt.shared && used.has(key(X[i], Y[j], X[ni], Y[nj]))) c += len * 1.5 + 20;
+        if (nd < 2 && nearBus(X[i], X[ni], Y[j])) c *= 3;
+        c *= 1 + Math.max(0, CLR - clearance(X[i], Y[j], X[ni], Y[nj])) / 11;
+        if (alongFrame(X[i], Y[j], X[ni], Y[nj])) c *= 3;
+        if (used.has(key(X[i], Y[j], X[ni], Y[nj]))) c *= 0.9;   // aynı koridoru paylaş: demet halinde, nudge aralıklar
         const ng = g + c + (nd !== d ? BEND : 0), ns = w * 4 + nd;
         if (ng < dist[ns]) { dist[ns] = ng; prev[ns] = st; push(ng + h(ni, nj), ns); }
       }
@@ -785,16 +802,71 @@ function makeRouter(frames, inet, extra) {
   return { route, ports };
 }
 function drawExits(g, R) {
+  const links = [];
   for (const o of DATA.overlay || []) {
     const a = byId.get(o.from), b = byId.get(o.to);
     if (!a || !b || a.x === undefined || b.x === undefined) continue;
     const pts = R.route(R.ports(a), R.ports(b));
-    if (!pts) continue;
-    const d = roundPath(pts), t = el("title", {}, el("path", { class: "exit", d }, g));
+    if (pts) links.push({ a, b, pts });
+  }
+  const raw = links.map((l) => l.pts);
+  nudge(raw, raw.length).forEach((pts, i) => {
+    const { a, b } = links[i], d = roundPath(pts);
+    const t = el("title", {}, el("path", { class: "exit", d }, g));
     t.textContent = `${a.label} interneti ${b.label} üzerinden çıkıyor (exit node)`;
     el("path", { class: "exit-flow", d }, g);   // akış yönü: kullanan cihazdan exit node'a
     for (const p of pts) bounds.h = Math.max(bounds.h, p[1] + 24);
+  });
+  return raw;
+}
+/* Aynı kanalı paylaşan çizgileri eşit aralıkla yana kaydırır: üst üste binip tek çizgi gibi
+   görünmesinler. Köşenin x'i bitişik dikey parçayla, y'si bitişik yatay parçayla kayar.
+   İlk `fixed` çizginin aralıkları yalnız kendi aralarında hesaplanır (diğerleri eklenince
+   kaymazlar); diğerleri onların iki yanına yerleşir. */
+function nudge(routes, fixed = routes.length, gap = 9) {
+  const simp = (pts) => {
+    const out = [];
+    for (const p of pts) {
+      const q = out[out.length - 1];
+      if (q && q[0] === p[0] && q[1] === p[1]) continue;
+      const r = out[out.length - 2];
+      if (r && ((r[0] === q[0] && q[0] === p[0]) || (r[1] === q[1] && q[1] === p[1]))) out.pop();
+      out.push([p[0], p[1]]);
+    }
+    return out;
+  };
+  routes = routes.map(simp);
+  const segs = [];
+  routes.forEach((pts, r) => {
+    for (let i = 1; i < pts.length; i++) {
+      const [p, q] = [pts[i - 1], pts[i]], v = p[0] === q[0], k = v ? 1 : 0;
+      segs.push({ r, i, v, c: v ? p[0] : p[1], lo: Math.min(p[k], q[k]), hi: Math.max(p[k], q[k]), off: 0 });
+    }
+  });
+  for (const v of [true, false]) {
+    const list = segs.filter((s) => s.v === v), seen = new Set();
+    for (const s of list) {
+      if (seen.has(s)) continue;
+      const grp = [s]; seen.add(s);
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const t of list) if (!seen.has(t) && Math.abs(t.c - s.c) < 1 && grp.some((x) => t.lo < x.hi - 1 && t.hi > x.lo + 1)) { grp.push(t); seen.add(t); grew = true; }
+      }
+      const rs = [...new Set(grp.map((x) => x.r))].sort((a, b) => a - b);
+      if (rs.length < 2) continue;
+      const fx = rs.filter((r) => r < fixed), fr = rs.filter((r) => r >= fixed), off = {};
+      fx.forEach((r, k) => { off[r] = (k - (fx.length - 1) / 2) * gap; });
+      fr.forEach((r, k) => {
+        off[r] = fx.length ? (k % 2 ? -1 : 1) * ((fx.length - 1) / 2 + Math.floor(k / 2) + 1) * gap
+          : (k - (fr.length - 1) / 2) * gap;
+      });
+      for (const x of grp) x.off = off[x.r];
+    }
   }
+  return routes.map((pts, r) => pts.map(([x, y], k) => {
+    for (const s of segs) if (s.r === r && (s.i === k || s.i === k + 1)) { if (s.v) x += s.off; else y += s.off; }
+    return [x, y];
+  }));
 }
 /* Tailnet: çerçevelerin üstünde ortak bir omurga; her grup kendi bağlantı noktasından ona iner.
    İnişin rengi ve etiketi, o gruptaki cihazlara Pi'den görülen yol:
@@ -806,10 +878,14 @@ function tailnetPorts(frames) {
     const ms = tsMembers(f.id), paths = ms.map(tsPath), hub = !!self && f.id === self.site;
     const nDir = paths.filter((x) => x === "direct").length, nRel = paths.filter((x) => x === "relay").length, nDown = ms.length - nDir - nRel;
     const st = hub ? "direct" : nDown === ms.length ? "down" : nRel ? "relay" : "direct";
+    // kısa özet (çerçeveye sığsın); ayrıntı üzerine gelince
     let sum;
-    if (hub) sum = `${ms.length} cihaz · görüş noktası`;
+    if (hub) sum = "görüş noktası";
     else if (ms.length === 1) sum = ms[0].tailscale.path;
-    else sum = [nDir ? `${nDir} doğrudan` : "", nRel ? `${nRel} aktarıcı` : "", nDown ? `${nDown} kapalı` : ""].filter(Boolean).join(" · ");
+    else if (nDown === ms.length) sum = "bağlantı yok";
+    else if (nDir === ms.length) sum = "doğrudan";
+    else if (nRel === ms.length) sum = `${nRel} aktarıcı`;
+    else sum = `${nDir}/${ms.length} doğrudan`;
     const label = `Tailnet · ${sum}`, w = label.length * 6.5 + 22;
     const cx = Math.max(f.x + w / 2 + 12, Math.min(f.x + f.w - w / 2 - 12, f.x + f.w / 2 + 130));
     return { site: f.id, f, st, hub, label, x: cx - w / 2, y: f.y - 10, w, h: 20, cx,
@@ -817,16 +893,16 @@ function tailnetPorts(frames) {
         ms.map((m) => `${m.label}: ${m.tailscale.path}`).join("\n") };
   });
 }
-function drawTailnet(g, ports, R) {
+function drawTailnet(g, ports, R, inet, exitRoutes) {
   if (!ports.length) return;
-  const top = Math.min(...ports.map((p) => p.f.y)), busY = top - 38;
+  // omurga İnternet düğümünün üstünde: exit çizgilerinin koridoruyla (çerçevelerin hemen
+  // üstü) hiçbir ekran boyutunda çakışmaz
+  const busY = inet.y - 24;
   const gutters = [...new Set(ports.flatMap((p) => [p.cx, p.f.x - SITE_GAP / 2, p.f.x + p.f.w + SITE_GAP / 2]))];
-  const drops = ports.map((p) => {
-    if (p.f.y === top) return [[p.cx, p.y], [p.cx, busY]];
-    // alt satırdaki grup: çerçevelerin arasındaki boşluktan omurgaya çıkar
-    return R.route([{ x: p.cx, y: p.y - 12, from: [p.cx, p.y], cost: 0 }],
-      gutters.map((x) => ({ x, y: busY })), { framePenalty: 6, shared: true }) || [[p.cx, p.y], [p.cx, busY]];
-  });
+  const drops = ports.map((p) => R.route([{ x: p.cx, y: p.y - 12, from: [p.cx, p.y], cost: 0 }],
+    gutters.map((x) => ({ x, y: busY })), { framePenalty: 6 }) || [[p.cx, p.y], [p.cx, busY]]);
+  // exit çizgileri yerinde kalır, Tailnet inişleri onların yanına aralıklanır
+  nudge([...exitRoutes, ...drops], exitRoutes.length).slice(exitRoutes.length).forEach((d, i) => { drops[i] = d; });
   const ends = drops.map((d) => d[d.length - 1][0]);
   el("path", { class: "ts-link direct", d: `M${Math.min(...ends) - 30},${busY}H${Math.max(...ends) + 30}` }, g);
   const bt = text(g, Math.min(...ends) - 36, busY + 4, "Tailnet", "ts-bus-label", { "text-anchor": "end" });
