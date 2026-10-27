@@ -114,8 +114,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .exit-flow { fill: none; stroke: var(--bg); stroke-width: 3; stroke-dasharray: 2 34; stroke-linecap: round; animation: flow 1.8s linear infinite; }
 @keyframes flow { to { stroke-dashoffset: -36; } }
 @media (prefers-reduced-motion: reduce) { .exit-flow { animation: none; } }
-.exit-label { font: 600 13px var(--sans); fill: var(--exit); }
-.exit-label-bg { fill: var(--bg); }
+.exit-label { font: 600 12px var(--sans); fill: var(--exit); }
+.exit-label-bg { fill: var(--bg); stroke: var(--exit); stroke-width: 1.2; }
+.exit-chip rect { fill: var(--card); stroke: var(--exit); stroke-width: 1.3; }
+.exit-chip text { font: 600 11px var(--sans); fill: var(--exit); }
+/* servis grubu başlığı: kutu değil, açılıp kapanan küçük bir hap */
+.svc-head { cursor: pointer; outline: none; }
+.svc-head.cat-app { --cat: var(--c-svc); } .svc-head.cat-sys { --cat: var(--c-sys); }
+.svc-head rect.pill { fill: color-mix(in srgb, var(--cat) 12%, var(--card)); stroke: color-mix(in srgb, var(--cat) 55%, var(--card-line)); stroke-width: 1.2; }
+.svc-head:hover rect.pill { stroke: var(--cat); }
+.svc-head:focus-visible rect.pill { stroke: var(--hl); stroke-width: 2.4; }
+.svc-head text { font: 600 13.5px var(--sans); fill: var(--text); }
+.svc-head .cnt { font: 600 12px var(--sans); fill: var(--muted); }
+.svc-head path { stroke: var(--muted); stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.svc-head .led { stroke: var(--card); stroke-width: 1.5; }
+.meta .unnamed { background: none; border: 0; padding: 0; color: var(--relay); font: inherit; cursor: pointer; text-decoration: underline dotted; }
 .card { cursor: pointer; outline: none; }
 .card rect.box { fill: var(--card); stroke: var(--card-line); stroke-width: 1.2; }
 /* rol rengi: ağ cihazı, sunucu, servis (diğer cihazlar nötr) */
@@ -243,6 +256,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
     <span class="sep"></span>
     <button class="btn" id="bFilter" title="Filtrele"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12l-4.5 5.5V13l-3-1.5v-3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="lbl">Filtre</span><span class="badge" id="fCount" hidden></span></button>
     <button class="btn" id="tTail" aria-pressed="false" title="Tailscale bağlantılarını göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="2" fill="currentColor"/><circle cx="13" cy="3.5" r="2" fill="currentColor"/><circle cx="13" cy="12.5" r="2" fill="currentColor"/><path d="M5 7l6-3M5 9l6 3" stroke="currentColor" stroke-dasharray="2 2" fill="none"/></svg><span class="lbl">Tailnet</span></button>
+    <button class="btn" id="tExit" aria-pressed="true" title="Exit node kullanımını göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13L13 3M7 3h6v6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">Exit</span></button>
     <button class="btn" id="tSvc" aria-pressed="true" title="Servisleri göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span class="lbl">Servisler</span></button>
     <button class="btn" id="tOff" aria-pressed="true" title="Şu an görünmeyen cihazları göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="currentColor" stroke-dasharray="2.5 2"/></svg><span class="lbl">Çevrimdışı</span></button>
     <span class="sep"></span>
@@ -348,15 +362,16 @@ const CAT = { modem: "net", router: "net", ap: "net", server: "srv", nas: "srv",
 
 /* ---------------- ölçüler ---------------- */
 const SW = 186, SH = 48, KW = 172, KH = 38;
-const CW = 200, CH = 52, GX = 22, GY = 46, SPINE = 18, ROWGAP = 10, MAXROWS = 6, INDENT = 22;
+const CW = 200, CH = 52, GX = 22, GY = 46, SPINE = 18, ROWGAP = 10, MAXROWS = 6, INDENT = 22, HW = 150, HH = 30;
 const FRAME_TOP = 58, FRAME_PAD = 26, SITE_GAP = 46;
 
 /* ---------------- durum ---------------- */
 let DATA = null, STATE = null, API_OK = false, byId = new Map(), ALL = [], selected = null, editing = false;
-const prefs = { tail: false, off: true, svc: true, collapsed: {}, filters: { sites: [], kinds: [], tags: [], status: "", hidden: false }, dismissed: {} };
-try { const p = JSON.parse(localStorage.getItem("nodesk-prefs") || "{}"); Object.assign(prefs, p); prefs.filters = Object.assign({ sites: [], kinds: [], tags: [], status: "", hidden: false }, p.filters || {}); } catch (e) {}
+const NO_FILTER = () => ({ sites: [], kinds: [], tags: [], status: "", hidden: false, unnamed: false });
+const prefs = { tail: false, off: true, svc: true, exit: true, collapsed: {}, filters: NO_FILTER(), dismissed: {} };
+try { const p = JSON.parse(localStorage.getItem("nodesk-prefs") || "{}"); Object.assign(prefs, p); prefs.filters = Object.assign(NO_FILTER(), p.filters || {}); } catch (e) {}
 const savePrefs = () => { try { localStorage.setItem("nodesk-prefs", JSON.stringify(prefs)); } catch (e) {} };
-let view = { x: 0, y: 0, k: 1 }, fitted = false, bounds = null;
+let view = { x: 0, y: 0, k: 1 }, fitted = false, bounds = null, HEADS = [], ROWS = [];
 
 /* ---------------- yardımcılar ---------------- */
 function el(tag, attrs, parent) {
@@ -435,22 +450,40 @@ function measure(n) {
   const kids = visibleKids(n).sort(kidSort);
   n.blocks = [];
   if (!kids.length) { n.bw = n.cw; n.bh = n.ch; return; }
-  // Servisler hep aynı sütunda kalır (açılan servisin container'ları kendi altında girintili);
-  // cihazlar, uygulamalar ve sistem servisleri ayrı sütunlara dizilir
+  // Cihazlar sütunlarda; servisler "Uygulamalar" ve "Sistem" gruplarında (başlığa tıklayınca
+  // açılır/kapanır). Açılan servisin container'ları kendi altında girintili.
   const big = kids.filter((k) => !isSvc(k) && (visibleKids(k).length || MAJOR.has(k.kind)));
   for (const k of big) { measure(k); n.blocks.push({ type: "node", node: k, w: k.bw, h: k.bh }); }
-  const sys = (k) => k.source === "system";
-  for (const group of [kids.filter((k) => !isSvc(k) && !big.includes(k)), kids.filter((k) => isSvc(k) && !sys(k)), kids.filter(sys)]) {
-    for (let i = 0; i < group.length; i += MAXROWS) {
-      const items = group.slice(i, i + MAXROWS);
-      items.forEach(measureTree);
-      const h = items.reduce((s, k) => s + k.th, 0) + ROWGAP * (items.length - 1);
-      n.blocks.push({ type: "col", items, w: Math.max(...items.map((k) => k.tw)) + SPINE, h });
-    }
+  const devs = kids.filter((k) => !isSvc(k) && !big.includes(k));
+  for (let i = 0; i < devs.length; i += MAXROWS) {
+    const items = devs.slice(i, i + MAXROWS);
+    items.forEach(measureTree);
+    const h = items.reduce((s, k) => s + k.th, 0) + ROWGAP * (items.length - 1);
+    n.blocks.push({ type: "col", items, w: Math.max(...items.map((k) => k.tw)) + SPINE, h });
+  }
+  for (const cat of ["app", "sys"]) {
+    const group = kids.filter((k) => isSvc(k) && (k.source === "system") === (cat === "sys"));
+    if (group.length) n.blocks.push(svcBlock(n, cat, group));
   }
   n.rowW = n.blocks.reduce((s, b) => s + b.w, 0) + GX * (n.blocks.length - 1);
   n.bw = Math.max(n.cw, n.rowW);
   n.bh = n.ch + GY + Math.max(...n.blocks.map((b) => b.h));
+}
+function svcBlock(host, cat, group) {
+  const head = { id: `${host.id}#${cat}`, kind: "svchead", cat, site: host.site, kids: [], cw: HW, ch: HH,
+    label: cat === "sys" ? "Sistem" : "Uygulamalar", count: group.length, online: group.some((k) => k.online),
+    warn: group.some((k) => k.health === "fail" || k.health === "partial" || (k.state && k.state !== "running")) };
+  head.collapsed = !!prefs.collapsed[head.id];
+  const cols = [];
+  if (!head.collapsed) for (let i = 0; i < group.length; i += MAXROWS) {
+    const items = group.slice(i, i + MAXROWS);
+    items.forEach(measureTree);
+    cols.push({ items, w: Math.max(...items.map((k) => k.tw)) + INDENT,
+      h: items.reduce((s, k) => s + k.th, 0) + ROWGAP * (items.length - 1) });
+  }
+  const colsW = cols.reduce((s, c) => s + c.w, 0) + GX * Math.max(0, cols.length - 1);
+  return { type: "svc", head, cols, w: Math.max(HW, colsW) + SPINE,
+    h: HH + (cols.length ? ROWGAP + Math.max(...cols.map((c) => c.h)) : 0) };
 }
 function measureTree(k) {
   k.cw = cardW(k); k.ch = cardH(k); k.blocks = [];
@@ -479,6 +512,24 @@ function place(n, x, y, edges) {
     if (b.type === "node") {
       place(b.node, bx, top, edges);
       edges.push({ d: `M${px},${pb}V${busY}H${b.node.x + b.node.cw / 2}V${top}`, off: !b.node.online, to: b.node });
+    } else if (b.type === "svc") {
+      const h = b.head, sx = bx + 7, r = 6, my = top + HH / 2, ty = top + HH;
+      h.x = bx + SPINE; h.y = top; HEADS.push(h);
+      edges.push({ d: `M${px},${pb}V${busY}H${sx}V${my - r}Q${sx},${my} ${sx + r},${my}H${h.x}`, off: !h.online, to: h });
+      let cx = h.x;
+      b.cols.forEach((col, ci) => {
+        const spx = cx + 9, y0 = ci ? ty + 5 : ty;
+        if (ci) edges.push({ d: `M${h.x + 9},${ty}V${y0}H${spx}`, to: h });
+        let yy = ty + ROWGAP;
+        for (const k of col.items) {
+          k.x = cx + INDENT; k.y = yy;
+          const ky = yy + k.ch / 2;
+          edges.push({ d: `M${spx},${y0}V${ky - r}Q${spx},${ky} ${spx + r},${ky}H${k.x}`, off: !k.online, to: k });
+          placeSub(k, edges);
+          yy += k.th + ROWGAP;
+        }
+        cx += col.w + GX;
+      });
     } else {
       const sx = bx + 7; let yy = top;
       for (const k of b.items) {
@@ -526,11 +577,13 @@ function layout() {
     if (!best || k > best.k * 1.02) best = { k, lines, W };
   }
   const edges = [], frames = [];
+  HEADS = []; ROWS = [];
   let y = 150;
   for (const line of best.lines) {
     const lw = line.reduce((s, x) => s + x.w, 0) + SITE_GAP * (line.length - 1);
     let x = (best.W - lw) / 2;
     const lh = Math.max(...line.map((s) => s.h));
+    ROWS.push({ y, h: lh, frames: line });
     for (const s of line) {
       s.x = x; s.y = y; frames.push(s);
       let rx = x + (s.w - s.innerW) / 2;
@@ -544,7 +597,7 @@ function layout() {
 }
 
 /* ---------------- filtre ---------------- */
-function filterActive() { const f = prefs.filters; return f.sites.length || f.kinds.length || f.tags.length || f.status; }
+function filterActive() { const f = prefs.filters; return f.sites.length || f.kinds.length || f.tags.length || f.status || f.unnamed; }
 function passesFilter(n) {
   const f = prefs.filters;
   if (f.sites.length && !f.sites.includes(n.site)) return false;
@@ -552,6 +605,7 @@ function passesFilter(n) {
   if (f.tags.length && !(n.tags || []).some((t) => f.tags.includes(t))) return false;
   if (f.status === "on" && !n.online) return false;
   if (f.status === "off" && n.online) return false;
+  if (f.unnamed && !n.unnamed) return false;
   return true;
 }
 function matches(n, q) {
@@ -601,29 +655,94 @@ function render() {
       el("path", { class: "tail " + tsPath(n), d: `M${hx},${hy}C${hx},${hy + 140} ${tx},${ty - 140} ${tx},${ty}` }, gTail);
     }
   }
-  for (const e of edges) el("path", { class: "cable" + (isSvc(e.to) ? " svc" : "") + (e.off ? " off" : "") + (fa && !passesFilter(e.to) ? " faded" : ""), d: e.d }, gEdges);
+  for (const e of edges) el("path", { class: "cable" + (isSvc(e.to) || e.to.kind === "svchead" ? " svc" : "") + (e.off ? " off" : "") + (fa && e.to.kind !== "svchead" && !passesFilter(e.to) ? " faded" : ""), d: e.d }, gEdges);
   for (const n of ALL) if (n.x !== undefined && n.kind !== "internet") (isSvc(n) ? drawSvcCard : drawCard)(gCards, n, q, fa);
+  for (const h of HEADS) drawHead(gCards, h);
 
-  let li = 0;   // her exit node bağı kendi şeridinde (aynı anda birden çok cihaz kullanabilir)
-  for (const o of DATA.overlay || []) {
-    const a = byId.get(o.from), b = byId.get(o.to);
-    if (!a || !b || a.x === undefined || b.x === undefined) continue;
-    const fA = frames.find((f) => f.id === a.site), fB = frames.find((f) => f.id === b.site);
-    const off = li * 8, lane = Math.max(fA ? fA.y + fA.h : 0, fB ? fB.y + fB.h : 0) + SITE_GAP / 2 + li * 34;
-    li++;
-    bounds.h = Math.max(bounds.h, lane + 20);
-    const leg = (n) => n.blocks && n.blocks.length
-      ? { pts: [[n.x + n.cw, n.y + CH / 2 + off], [n.bx + n.bw + GX / 2 + off, n.y + CH / 2 + off]], x: n.bx + n.bw + GX / 2 + off }
-      : { pts: [[n.x + n.cw / 2 + off, n.y + n.ch]], x: n.x + n.cw / 2 + off };
-    const la = leg(a), lb = leg(b);
-    const d = "M" + [...la.pts, [la.x, lane], [lb.x, lane], ...lb.pts.reverse()].map((p) => p.join(",")).join("L");
-    el("path", { class: "exit", d }, gExit);
-    el("path", { class: "exit-flow", d }, gExit);
-    const label = `${a.label} interneti ${b.label} üzerinden çıkıyor`, lw = label.length * 6.6 + 24, mx = (la.x + lb.x) / 2;
-    el("rect", { class: "exit-label-bg", x: mx - lw / 2, y: lane - 12, width: lw, height: 24, rx: 12, stroke: "var(--exit)", "stroke-width": 1.4 }, gExit);
-    text(gExit, mx, lane + 4.5, label, "exit-label", { "text-anchor": "middle" });
-  }
+  if (prefs.exit) drawExits(gExit);
   applyView();
+}
+/* Exit node bağları: kartın yanından çerçevenin altına inip çerçeveler arasındaki oluklardan
+   (satır arası ve çerçeve arası boşluklar) ilerler; çerçevelerin ve kartların üstünden geçmez. */
+function exitRoute(a, b, li) {
+  const off = (li % 4) * 4, lane = (li % 4) * 5 - 7;
+  const rowOf = (n) => Math.max(0, ROWS.findIndex((r) => n.y >= r.y && n.y <= r.y + r.h));
+  const gy = (r) => ROWS[r].y + ROWS[r].h + SITE_GAP / 2 + lane;
+  const vgut = (r, x) => {
+    const fs = ROWS[r].frames, xs = [fs[0].x - SITE_GAP / 2, ...fs.map((f) => f.x + f.w + SITE_GAP / 2)];
+    return xs.reduce((m, v) => (Math.abs(v - x) < Math.abs(m - x) ? v : m)) + lane;
+  };
+  const leg = (n) => {   // kartın sağından, yanındaki boşluğa
+    const y = n.y + n.ch / 2, x = n.blocks && n.blocks.length ? n.bx + n.bw + GX / 2 + off - 4 : n.x + n.cw + 9 + off;
+    return [[n.x + n.cw, y], [x, y]];
+  };
+  let A = a, B = b, ra = rowOf(a), rb = rowOf(b);
+  const flip = ra > rb;
+  if (flip) [A, B, ra, rb] = [b, a, rb, ra];
+  const la = leg(A), lb = leg(B), pts = [...la, [la[1][0], gy(ra)]];
+  let x = la[1][0];
+  for (let r = ra + 1; r <= rb; r++) {
+    const xv = vgut(r, r === rb ? lb[1][0] : x);
+    pts.push([xv, gy(r - 1)], [xv, gy(r)]);
+    x = xv;
+  }
+  pts.push([lb[1][0], gy(rb)], ...lb.reverse());
+  return flip ? pts.reverse() : pts;
+}
+function roundPath(pts, r = 9) {
+  pts = pts.filter((p, i) => !i || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1]);
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+    const d1 = Math.hypot(x1 - x0, y1 - y0), d2 = Math.hypot(x2 - x1, y2 - y1), k = Math.min(r, d1 / 2, d2 / 2);
+    d += `L${x1 - (x1 - x0) / d1 * k},${y1 - (y1 - y0) / d1 * k}Q${x1},${y1} ${x1 + (x2 - x1) / d2 * k},${y1 + (y2 - y1) / d2 * k}`;
+  }
+  const z = pts[pts.length - 1];
+  return d + `L${z[0]},${z[1]}`;
+}
+function drawExits(g) {
+  const placed = [], gLabels = el("g", {}, g);   // etiketler hep çizgilerin üstünde
+  (DATA.overlay || []).forEach((o, li) => {
+    const a = byId.get(o.from), b = byId.get(o.to);
+    if (!a || !b || a.x === undefined || b.x === undefined) return;
+    const pts = exitRoute(a, b, li), d = roundPath(pts);
+    el("path", { class: "exit", d }, g);
+    el("path", { class: "exit-flow", d }, g);
+    for (const p of pts) bounds.h = Math.max(bounds.h, p[1] + 24);
+    // kısa etiket en uzun yatay parçanın üstünde; başka etiketle çakışırsa kaydır
+    let seg = null;
+    for (let i = 1; i < pts.length; i++) if (pts[i][1] === pts[i - 1][1]) {
+      const len = Math.abs(pts[i][0] - pts[i - 1][0]);
+      if (!seg || len > seg.len) seg = { len, x0: Math.min(pts[i][0], pts[i - 1][0]), y: pts[i][1] };
+    }
+    if (!seg) return;
+    const label = `${a.label} → ${b.label}`, lw = label.length * 6.2 + 20;
+    let lx = seg.x0 + seg.len / 2 - lw / 2;
+    while (placed.some((r) => Math.abs(r.y - seg.y) < 22 && lx < r.x + r.w + 8 && r.x < lx + lw + 8)) lx += lw + 12;
+    placed.push({ x: lx, y: seg.y, w: lw });
+    const lg = el("g", {}, gLabels);
+    el("rect", { class: "exit-label-bg", x: lx, y: seg.y - 10, width: lw, height: 20, rx: 10 }, lg);
+    text(lg, lx + lw / 2, seg.y + 4, label, "exit-label", { "text-anchor": "middle" });
+    const t = el("title", {}, lg); t.textContent = `${a.label} interneti ${b.label} üzerinden çıkıyor (exit node)`;
+  });
+  g.appendChild(gLabels);
+}
+function drawHead(parent, h) {
+  const g = el("g", { class: `svc-head cat-${h.cat}`, transform: `translate(${h.x},${h.y})`, tabindex: 0, role: "button",
+    "aria-expanded": String(!h.collapsed), "aria-label": `${h.label}, ${h.count} servis, ${h.collapsed ? "kapalı" : "açık"}` }, parent);
+  g.dataset.head = h.id;
+  el("rect", { class: "pill", width: h.cw, height: h.ch, rx: h.ch / 2 }, g);
+  el("circle", { class: "led", cx: 15, cy: h.ch / 2, r: 4.5, fill: !h.online ? "var(--off)" : h.warn ? "var(--relay)" : "var(--on)" }, g);
+  text(g, 27, h.ch / 2 + 5, h.label, "");
+  text(g, h.cw - 32, h.ch / 2 + 4.5, String(h.count), "cnt", { "text-anchor": "end" });
+  el("path", { d: h.collapsed ? `M${h.cw - 22} ${h.ch / 2 - 4}l4 4-4 4` : `M${h.cw - 24} ${h.ch / 2 - 2}l4 4 4-4` }, g);
+  const t = el("title", {}, g); t.textContent = h.collapsed ? "Aç" : "Kapat";
+}
+function exitChip(g, x, y, label, title, right) {
+  const w = label.length * 6.1 + 14, cg = el("g", { class: "exit-chip" }, g);
+  el("rect", { x: right ? x - w : x, y: y - 8, width: w, height: 16, rx: 8 }, cg);
+  text(cg, (right ? x - w : x) + w / 2, y + 4, label, "", { "text-anchor": "middle" });
+  const t = el("title", {}, cg); t.textContent = title;
 }
 function subnetOf(s) {
   const r = s.roots[0];
@@ -655,6 +774,14 @@ function drawCard(parent, n, q, fa) {
   }
   const ns = (n.service_ids || []).length;
   if (ns && !prefs.svc) text(g, n.cw - 10, n.tailscale ? 41 : 23, `${ns} servis`, "svc-badge", { "text-anchor": "end" });
+  if (prefs.exit && n.exit_via && byId.get(n.exit_via)) {
+    const v = byId.get(n.exit_via).label;
+    exitChip(g, 10, n.ch, "↗ " + clip(v, 18), `İnterneti ${v} üzerinden çıkıyor (exit node)`);
+  }
+  if (prefs.exit && (n.exit_users || []).length) {
+    const users = n.exit_users.map((id) => (byId.get(id) || {}).label || id);
+    exitChip(g, n.cw - 10, n.ch, `exit node · ${users.length}`, "Exit node olarak kullananlar: " + users.join(", "), true);
+  }
   const t = el("title", {}, g); t.textContent = n.label;
 }
 
@@ -823,6 +950,10 @@ function renderPanel(n) {
   add("Yerel IP", (n.ips || []).filter((i) => !i.startsWith("100.")).map(esc).join("<br>"), true);
   add("MAC", n.mac ? [n.mac, ...(n.aliases || [])].map(esc).join("<br>") + (n.random_mac ? "<br><small>rastgele (gizlilik) MAC</small>" : "") : (n.macs || []).map(esc).join("<br>"), true);
   add("Üretici", esc(n.vendor || (n.mac ? (n.random_mac ? "gizli (rastgele MAC)" : "bilinmiyor") : "")));
+  add("İşletim sist.", esc(n.os || ""));
+  const lnk = (id) => `<a href="#" data-open="${esc(id)}">${esc((byId.get(id) || {}).label || id)}</a>`;
+  if (n.exit_via) add("İnternet çıkışı", `${lnk(n.exit_via)} üzerinden <small>(exit node)</small>`);
+  if ((n.exit_users || []).length) add("Exit node", "kullananlar: " + n.exit_users.map(lnk).join(", "));
   const nm = n.names || {};
   add("Kendi adı", esc([...new Set([nm.dhcp_name, nm.mdns_name, nm.nb_name].filter(Boolean))].join(" · ")));
   add("Model", esc([nm.friendly, nm.model].filter(Boolean).join(" · ")));
@@ -834,6 +965,7 @@ function renderPanel(n) {
   add("Son görülme", n.last_seen ? `${ago(n.last_seen)} <small>(${fmtTime(n.last_seen)})</small>` : (n.mac ? "henüz çevrimiçi görülmedi" : ""));
   let html = `<h2>${esc(n.label)}</h2><div class="kind">${esc(KIND_TR[n.kind] || n.kind)}${siteName(n.site) ? " · " + esc(siteName(n.site)) : ""}${n.edited ? " · düzenlendi" : ""}</div>`;
   if ((n.tags || []).length) html += `<div class="chips" style="margin-bottom:12px">${n.tags.map((t) => `<span class="chip static">#${esc(t)}</span>`).join("")}</div>`;
+  if (n.unnamed && API_OK && !n.same_hint) html += `<p class="note">Bu cihazın adı bilinmiyor; gösterilen ad üretici, işletim sistemi ya da IP'den tahmin. Düzenle'den bir kez adlandırırsan kalıcı olur.</p>`;
   if (n.same_hint && API_OK) html += `<div class="note">Bu cihaz, az önce kaybolan <b>${esc(n.same_hint.label)}</b> ile aynı telefon olabilir: telefonlar her Wi-Fi ağında farklı (rastgele) MAC kullanır.
     <div class="actions"><button class="btn primary" id="bSame">Aynı cihaz</button><button class="btn line" id="bNotSame">Farklı cihaz</button></div></div>`;
   html += `<dl>${rows.join("")}</dl>`;
@@ -940,7 +1072,8 @@ function renderFilters() {
     <h3>Tür</h3><div class="chips">${kinds.map((k) => chip("kinds", k, KIND_TR[k] || k)).join("")}</div>
     <h3>Durum</h3><div class="chips">${chip("status", "on", "Çevrimiçi")}${chip("status", "off", "Çevrimdışı")}</div>`;
   html += `<h3>Etiket</h3>` + (tags.length ? `<div class="chips">${tags.map((t) => chip("tags", t, "#" + t)).join("")}</div>` : `<p class="hint">Henüz etiket yok. Bir cihazı düzenleyip etiket ekleyebilirsin.</p>`);
-  html += `<label class="check" style="margin-top:14px"><input type="checkbox" id="fHidden"${f.hidden ? " checked" : ""}> Gizlenmiş cihazları göster</label>
+  html += `<label class="check" style="margin-top:14px"><input type="checkbox" id="fUnnamed"${f.unnamed ? " checked" : ""}> Sadece adı bilinmeyenler <small>(adlandırılmayı bekleyenler)</small></label>
+    <label class="check"><input type="checkbox" id="fHidden"${f.hidden ? " checked" : ""}> Gizlenmiş cihazları göster</label>
     <div class="actions"><button class="btn line" id="fClear">Filtreyi temizle</button></div>`;
   $("#fbody").innerHTML = html;
   $$("[data-f]", $("#fbody")).forEach((b) => b.onclick = () => {
@@ -950,7 +1083,8 @@ function renderFilters() {
     afterFilter();
   });
   $("#fHidden").onchange = (e) => { f.hidden = e.target.checked; afterFilter(); };
-  $("#fClear").onclick = () => { prefs.filters = { sites: [], kinds: [], tags: [], status: "", hidden: false }; afterFilter(); };
+  $("#fUnnamed").onchange = (e) => { f.unnamed = e.target.checked; afterFilter(); };
+  $("#fClear").onclick = () => { prefs.filters = NO_FILTER(); afterFilter(); };
 }
 function afterFilter() {
   savePrefs(); renderFilters(); render();
@@ -1112,7 +1246,9 @@ function updateMeta() {
   const nodes = DATA.nodes.filter((n) => !n.placeholder && n.kind !== "internet" && !isSvc(n));
   const on = nodes.filter((n) => n.online).length;
   const sv = DATA.nodes.filter((n) => n.kind === "service"), bad = sv.filter((n) => n.health === "fail" || n.health === "partial").length;
-  $("#meta").innerHTML = `<b>${on}</b> / ${nodes.length} cihaz · ${sv.filter((n) => n.online).length} / ${sv.length} servis${bad ? ` · <span style="color:var(--relay)">${bad} yanıt vermiyor</span>` : ""} · ${esc(ago(DATA.generated))} tarandı`;
+  const unnamed = nodes.filter((n) => n.unnamed && !n.hidden).length;
+  $("#meta").innerHTML = `<b>${on}</b> / ${nodes.length} cihaz · ${sv.filter((n) => n.online).length} / ${sv.length} servis${bad ? ` · <span style="color:var(--relay)">${bad} yanıt vermiyor</span>` : ""}${unnamed ? ` · <button class="unnamed" id="mUnnamed" title="Adı bilinmeyen cihazları göster">${unnamed} adsız</button>` : ""} · ${esc(ago(DATA.generated))} tarandı`;
+  if ($("#mUnnamed")) $("#mUnnamed").onclick = () => { prefs.filters.unnamed = !prefs.filters.unnamed; afterFilter(); };
   const a = DATA.app || {};
   $("#meta").title = `Son tarama: ${fmtTime(DATA.generated)}\nNodesk ${a.version || "?"}${a.rev ? " (" + a.rev + ")" : ""}`;
 }
@@ -1148,13 +1284,18 @@ function up(e) {
   svg.classList.remove("dragging");
   if (!moved && downAt && pointers.size === 0) {
     const t = downAt.target, tog = t.closest && t.closest(".toggle"), c = t.closest && t.closest(".card");
-    const ft = t.closest && t.closest(".frame-title");
-    if (ft) openSitePanel(ft.dataset.site);
+    const ft = t.closest && t.closest(".frame-title"), hd = t.closest && t.closest(".svc-head");
+    if (hd) toggleHead(hd.dataset.head);
+    else if (ft) openSitePanel(ft.dataset.site);
     else if (tog && c) toggleNode(c.dataset.id);
     else if (c) openPanel(c.dataset.id);
     else closeDrawers();
   }
   if (pointers.size === 0) downAt = null;
+}
+function toggleHead(id) {
+  prefs.collapsed[id] = !prefs.collapsed[id]; savePrefs(); render();
+  const h = document.querySelector(`.svc-head[data-head="${CSS.escape(id)}"]`); if (h) h.focus();
 }
 function toggleNode(id) {
   const n = byId.get(id); if (!n) return;
@@ -1163,15 +1304,18 @@ function toggleNode(id) {
 svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", up);
 svg.addEventListener("wheel", (e) => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
 svg.addEventListener("keydown", (e) => {
+  const hd = e.target.closest && e.target.closest(".svc-head");
+  if (hd && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); return toggleHead(hd.dataset.head); }
   const c = e.target.closest && e.target.closest(".card");
   if (c && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openPanel(c.dataset.id); }
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawers(); });
 
 /* ---------------- kontroller ---------------- */
-function syncButtons() { $("#tTail").setAttribute("aria-pressed", prefs.tail); $("#tOff").setAttribute("aria-pressed", prefs.off); $("#tSvc").setAttribute("aria-pressed", prefs.svc); }
+function syncButtons() { $("#tExit").setAttribute("aria-pressed", prefs.exit); $("#tTail").setAttribute("aria-pressed", prefs.tail); $("#tOff").setAttribute("aria-pressed", prefs.off); $("#tSvc").setAttribute("aria-pressed", prefs.svc); }
 $("#tSvc").onclick = () => { prefs.svc = !prefs.svc; savePrefs(); syncButtons(); render(); fit(); };
 $("#tTail").onclick = () => { prefs.tail = !prefs.tail; savePrefs(); syncButtons(); render(); };
+$("#tExit").onclick = () => { prefs.exit = !prefs.exit; savePrefs(); syncButtons(); render(); };
 $("#tOff").onclick = () => { prefs.off = !prefs.off; savePrefs(); syncButtons(); render(); fit(); };
 $("#bFilter").onclick = () => { if ($("#filters").classList.contains("open")) closeDrawers(); else { renderFilters(); openDrawer("filters"); } };
 $("#bSettings").onclick = () => { if ($("#settings").classList.contains("open")) closeDrawers(); else openSettings(); };
@@ -1225,7 +1369,7 @@ async function load(force) {
   }
 }
 function afterFilterBadge() {
-  const f = prefs.filters, c = f.sites.length + f.kinds.length + f.tags.length + (f.status ? 1 : 0);
+  const f = prefs.filters, c = f.sites.length + f.kinds.length + f.tags.length + (f.status ? 1 : 0) + (f.unnamed ? 1 : 0);
   $("#fCount").hidden = !c; $("#fCount").textContent = c;
 }
 async function probeApi() {

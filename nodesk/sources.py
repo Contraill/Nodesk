@@ -158,7 +158,7 @@ def _nla(buf, off, end):
 
 
 def conntrack_v4():
-    """Çekirdeğin bağlantı tablosu (netlink, salt okunur) -> [(kaynak, hedef, proto, kalan_sn)]"""
+    """Çekirdeğin bağlantı tablosu (netlink, salt okunur) -> [(kaynak, hedef, proto, kport, hport)]"""
     s = socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, 12)   # NETLINK_NETFILTER
     s.settimeout(5)
     try:
@@ -178,9 +178,10 @@ def conntrack_v4():
                 tup = _nla(a.get(1, b""), 0, len(a.get(1, b"")))           # CTA_TUPLE_ORIG
                 ip = _nla(tup.get(1, b""), 0, len(tup.get(1, b"")))        # CTA_TUPLE_IP
                 pr = _nla(tup.get(2, b""), 0, len(tup.get(2, b"")))        # CTA_TUPLE_PROTO
-                if len(ip.get(1, b"")) == 4 and len(ip.get(2, b"")) == 4 and len(a.get(7, b"")) == 4:
+                if len(ip.get(1, b"")) == 4 and len(ip.get(2, b"")) == 4:
+                    port = lambda k: struct.unpack("!H", pr[k])[0] if len(pr.get(k, b"")) == 2 else 0
                     out.append((socket.inet_ntoa(ip[1]), socket.inet_ntoa(ip[2]),
-                                pr.get(1, b"\0")[0], struct.unpack("!I", a[7])[0]))
+                                pr.get(1, b"\0")[0], port(2), port(3)))
                 off += (ln + 3) & ~3
     finally:
         s.close()
@@ -190,32 +191,33 @@ def is_tailnet(ip):
     return util.in_net(ip, "100.64.0.0/10")
 
 
-def exit_clients_from(entries, est=432000):
-    """Son 10 dakikada bu cihaz üzerinden internete çıkan tailnet cihazları -> {IP: bağlantı}.
-    Kalan süre kısaysa (UDP, kapanan TCP) ya da kurulu TCP yeni paket görmüşse yakın zamanda."""
-    out = {}
-    for src, dst, _proto, left in entries:
+def exit_tuples(entries):
+    """Tailnet cihazından internete giden bağlantılar (bu cihaz exit node olarak kullanılıyor).
+    Bir cihazın exit node'u kullandığının kanıtı bunlardan YENİ birinin açılmasıdır: exit
+    kapanınca eski bağlantılar tabloda bir süre kalır (sunucu paket yollamayı sürdürür) ama
+    cihaz bu yoldan yeni bağlantı açamaz."""
+    out = set()
+    for e in entries:
+        src, dst = e[0], e[1]
         if not is_tailnet(src) or not util.is_ipv4(dst) or is_tailnet(dst):
             continue
         a = ipaddress.ip_address(dst)
-        if a.is_private or a.is_multicast or a.is_loopback or a.is_link_local:
-            continue
-        if left <= 600 or left >= est - 600:
-            out[src] = out.get(src, 0) + 1
+        if not (a.is_private or a.is_multicast or a.is_loopback or a.is_link_local):
+            out.add(tuple(e))
     return out
 
 
-def exit_clients(r):
-    if r.fixtures:
-        raw = r.fixture("exit_clients.json")
-        return json.loads(raw) if raw else None
+def exit_tuples_now(r):
+    """-> bağlantı kümesi ya da None (okunamadıysa)"""
+    if r and r.fixtures:
+        raw = r.fixture("exit_tuples.json")
+        return {tuple(x) for x in json.loads(raw)} if raw else None
     try:
-        est = int(util.read_text("/proc/sys/net/netfilter/nf_conntrack_tcp_timeout_established", "432000"))
-        res = exit_clients_from(conntrack_v4(), est)
-    except (OSError, ValueError) as e:
-        r.mark("exit", False, error=str(e)[:200])
+        return exit_tuples(conntrack_v4())
+    except OSError as e:
+        if r:
+            r.mark("exit", False, error=str(e)[:200])
         return None
-    return res
 
 
 # ---------------------------------------------------------------- Docker

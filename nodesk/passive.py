@@ -22,7 +22,7 @@ from . import util
 ETH_P_ALL = 0x0003
 SO_ATTACH_FILTER = 26
 PACKET_OUTGOING = 4
-NAME_FIELDS = ("dhcp_name", "dhcp_vendor", "mdns_name", "friendly", "model", "ssdp_server", "nb_name")
+NAME_FIELDS = ("dhcp_name", "dhcp_vendor", "dhcp_fp", "mdns_name", "friendly", "model", "ssdp_server", "nb_name")
 LIST_FIELDS = ("mdns_services", "mdns_instances")
 
 # tcpdump -dd 'arp or (ip and udp and (port 67 or port 68 or port 5353 or port 1900))'
@@ -120,7 +120,7 @@ def parse_mdns(payload):
                 i += 1 + ln
                 if "=" in kv:
                     k, v = kv.split("=", 1)
-                    if k in ("fn", "md", "model", "ty", "am") and v:
+                    if k in ("fn", "md", "model", "ty", "am", "rpMd") and v:   # rpMd: Apple model kodu
                         out["txt"][k] = v
         off += rdlen
     return out
@@ -141,8 +141,9 @@ def mdns_obs(payload, obs):
         obs["mdns_instances"] = sorted(_clean(i) for i in m["instances"] if _clean(i))[:6]
     if m["txt"].get("fn"):
         obs["friendly"] = _clean(m["txt"]["fn"])
-    if m["txt"].get("md") or m["txt"].get("model") or m["txt"].get("am"):
-        obs["model"] = _clean(m["txt"].get("md") or m["txt"].get("model") or m["txt"].get("am"))
+    model = next((m["txt"][k] for k in ("md", "model", "rpMd", "am") if m["txt"].get(k)), None)
+    if model:
+        obs["model"] = _clean(model)
     return obs
 
 
@@ -213,6 +214,8 @@ def _parse_dhcp(b):
             obs["dhcp_name"] = _clean(opts[12].decode("utf-8", "replace"))
         if opts.get(60):
             obs["dhcp_vendor"] = _clean(opts[60].decode("utf-8", "replace"))
+        if opts.get(55):   # istenen seçenekler ve sırası: işletim sisteminin parmak izi
+            obs["dhcp_fp"] = ",".join(str(x) for x in opts[55][:40])
     elif op == 2 and msg == 5 and yiaddr != "0.0.0.0":     # ACK
         obs["ip"] = yiaddr
     return [obs]

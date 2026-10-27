@@ -18,6 +18,7 @@ TYPE_RULES = [
     (r"roborock|rockrobo|roomba|dreame|vacuum", "vacuum"),
     (r"yeelink|yeelight|\bhue\b|lamp|bulb|\blight\b", "lamp"),
     (r"imilab|camera|ipcam|ezviz|hikvision|dahua|reolink|_rtsp", "camera"),
+    (r"appletv", "tv"), (r"audioaccessory|homepod", "speaker"), (r"\bimac|macmini|macpro", "pc"),
     (r"_googlecast|webos|tizen|bravia|smart-?tv|androidtv|android tv|chromecast|lgwebos|"
      r"vestel|roku|fire ?tv|\btv\b", "tv"),
     (r"_ipp|_printer|_pdl-datastream|printer|epson|brother|canon", "printer"),
@@ -35,10 +36,35 @@ TYPE_RULES = [
 ]
 
 
+def os_guess(names):
+    """DHCP parmak izi (opsiyon 60 istemci sınıfı, 55 istenen seçenekler) ve Apple model kodundan
+    işletim sistemi. Her cihaz ağa katılırken DHCP yaptığı için en az yanıtsız kalan kaynak."""
+    v = (names.get("dhcp_vendor") or "").lower()
+    fp = (names.get("dhcp_fp") or "").split(",")
+    model = (names.get("model") or "").lower()
+    if v.startswith("android-dhcp-"):
+        return "Android " + v.rsplit("-", 1)[-1]
+    if v.startswith("android"):
+        return "Android"
+    if v.startswith("msft"):
+        return "Windows"
+    if v.startswith("dhcpcd") and "linux" in v:
+        return "Linux"
+    if v.startswith("udhcp"):
+        return "Gömülü Linux"
+    if model.startswith(("iphone", "ipad", "ipod")):
+        return "iOS"
+    if model.startswith(("macbook", "imac", "macmini", "macpro", "mac1")):
+        return "macOS"
+    if fp[:2] == ["1", "121"] and "252" in fp:   # Apple'ın DHCP istemcisi (iOS/macOS)
+        return "Apple"
+    return None
+
+
 def guess_type(vendor, mac, names=None):
     names = names or {}
     text = " ".join(str(x) for x in [
-        vendor or "", names.get("dhcp_name", ""), names.get("mdns_name", ""),
+        vendor or "", names.get("dhcp_name", ""), names.get("mdns_name", ""), os_guess(names) or "",
         names.get("friendly", ""), names.get("model", ""), names.get("ssdp_server", ""),
         names.get("dhcp_vendor", ""), names.get("nb_name", ""),
         " ".join(names.get("mdns_services", []))]).lower()
@@ -128,11 +154,15 @@ def parse_proc_listen(lines):
     return list(by.values())
 
 
-def fallback_label(vendor, mac, ip):
+def fallback_label(vendor, mac, ip, names=None):
+    """Adı bilinmeyen cihaz için geçici ad: üretici, yoksa işletim sistemi, yoksa tahmin."""
     tail = f" (.{ip.rsplit('.', 1)[-1]})" if ip and "." in ip else ""
     sv = util.short_vendor(vendor)
     if sv:
         return sv + tail
+    os_name = os_guess(names or {})
+    if os_name:
+        return os_name + tail
     if util.is_local_mac(mac):
         return "Telefon/tablet?" + tail
     return "Bilinmeyen" + tail
@@ -823,7 +853,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             pm = util.norm_mac(pconf)
             parent = f"mac:{pm}" if pm else pconf
         label = (ov.get("name") or conf.get("name") or snap.get("label") or best_name(names)
-                 or fallback_label(snap.get("vendor"), mac, (snap.get("ips") or [None])[0]))
+                 or fallback_label(snap.get("vendor"), mac, (snap.get("ips") or [None])[0], names))
         kind = ov.get("type") or conf.get("type") or snap.get("kind") \
             or guess_type(snap.get("vendor"), mac, names)
         services = list(snap.pop("services", None) or [])
@@ -850,8 +880,12 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             "tags": ov.get("tags") or conf.get("tags") or [], "note": ov.get("note") or snap.get("note"),
             "hidden": bool(ov.get("hidden")), "edited": bool(ov), "override": ov or None,
             "auto_label": (conf.get("name") or snap.get("label") or best_name(names) or
-                           fallback_label(snap.get("vendor"), mac, (snap.get("ips") or [None])[0])),
+                           fallback_label(snap.get("vendor"), mac, (snap.get("ips") or [None])[0], names)),
             "auto_kind": conf.get("type") or snap.get("kind") or guess_type(snap.get("vendor"), mac, names),
+            "os": os_guess(names),
+            # adı yalnızca tahmin (üretici/işletim sistemi/IP): kullanıcıya "adlandır" diye gösterilir
+            "unnamed": bool(mac) and not (ov.get("name") or conf.get("name") or snap.get("label")
+                                           or best_name(names)),
         }
 
     # Öneri (onay kullanıcıda): rastgele MAC'li bir cihaz kaybolduktan hemen sonra aynı türde yeni
@@ -899,6 +933,10 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
     for a in agents_out:
         if a["name"] == "router":
             a["node"] = "router"
+
+    for o in overlay:   # kartlarda ve panelde gösterilsin
+        nodes[o["from"]]["exit_via"] = o["to"]
+        nodes[o["to"]].setdefault("exit_users", []).append(o["from"])
 
     data = {
         "generated": now_s,

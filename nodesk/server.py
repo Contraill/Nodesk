@@ -67,6 +67,8 @@ class App:
                 self.icon_files[url] = "live/icons/" + v["file"]
         self.icon_thread = None
         self.probed = {}         # IP -> son ad sorgusu (time.monotonic)
+        self.ct_prev = None      # exit node: önceki örnekteki bağlantılar
+        self.exit_seen = {}      # tailnet IP -> Pi üzerinden son yeni bağlantı (time.monotonic)
 
     # ------------------------------------------------------------ sürüm
     def version(self):
@@ -140,7 +142,6 @@ class App:
                     self.passive.set_subnet(f"{i['ip']}/{i['prefix']}")
         raw["arp"] = sources.arpscan(r, iface) if src["arp"] else None
         raw["neigh"] = sources.neigh(r) if src["neigh"] else None
-        raw["exit_clients"] = sources.exit_clients(r) if src["tailscale"] else None
         if src.get("probe", True) and raw["arp"] and not self.fixtures:
             self.probe_names(r, raw, iface)
         raw["docker"] = sources.docker_containers(r) if src["docker"] else None
@@ -185,10 +186,25 @@ class App:
         if not self.fixtures:
             self.heard.prune_and_save()
 
+    def exit_clients(self, src):
+        """Pi'yi exit node olarak kullananlar: son örnekten beri Pi üzerinden internete YENİ
+        bağlantı açan tailnet cihazları (dakikada bir örneklenir, 3 dakika hatırlanır)."""
+        cur = sources.exit_tuples_now(sources.Runner(self.fixtures)) if src["tailscale"] else None
+        if cur is None:
+            return {}
+        now = time.monotonic()
+        for t in cur - (self.ct_prev if self.ct_prev is not None else cur):
+            self.exit_seen[t[0]] = now
+        if self.fixtures:   # test: örnekteki her bağlantı yeni sayılır
+            self.exit_seen.update((t[0], now) for t in cur)
+        self.ct_prev = cur
+        return {ip: 1 for ip, t in self.exit_seen.items() if now - t < 180}
+
     def attach_live(self, raw, settings):
-        """Her yeniden hesaplamada güncel olan kaynaklar: pasif dinleme ve ajan raporları."""
+        """Her yeniden hesaplamada güncel olan kaynaklar: pasif dinleme, ajan raporları, exit."""
         raw = dict(raw)
         src = settings["sources"]
+        raw["exit_clients"] = self.exit_clients(src)
         raw["passive"] = self.passive.snapshot() if src["passive"] else None
         raw["passive_ip"] = self.passive.snapshot_ip() if src["passive"] else {}
         raw["passive_ev2"] = self.heard.snapshot()

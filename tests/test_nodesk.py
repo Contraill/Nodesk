@@ -164,17 +164,48 @@ class CollectTest(unittest.TestCase):
         links = {(o["from"], o["to"]) for o in self.data["overlay"]}
         self.assertIn(("router", "self"), links, "router'ın kendi seçimi")
         self.assertIn(("ts:nothing", "self"), links, "Pi'nin bağlantı tablosu: telefon Pi'den çıkıyor")
+        self.assertEqual(self.ids["ts:nothing"]["exit_via"], "self")
+        self.assertIn("ts:nothing", self.ids["self"]["exit_users"])
         self.assertIn(("ts:laptop", "router"), links, "router'ın bağlantı tablosu")
         self.assertNotIn(("router", "router"), links, "kendi trafiği sayılmaz")
 
-    def test_exit_clients_filter(self):
-        e = [("100.64.0.3", "142.250.1.1", 6, 431990),    # kurulu TCP, az önce paket görmüş
-             ("100.64.0.3", "1.1.1.1", 6, 300000),          # saatlerdir boşta
-             ("100.64.0.4", "8.8.8.8", 17, 50),            # UDP: hep yakın zamanlı
-             ("100.64.0.4", "192.168.1.1", 17, 50),         # yerel hedef: exit değil
-             ("100.64.0.4", "100.64.0.1", 6, 431999),   # tailnet içi
-             ("192.168.44.8", "8.8.8.8", 17, 50)]              # tailnet dışı kaynak
-        self.assertEqual(sources.exit_clients_from(e), {"100.64.0.3": 1, "100.64.0.4": 1})
+    def test_exit_tuples_filter(self):
+        e = [("100.64.0.3", "142.250.1.1", 6, 50000, 443),   # tailnet -> internet
+             ("100.64.0.4", "192.168.1.1", 17, 5000, 53),     # yerel hedef: exit değil
+             ("100.64.0.4", "100.64.0.1", 6, 5000, 22),   # tailnet içi
+             ("192.168.44.8", "8.8.8.8", 17, 5000, 53)]           # tailnet dışı kaynak
+        self.assertEqual(sources.exit_tuples(e), {e[0]})
+
+    def test_exit_needs_new_connections(self):
+        home = make_home()
+        self.addCleanup(shutil.rmtree, home, True)
+        app = server.App(home)
+        app.fixtures = None   # canlı örnekleme mantığı
+        samples = iter([{("100.64.0.3", "1.1.1.1", 6, 1, 443)},
+                        {("100.64.0.3", "1.1.1.1", 6, 1, 443)},
+                        {("100.64.0.3", "1.1.1.1", 6, 1, 443), ("100.64.0.3", "8.8.8.8", 17, 2, 53)}])
+        orig = sources.exit_tuples_now
+        sources.exit_tuples_now = lambda r: next(samples)
+        try:
+            src = {"tailscale": True}
+            self.assertEqual(app.exit_clients(src), {}, "ilk örnek: karşılaştıracak önceki yok")
+            self.assertEqual(app.exit_clients(src), {}, "eski bağlantı kalsa da yeni yok: exit kapalı")
+            self.assertEqual(app.exit_clients(src), {"100.64.0.3": 1}, "yeni bağlantı: exit kullanılıyor")
+        finally:
+            sources.exit_tuples_now = orig
+
+    def test_os_and_fallback_labels(self):
+        self.assertEqual(model.os_guess({"dhcp_vendor": "android-dhcp-16"}), "Android 16")
+        self.assertEqual(model.os_guess({"dhcp_vendor": "MSFT 5.0"}), "Windows")
+        self.assertEqual(model.os_guess({"dhcp_fp": "1,121,3,6,15,108,114,119,252,95,44,46"}), "Apple")
+        self.assertEqual(model.os_guess({"model": "iPhone15,2"}), "iOS")
+        self.assertIsNone(model.os_guess({"dhcp_fp": "1,3,6,15"}))
+        self.assertEqual(model.fallback_label(None, "62:ef:fd:53:b3:ae", "192.168.1.102",
+                                              {"dhcp_vendor": "android-dhcp-16"}), "Android 16 (.102)")
+        self.assertEqual(model.guess_type(None, "62:ef:fd:53:b3:ae", {"model": "AppleTV11,1"}), "tv")
+        robo = self.ids["mac:b0:4a:39:74:6b:d6"]
+        self.assertFalse(robo["unnamed"], "DHCP adı var")
+        self.assertTrue(self.ids["mac:9c:8e:cd:01:02:03"]["unnamed"], "sadece üretici/IP biliniyor")
 
     def test_router_services(self):
         by = {n["label"]: n for n in self.data["nodes"] if n["kind"] == "service" and n["parent"] == "router"}
@@ -333,7 +364,7 @@ class DuplicateTest(unittest.TestCase):
 
 class ProbeTest(unittest.TestCase):
     def name(self, n):
-        return b"".join(bytes([len(p)]) + p.encode() for p in n.split(".")) + b"\x00"
+        return probe.qname(n)
 
     def test_nbstat(self):
         q = probe.nbstat_query(7)
@@ -355,6 +386,23 @@ class ProbeTest(unittest.TestCase):
         obs = passive.mdns_obs(resp, {"ip": "192.168.44.7"})
         self.assertEqual(obs["mdns_name"], "Salon-TV")
         self.assertEqual(obs["mdns_services"], ["_googlecast._tcp"])
+
+    def test_apple_companion_link(self):
+        q = probe.mdns_services_query(0)
+        self.assertIn(self.name("_companion-link._tcp.local"), q)
+        inst = "Ali\u2019s iPhone._companion-link._tcp.local"
+        txt = b"".join(bytes([len(x)]) + x for x in (b"rpMd=iPhone15,2", b"rpVr=510.2"))
+        resp = (struct.pack("!HHHHHH", 0, 0x8400, 0, 1, 0, 1)
+                + self.name("_companion-link._tcp.local") + struct.pack("!HHIH", 12, 1, 120, len(self.name(inst)))
+                + self.name(inst)
+                + self.name(inst) + struct.pack("!HHIH", 16, 1, 120, len(txt)) + txt)
+        found = {"mac": "02:00:00:00:00:09", "ip": "192.168.44.30", "via": "probe"}
+        probe.merge_obs(found, passive.mdns_obs(resp, {"ip": "192.168.44.30"}))
+        probe.merge_obs(found, {"mdns_services": ["_airplay._tcp"]})
+        self.assertEqual(found["model"], "iPhone15,2")
+        self.assertEqual(found["mdns_instances"], ["Ali\u2019s iPhone"])
+        self.assertEqual(found["mdns_services"], ["_airplay._tcp", "_companion-link._tcp"], "yanıtlar birikir")
+        self.assertEqual(found["mac"], "02:00:00:00:00:09")
 
     def test_upnp_fields(self):
         xml = "<root><device><friendlyName>[LG] webOS TV &amp; Salon</friendlyName><modelName>OLED55</modelName>"
@@ -568,7 +616,7 @@ class ApiTest(unittest.TestCase):
 
     def test_ingest_asks_old_agent_to_update(self):
         token = store.Store(store.Paths(self.home)).agents()["agents"]["router"]["token"]
-        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n7", "#VERSION\n2", 1)
+        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n8", "#VERSION\n2", 1)
         st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=old.encode(), ctype="text/plain")
         self.assertEqual((st, body.strip()), (200, "ok update"))
         cur = open(os.path.join(FIX, "router.txt")).read()
@@ -610,7 +658,7 @@ class ScriptsTest(unittest.TestCase):
             s = agents.installer(kind, "http://100.64.0.1:8088", "x", "tok")
             r = subprocess.run(["sh", "-n"], input=s, text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(agents.topo_version(), "7")
+        self.assertEqual(agents.topo_version(), "8")
 
     def test_router_installer_sandbox(self):
         """Router kurulum scriptini sahte kök dizinde BusyBox ile iki kez çalıştır."""

@@ -4,6 +4,8 @@ Her IP'ye günde en fazla bir kez, protokol başına tek paket:
   NetBIOS (UDP 137)  -> Windows/Samba bilgisayar adı (NBSTAT)
   mDNS    (UDP 5353) -> IP'nin .local adı (ters PTR) ve duyurduğu servis türleri
   SSDP    (UDP 1900) -> ağa tek M-SEARCH; yanıt verenlerin cihaz tanımından (XML) ad ve model
+  mDNS    (multicast) -> ağa tek soru: Apple (_companion-link, _device-info: model kodu ve
+                         "Ali'in iPhone'u" gibi ad), AirPlay, Chromecast, HomeKit, yazıcı
 Port taraması değildir ve router'a hiç uğramaz: paketler Pi'nin kendi yerel ağında kalır.
 Yanıtlar pasif dinlemeyle aynı kayda (passive.json) yazılır.
 """
@@ -52,12 +54,35 @@ def parse_nbstat(b):
     return None
 
 
+SERVICE_TYPES = ("_companion-link._tcp", "_device-info._tcp", "_airplay._tcp", "_raop._tcp",
+                 "_googlecast._tcp", "_hap._tcp", "_ipp._tcp", "_spotify-connect._tcp")
+
+
+def qname(name):
+    labels = [p.encode() for p in name.split(".")]
+    return b"".join(bytes([len(p)]) + p for p in labels) + b"\x00"
+
+
+def mdns_services_query(tid):
+    """Bilinen servis türlerinin hepsi tek pakette (PTR). Yanıt veren cihaz servis adını
+    (çoğu zaman kullanıcının verdiği cihaz adı) ve TXT'de modelini söyler."""
+    return (struct.pack("!HHHHHH", tid, 0, len(SERVICE_TYPES), 0, 0, 0)
+            + b"".join(qname(t + ".local") + struct.pack("!HH", 12, 1) for t in SERVICE_TYPES))
+
+
+def merge_obs(dst, src):
+    """Aynı cihazdan gelen birden çok yanıtı birleştir (listeler birikir)."""
+    for k, v in src.items():
+        if isinstance(v, list):
+            dst[k] = sorted(set(dst.get(k) or []) | set(v))[:16]
+        elif v and k not in ("mac", "ip", "via"):
+            dst[k] = v
+
+
 def mdns_query(ip, tid):
     """Tek pakette iki soru: IP'nin ters PTR'si (.local adı) ve servis türleri listesi."""
-    q = b""
-    for name in (".".join(reversed(ip.split("."))) + ".in-addr.arpa", "_services._dns-sd._udp.local"):
-        q += b"".join(bytes([len(p)]) + p.encode() for p in name.split(".")) + b"\x00"
-        q += struct.pack("!HH", 12, 1)
+    q = b"".join(qname(n) + struct.pack("!HH", 12, 1)
+                 for n in (".".join(reversed(ip.split("."))) + ".in-addr.arpa", "_services._dns-sd._udp.local"))
     return struct.pack("!HHHHHH", tid, 0, 2, 0, 0, 0) + q
 
 
@@ -100,8 +125,9 @@ def run(targets, local_ip, wait=3.0):
         socks = [nb, md, ss]
         for s in socks:
             s.bind((local_ip, 0))
-        ss.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-        ss.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(local_ip))
+        for s in (ss, md):
+            s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+            s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(local_ip))
         for i, ip in enumerate(targets):
             for s, pkt, port in ((nb, nbstat_query(i + 1), 137), (md, mdns_query(ip, i + 1), 5353)):
                 try:
@@ -110,6 +136,7 @@ def run(targets, local_ip, wait=3.0):
                     pass
             time.sleep(0.02)   # paketleri yay: ağda ani yük olmasın
         ss.sendto(M_SEARCH, SSDP_ADDR)
+        md.sendto(mdns_services_query(0), ("224.0.0.251", 5353))
         locations = {}
         end = time.monotonic() + wait
         while (left := end - time.monotonic()) > 0:
@@ -125,7 +152,7 @@ def run(targets, local_ip, wait=3.0):
                     if s is nb and (name := parse_nbstat(data)):
                         found[ip]["nb_name"] = name
                     elif s is md:
-                        mdns_obs(data, found[ip])
+                        merge_obs(found[ip], mdns_obs(data, {"ip": ip}))
                     elif s is ss and (loc := ssdp_location(data)):
                         locations.setdefault(ip, loc)
                 except (ValueError, struct.error, IndexError):
