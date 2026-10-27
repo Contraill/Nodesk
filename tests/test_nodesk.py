@@ -150,6 +150,13 @@ class CollectTest(unittest.TestCase):
         self.assertNotIn("mac:3c:7c:3f:12:34:56", self.ids, "aynı cihaz iki kez görünmez")
         self.assertEqual(self.ids["ts:nothing"]["site"], "mobile", "evde olmayan mobilde kalır")
 
+    def test_router_name_queries(self):
+        tv = self.ids["mac:1c:af:4a:55:4b:2c"]
+        self.assertEqual(tv["names"]["mdns_services"], ["_airplay._tcp", "_spotify-connect._tcp"])
+        self.assertEqual(tv["names"]["dhcp_name"], "Samsung")
+        self.assertEqual(self.ids["mac:c0:49:43:1c:cc:12"]["names"]["nb_name"], "HGW")
+        self.assertEqual(self.ids["mac:60:7e:a4:07:f9:d8"]["names"], {}, "bozuk satır atlanır")
+
     def test_router_services(self):
         by = {n["label"]: n for n in self.data["nodes"] if n["kind"] == "service" and n["parent"] == "router"}
         self.assertEqual(by["LuCI"]["ports"], [80, 443])
@@ -199,10 +206,10 @@ class DuplicateTest(unittest.TestCase):
         "b4:e6:2a:c2:32:4a": {"name": "LG TV 1", "type": "tv"},
         "38:8c:50:9f:be:1c": {"name": "LG TV 2", "type": "tv"}}}
 
-    def build(self, state, keenetic=None):
+    def build(self, state):
         raw = {"ifaces": [{"ifname": "eth0", "ip": "192.168.44.2", "prefix": 24, "mac": "88:a2:9e:35:f8:b1"}],
                "arp": [{"ip": ip, "mac": m, "vendor": None} for ip, m in self.ARP], "neigh": [],
-               "passive": self.PASSIVE, "passive_ip": self.PASSIVE_IP, "keenetic": keenetic}
+               "passive": self.PASSIVE, "passive_ip": self.PASSIVE_IP}
         settings = json.loads(json.dumps(store.DEFAULT_SETTINGS))
         settings["sources"]["router"] = False
         data, state = model.build(raw, self.CFG, settings, {}, state, {}, util.parse_iso(self.T))
@@ -239,15 +246,6 @@ class DuplicateTest(unittest.TestCase):
         ids, _ = self.build(self.old_state())
         self.assertNotIn("ip:192.168.44.6", ids)
         self.assertEqual(ids["mac:70:54:b4:5a:b6:4e"]["parent"], "mac:52:ff:20:53:86:18")
-
-    def test_keenetic_names_device_behind_it(self):
-        ids, _ = self.build({}, keenetic=[{"mac": "d8:3a:dd:11:22:33", "ip": "192.168.44.7",
-                                          "name": "Annemin tableti", "hostname": "Galaxy-Tab", "active": True}])
-        self.assertNotIn("ip:192.168.44.7", ids)
-        tab = ids["mac:d8:3a:dd:11:22:33"]
-        self.assertEqual(tab["label"], "Annemin tableti")
-        self.assertEqual(tab["parent"], "mac:52:ff:20:53:86:18")
-        self.assertTrue(tab["online"])
 
     def test_different_names_not_merged(self):
         self.assertFalse(model.twin_mac("50:ff:20:73:86:18", "50:ff:20:11:22:33"), "iki ayrı Keenetic")
@@ -491,7 +489,7 @@ class ApiTest(unittest.TestCase):
 
     def test_ingest_asks_old_agent_to_update(self):
         token = store.Store(store.Paths(self.home)).agents()["agents"]["router"]["token"]
-        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n4", "#VERSION\n2", 1)
+        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n5", "#VERSION\n2", 1)
         st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=old.encode(), ctype="text/plain")
         self.assertEqual((st, body.strip()), (200, "ok update"))
         cur = open(os.path.join(FIX, "router.txt")).read()
@@ -533,7 +531,7 @@ class ScriptsTest(unittest.TestCase):
             s = agents.installer(kind, "http://100.64.0.1:8088", "x", "tok")
             r = subprocess.run(["sh", "-n"], input=s, text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(agents.topo_version(), "4")
+        self.assertEqual(agents.topo_version(), "5")
 
     def test_router_installer_sandbox(self):
         """Router kurulum scriptini sahte kök dizinde BusyBox ile iki kez çalıştır."""

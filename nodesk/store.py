@@ -34,7 +34,6 @@ DEFAULT_SETTINGS = {
         "agents": True,       # diğer sunucuların ajan raporları
         "health": True,       # Pi servislerinin kendi portları yanıt veriyor mu (127.0.0.1)
         "probe": True,        # Ev 1 ad sorgusu: her IP'ye günde bir kez NetBIOS/mDNS/SSDP
-        "keenetic": True,     # Keenetic'in cihaz listesi (keys/keenetic dosyası varsa)
     },
 }
 INTERVALS = (1, 2, 5, 10, 15, 30, 60)

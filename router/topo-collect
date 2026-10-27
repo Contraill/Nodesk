@@ -6,7 +6,7 @@
 # İlk kurulum (bir kez) Laptop'tan; sonraki sürümleri ajan Pi'den kendisi alır:
 #   ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh
 
-TOPO_VERSION=4
+TOPO_VERSION=5
 
 echo "#VERSION"
 echo "$TOPO_VERSION"
@@ -23,7 +23,47 @@ ip -4 neigh show 2>/dev/null
 echo "#ARPSCAN_WAN"
 # H3600P ağı: router'ın WAN arayüzü bu ağa doğrudan bağlı (L2).
 # ~256 ARP paketi, ~2 saniye. Bağlantı tablosuna kayıt açmaz.
-arp-scan -I wan --localnet --quiet --plain --retry=2 2>/dev/null
+WAN=$(arp-scan -I wan --localnet --quiet --plain --retry=2 2>/dev/null)
+echo "$WAN"
+
+echo "#NAMES"
+# Günde bir kez, router'ın kendi ağlarındaki (WAN tarafı + LAN) cihazlara ad sorusu:
+# her IP'ye bir NetBIOS (UDP 137) ve bir mDNS (UDP 5353) paketi. Port taraması değil;
+# Tailscale'e hiç gitmez. Yanıtlar ham (hex) gönderilir, Pi ayrıştırır.
+# ucode-mod-socket yoksa atlanır.
+NAMES=/tmp/nodesk-names.txt
+if [ -f /usr/lib/ucode/socket.so ] && command -v ucode >/dev/null &&
+    { [ ! -f "$NAMES" ] || [ $(( $(date +%s) - $(date -r "$NAMES" +%s) )) -ge 86400 ]; }; then
+    IPS=$( { echo "$WAN" | awk '{ print $1 }'
+             ip -4 neigh show dev br-lan 2>/dev/null | awk '$0 !~ /FAILED|INCOMPLETE/ { print $1 }'; } |
+           grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -u | head -n 64)
+    cat > /tmp/nodesk-names.uc <<'UC'
+import * as socket from 'socket';
+function u16(n) { return chr(n >> 8, n & 255); }
+function hdr(id, qd) { return u16(id) + u16(0) + u16(qd) + u16(0) + u16(0) + u16(0); }
+function qname(n) { let o = ''; for (let p in split(n, '.')) o += chr(length(p)) + p; return o + chr(0); }
+let nb = socket.create(socket.AF_INET, socket.SOCK_DGRAM), md = socket.create(socket.AF_INET, socket.SOCK_DGRAM);
+let i = 0;
+for (let ip in ARGV) {
+	i++;
+	nb.send(hdr(i, 1) + chr(0x20) + 'CK' + 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' + chr(0) + u16(0x21) + u16(1), 0, { address: ip, port: 137 });
+	md.send(hdr(i, 2) + qname(join('.', reverse(split(ip, '.'))) + '.in-addr.arpa') + u16(12) + u16(1)
+		+ qname('_services._dns-sd._udp.local') + u16(12) + u16(1), 0, { address: ip, port: 5353 });
+}
+let end = time() + 3;
+while (time() < end) {
+	for (let ev in socket.poll(500, nb, md) ?? []) {
+		if (!(ev[1] & socket.POLLIN)) continue;
+		let a = {}, d = ev[0].recv(4096, socket.MSG_DONTWAIT, a);
+		if (d) print(a.address, ' ', ev[0] == nb ? 'nb' : 'mdns', ' ', hexenc(d), '\n');
+	}
+}
+UC
+    # shellcheck disable=SC2086  # IP listesi kelimelere bölünsün
+    [ -n "$IPS" ] && ucode /tmp/nodesk-names.uc $IPS > "$NAMES.new" 2>/dev/null && mv "$NAMES.new" "$NAMES"
+    rm -f /tmp/nodesk-names.uc "$NAMES.new"
+fi
+cat "$NAMES" 2>/dev/null
 
 echo "#LISTEN"
 # Router'ın dinlediği TCP portları (LuCI, DNS, SSH...): sadece yerel adres:port, onaltılık

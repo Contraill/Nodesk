@@ -14,6 +14,7 @@
   --text: #17222B; --muted: #5E6C76; --cable: #8C9AA3; --on: #1F9C78; --tail: #5B57D6;
   --relay: #B7801C; --off: #A3ADB3; --exit: #5B57D6; --hl: #E0B020; --panel: #FFFFFF; --danger: #C2412D;
   --field: #F3F5F2; --svcline: #7A9DB0;
+  --c-net: #2F6FB5; --c-srv: #B04A8B; --c-svc: #0F8EA5;
   --shadow: 0 1px 0 rgba(23,34,43,.06), 0 6px 18px rgba(23,34,43,.07);
   --sans: "Barlow Semi Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -24,6 +25,7 @@
     --text: #DCE4E8; --muted: #8B9AA6; --cable: #50616E; --on: #5BC8A6; --tail: #8E8CF0;
     --relay: #E6B85C; --off: #55636E; --exit: #8E8CF0; --hl: #F0C94A; --panel: #1B252F; --danger: #F07A63;
     --field: #24303B; --svcline: #4A6D80;
+    --c-net: #6FA8E8; --c-srv: #E07BB8; --c-svc: #4FC3D6;
     --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
   }
 }
@@ -32,6 +34,7 @@
   --text: #DCE4E8; --muted: #8B9AA6; --cable: #50616E; --on: #5BC8A6; --tail: #8E8CF0;
   --relay: #E6B85C; --off: #55636E; --exit: #8E8CF0; --hl: #F0C94A; --panel: #1B252F; --danger: #F07A63;
   --field: #24303B; --svcline: #4A6D80;
+  --c-net: #6FA8E8; --c-srv: #E07BB8; --c-svc: #4FC3D6;
   --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
 }
 * { box-sizing: border-box; }
@@ -89,6 +92,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-radius: 10px; padding: 7px 12px; max-width: calc(100% - 100px); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .legend i { display: inline-block; width: 22px; height: 0; border-top: 2px solid; }
+.legend b { display: inline-block; width: 16px; height: 12px; border-radius: 3px; border: 1.5px solid var(--c);
+  background: color-mix(in srgb, var(--c) 14%, var(--card)); }
 .zoom { position: fixed; right: 16px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 3;
   display: flex; flex-direction: column; padding: 3px; gap: 2px; }
 .zoom .btn { justify-content: center; width: 36px; height: 34px; padding: 0; font-size: 18px; }
@@ -113,6 +118,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .exit-label-bg { fill: var(--bg); }
 .card { cursor: pointer; outline: none; }
 .card rect.box { fill: var(--card); stroke: var(--card-line); stroke-width: 1.2; }
+/* rol rengi: ağ cihazı, sunucu, servis (diğer cihazlar nötr) */
+.card.cat-net { --cat: var(--c-net); } .card.cat-srv { --cat: var(--c-srv); } .card.cat-svc { --cat: var(--c-svc); }
+.card.cat rect.box { fill: color-mix(in srgb, var(--cat) 10%, var(--card)); stroke: color-mix(in srgb, var(--cat) 55%, var(--card-line)); }
+.card.cat .icon { stroke: var(--cat); }
 .card:hover rect.box { stroke: var(--text); }
 .card.selected rect.box, .card.match rect.box { stroke: var(--hl); stroke-width: 2.4; }
 .card.offline { opacity: .55; }
@@ -245,8 +254,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 <div class="alerts" id="alerts"></div>
 
 <div class="legend" aria-label="Lejant">
+  <span><b style="--c:var(--c-net)"></b>Ağ cihazı</span>
+  <span><b style="--c:var(--c-srv)"></b>Sunucu</span>
+  <span><b style="--c:var(--c-svc)"></b>Servis</span>
   <span><i style="border-color:var(--cable)"></i>Yerel ağ</span>
-  <span><i style="border-color:var(--svcline)"></i>Servis</span>
+  <span><i style="border-color:var(--svcline)"></i>Servis bağı</span>
   <span><i style="border-color:var(--tail);border-top-style:dashed"></i>Tailscale doğrudan</span>
   <span><i style="border-color:var(--relay);border-top-style:dashed"></i>Tailscale aktarıcı</span>
   <span><i style="border-color:var(--exit);border-top-width:3px"></i>Exit node trafiği</span>
@@ -326,17 +338,17 @@ const SOURCE_TR = {
   agents: ["Sunucu ajanları", "Oracle sunucularındaki servisler"],
   health: ["Servis sağlık kontrolü", "Pi'deki servislerin portları yanıt veriyor mu (sadece Pi'nin kendisinde)"],
   probe: ["Ev 1 ad sorgusu", "her cihaza günde bir kez NetBIOS/mDNS ad sorusu ve tek SSDP araması; router'a uğramaz"],
-  keenetic: ["Keenetic cihaz listesi", "extender arkasındaki cihazların gerçek MAC'i ve adı (Pi'de keys/keenetic gerekir)"],
 };
 const VIA_TR = { extender: "extender (MAC-NAT) arkasında", arp: "ARP taraması", neigh: "komşu tablosu", passive: "pasif dinleme", self: "bu cihaz",
   tailscale: "Tailscale", ajan: "ajan", "router arp": "router ARP", "router dhcp": "router DHCP" };
 const ORDER = ["router", "ap", "server", "nas", "cloud-vm", "pc", "laptop", "tv", "console", "speaker", "tablet",
   "phone", "camera", "printer", "iot", "lamp", "vacuum", "device"];
 const MAJOR = new Set(["router", "ap", "server", "nas"]);
+const CAT = { modem: "net", router: "net", ap: "net", server: "srv", nas: "srv", "cloud-vm": "srv" };
 
 /* ---------------- ölçüler ---------------- */
 const SW = 186, SH = 48, KW = 172, KH = 38;
-const CW = 200, CH = 52, GX = 22, GY = 46, SPINE = 18, ROWGAP = 10, MAXROWS = 6;
+const CW = 200, CH = 52, GX = 22, GY = 46, SPINE = 18, ROWGAP = 10, MAXROWS = 6, INDENT = 22;
 const FRAME_TOP = 58, FRAME_PAD = 26, SITE_GAP = 46;
 
 /* ---------------- durum ---------------- */
@@ -423,18 +435,39 @@ function measure(n) {
   const kids = visibleKids(n).sort(kidSort);
   n.blocks = [];
   if (!kids.length) { n.bw = n.cw; n.bh = n.ch; return; }
-  const big = kids.filter((k) => visibleKids(k).length || MAJOR.has(k.kind));
-  const small = kids.filter((k) => !big.includes(k));
+  // Servisler hep aynı sütunda kalır (açılan servisin container'ları kendi altında girintili);
+  // cihazlar ve servisler ayrı sütunlara dizilir
+  const big = kids.filter((k) => !isSvc(k) && (visibleKids(k).length || MAJOR.has(k.kind)));
   for (const k of big) { measure(k); n.blocks.push({ type: "node", node: k, w: k.bw, h: k.bh }); }
-  for (let i = 0; i < small.length; i += MAXROWS) {
-    const items = small.slice(i, i + MAXROWS);
-    items.forEach((k) => { k.cw = cardW(k); k.ch = cardH(k); k.blocks = []; });
-    const h = items.reduce((s, k) => s + k.ch, 0) + ROWGAP * (items.length - 1);
-    n.blocks.push({ type: "col", items, w: Math.max(...items.map((k) => k.cw)) + SPINE, h });
+  for (const group of [kids.filter((k) => !isSvc(k) && !big.includes(k)), kids.filter(isSvc)]) {
+    for (let i = 0; i < group.length; i += MAXROWS) {
+      const items = group.slice(i, i + MAXROWS);
+      items.forEach(measureTree);
+      const h = items.reduce((s, k) => s + k.th, 0) + ROWGAP * (items.length - 1);
+      n.blocks.push({ type: "col", items, w: Math.max(...items.map((k) => k.tw)) + SPINE, h });
+    }
   }
   n.rowW = n.blocks.reduce((s, b) => s + b.w, 0) + GX * (n.blocks.length - 1);
   n.bw = Math.max(n.cw, n.rowW);
   n.bh = n.ch + GY + Math.max(...n.blocks.map((b) => b.h));
+}
+function measureTree(k) {
+  k.cw = cardW(k); k.ch = cardH(k); k.blocks = [];
+  k.sub = isSvc(k) ? visibleKids(k).sort(kidSort) : [];
+  k.sub.forEach(measureTree);
+  k.th = k.ch + k.sub.reduce((s, c) => s + ROWGAP + c.th, 0);
+  k.tw = Math.max(k.cw, ...k.sub.map((c) => INDENT + c.tw));
+}
+function placeSub(k, edges) {
+  const sx = k.x + 9, r = 6;
+  let yy = k.y + k.ch + ROWGAP;
+  for (const c of k.sub) {
+    c.x = k.x + INDENT; c.y = yy;
+    const my = yy + c.ch / 2;
+    edges.push({ d: `M${sx},${k.y + k.ch}V${my - r}Q${sx},${my} ${sx + r},${my}H${c.x}`, off: !c.online, to: c });
+    placeSub(c, edges);
+    yy += c.th + ROWGAP;
+  }
 }
 function place(n, x, y, edges) {
   n.x = x + (n.bw - n.cw) / 2; n.y = y; n.bx = x;
@@ -451,7 +484,8 @@ function place(n, x, y, edges) {
         k.x = bx + SPINE; k.y = yy;
         const my = yy + k.ch / 2, r = 6;
         edges.push({ d: `M${px},${pb}V${busY}H${sx}V${my - r}Q${sx},${my} ${sx + r},${my}H${k.x}`, off: !k.online, to: k });
-        yy += k.ch + ROWGAP;
+        placeSub(k, edges);
+        yy += k.th + ROWGAP;
       }
     }
     bx += b.w + GX;
@@ -605,6 +639,7 @@ function subnetOf(s) {
 }
 function drawCard(parent, n, q, fa) {
   const cls = ["card"];
+  if (CAT[n.kind]) cls.push("cat", "cat-" + CAT[n.kind]);
   if (!n.online && !n.placeholder) cls.push("offline");
   if (selected === n.id) cls.push("selected");
   if (q) cls.push(matches(n, q) ? "match" : "dim");
@@ -647,7 +682,7 @@ function drawIcon(g, n, x, y, size) {
   }
 }
 function drawSvcCard(parent, n, q, fa) {
-  const cls = ["card", "svc-card"];
+  const cls = ["card", "svc-card", "cat", "cat-svc"];
   if (n.kind === "container") cls.push("container");
   if (!n.online) cls.push("offline");
   if (selected === n.id) cls.push("selected");

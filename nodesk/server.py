@@ -138,9 +138,6 @@ class App:
         raw["neigh"] = sources.neigh(r) if src["neigh"] else None
         if src.get("probe", True) and raw["arp"] and not self.fixtures:
             self.probe_names(r, raw, iface)
-        cred = util.read_text(os.path.join(self.paths.keys, "keenetic")).strip()
-        raw["keenetic"] = (sources.keenetic(r, self.keenetic_host(), cred)
-                           if src.get("keenetic", True) and (cred or self.fixtures) else None)
         raw["docker"] = sources.docker_containers(r) if src["docker"] else None
         projects = {c["project"] for c in raw["docker"] or [] if c.get("project")}
         raw["casaos"] = sources.casaos_titles(r, projects)
@@ -173,12 +170,6 @@ class App:
         for obs in found:
             self.passive.observe(obs)
         r.mark("probe", True, count=len(found))
-
-    def keenetic_host(self):
-        """Keenetic'in güncel IP'si: kendini 'Keenetic-...' diye tanıtan en son IP."""
-        cands = [(v.get("last") or "", ip) for ip, v in self.passive.snapshot_ip().items()
-                 if "keenetic" in f"{v.get('dhcp_name', '')} {v.get('mdns_name', '')}".lower()]
-        return max(cands)[1] if cands else None
 
     def attach_live(self, raw, settings):
         """Her yeniden hesaplamada güncel olan kaynaklar: pasif dinleme ve ajan raporları."""

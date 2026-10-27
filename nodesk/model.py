@@ -7,8 +7,9 @@ ad değişikliği tarama beklemeden, son ham veriden yeniden hesaplanabilir.
 import datetime as dt
 import ipaddress
 import re
+import struct
 
-from . import passive, sources, util
+from . import passive, probe, sources, util
 
 ROUTER_FRESH_MIN = 15      # router ajanı 5 dakikada bir rapor verir
 AGENT_FRESH_MIN = 20
@@ -63,7 +64,7 @@ NAME_KEYS = passive.NAME_FIELDS + passive.LIST_FIELDS
 
 def twin_mac(a, b):
     """50:ff:20:73:86:18 ve 52:ff:20:53:86:18: aynı cihazın ikinci ('yerel yönetimli') MAC'i.
-    Keenetic tekrarlayıcı modunda DHCP'de birini, ARP'de öbürünü kullanır."""
+    Bazı tekrarlayıcılar (örn. Keenetic) DHCP'de birini, ARP'de öbürünü kullanır."""
     try:
         x, y = a.split(":"), b.split(":")
         return (a != b and len(x) == len(y) == 6 and x[1:3] == y[1:3] and x[4:] == y[4:]
@@ -74,6 +75,25 @@ def twin_mac(a, b):
 
 ROUTER_PORTS = {22: ("dropbear", "SSH"), 53: ("dnsmasq", "DNS"), 80: ("uhttpd", "LuCI"),
                 443: ("uhttpd", "LuCI"), 8080: ("uhttpd", "LuCI")}
+
+
+def parse_router_names(lines):
+    """Router ajanının #NAMES satırları ("ip nb|mdns hex") -> {ip: ad alanları}"""
+    out = {}
+    for line in lines or []:
+        p = line.split()
+        if len(p) != 3 or not util.is_ipv4(p[0]):
+            continue
+        o = out.setdefault(p[0], {"ip": p[0]})
+        try:
+            data = bytes.fromhex(p[2])
+            if p[1] == "nb":
+                o["nb_name"] = probe.parse_nbstat(data)
+            elif p[1] == "mdns":
+                passive.mdns_obs(data, o)
+        except (ValueError, struct.error, IndexError):
+            pass
+    return {ip: {k: v for k, v in o.items() if k in NAME_KEYS and v} for ip, o in out.items()}
 
 
 def parse_proc_listen(lines):
@@ -355,21 +375,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             if rec.get(k):
                 o["names"][k] = rec[k]
 
-    # ---- Keenetic'in kendi cihaz listesi (RCI): arkasındaki cihazların gerçek MAC'i ve adı
-    ipinfo = {ip: dict(v) for ip, v in (raw.get("passive_ip") or {}).items()}
-    for h in raw.get("keenetic") or []:
-        names = {k: v for k, v in (("friendly", h.get("name")), ("dhcp_name", h.get("hostname")))
-                 if v and v != h["mac"]}
-        if h["mac"] in obs:
-            for k, v in names.items():
-                obs[h["mac"]]["names"].setdefault(k, v)
-        if h.get("ip") and subnet and util.in_net(h["ip"], subnet):
-            info = ipinfo.setdefault(h["ip"], {})
-            if info.get("real_mac") != h["mac"]:
-                info.clear()
-            info.update(real_mac=h["mac"], **names)
-            if h.get("active"):
-                info["active"] = True
+    ipinfo = raw.get("passive_ip") or {}
 
     def bridge_type(mac, o):
         conf, ov = cfg_dev.get(mac, {}), ov_dev.get(f"mac:{mac}", {})
@@ -377,7 +383,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
 
     # ---- Aynı cihazın ikinci MAC'i (haritada iki kez görünmesin). ARP'de bir IP'ye yanıt veren
     # MAC, o IP'yi DHCP'den başka bir MAC'le almışsa:
-    #   * ikiz MAC (twin_mac): extender'ın iki arayüzü (Keenetic 50:ff:.. / 52:ff:..)
+    #   * ikiz MAC (twin_mac): extender'ın iki arayüzü (örn. 50:ff:.. / 52:ff:..)
     #   * aynı DHCP adı: hem kablolu hem Wi-Fi bağlı cihaz (LG TV); Linux iki IP'nin ARP'sine de
     #     tek kartla yanıt verir. Farklı adlı cihazlar extender (MAC-NAT) arkasıdır, aşağıda ayrılır.
     alias = {}
@@ -429,7 +435,6 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 retired.add(ip)
                 continue
             info = ipinfo.get(ip) or {}
-            live = live or bool(info.get("active"))
             real = owner.get(ip) or info.get("real_mac") or hist.get(ip)
             if real in (b, None) or real in self_macs or twin_mac(real, b):
                 real = None
@@ -514,6 +519,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 ips.append(m.group(2))
         router_kw["ips"] = ips
         router_kw["via"] = ["tailscale", "ajan"]
+        rnames = parse_router_names(router_sec.get("NAMES"))
         for e in sources.parse_arpscan("\n".join(router_sec.get("ARPSCAN_WAN", []))):
             is_gw = e["ip"] == modem2_ip
             seen[f"mac:{e['mac']}"] = dict(
@@ -521,7 +527,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 ips=[e["ip"]], site="ev2", kind="modem" if is_gw else None,
                 label=ev2.get("modem_name") if is_gw else None,
                 parent_hint=None if is_gw else "ev2-gw", is_root=is_gw, online=True,
-                via=["router arp"])
+                via=["router arp"], names=rnames.get(e["ip"]) or {})
         lan = {}
         for line in router_sec.get("LEASES", []):
             p = line.split()
@@ -538,7 +544,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 d = lan.setdefault(mac, {"ip": m.group(1), "hostname": None})
                 d["reachable"] = True
         for mac, d in lan.items():
-            names = {"dhcp_name": d["hostname"]} if d["hostname"] else {}
+            names = {**rnames.get(d["ip"], {}), **({"dhcp_name": d["hostname"]} if d["hostname"] else {})}
             seen[f"mac:{mac}"] = dict(
                 mac=mac, vendor=util.vendor_for(mac, oui), ips=[d["ip"]], site="ev2",
                 parent_hint="router", online=bool(d.get("reachable")), names=names,
