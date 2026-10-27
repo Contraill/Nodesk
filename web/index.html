@@ -14,7 +14,7 @@
   --text: #17222B; --muted: #5E6C76; --cable: #8C9AA3; --on: #1F9C78; --tail: #5B57D6;
   --relay: #B7801C; --off: #A3ADB3; --exit: #5B57D6; --hl: #E0B020; --panel: #FFFFFF; --danger: #C2412D;
   --field: #F3F5F2; --svcline: #7A9DB0;
-  --c-net: #2F6FB5; --c-srv: #B04A8B; --c-svc: #0F8EA5;
+  --c-net: #2F6FB5; --c-srv: #B04A8B; --c-svc: #0F8EA5; --c-sys: #7A8A1E;
   --shadow: 0 1px 0 rgba(23,34,43,.06), 0 6px 18px rgba(23,34,43,.07);
   --sans: "Barlow Semi Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -25,7 +25,7 @@
     --text: #DCE4E8; --muted: #8B9AA6; --cable: #50616E; --on: #5BC8A6; --tail: #8E8CF0;
     --relay: #E6B85C; --off: #55636E; --exit: #8E8CF0; --hl: #F0C94A; --panel: #1B252F; --danger: #F07A63;
     --field: #24303B; --svcline: #4A6D80;
-    --c-net: #6FA8E8; --c-srv: #E07BB8; --c-svc: #4FC3D6;
+    --c-net: #6FA8E8; --c-srv: #E07BB8; --c-svc: #4FC3D6; --c-sys: #B5C454;
     --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
   }
 }
@@ -34,7 +34,7 @@
   --text: #DCE4E8; --muted: #8B9AA6; --cable: #50616E; --on: #5BC8A6; --tail: #8E8CF0;
   --relay: #E6B85C; --off: #55636E; --exit: #8E8CF0; --hl: #F0C94A; --panel: #1B252F; --danger: #F07A63;
   --field: #24303B; --svcline: #4A6D80;
-  --c-net: #6FA8E8; --c-srv: #E07BB8; --c-svc: #4FC3D6;
+  --c-net: #6FA8E8; --c-srv: #E07BB8; --c-svc: #4FC3D6; --c-sys: #B5C454;
   --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
 }
 * { box-sizing: border-box; }
@@ -119,7 +119,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .card { cursor: pointer; outline: none; }
 .card rect.box { fill: var(--card); stroke: var(--card-line); stroke-width: 1.2; }
 /* rol rengi: ağ cihazı, sunucu, servis (diğer cihazlar nötr) */
-.card.cat-net { --cat: var(--c-net); } .card.cat-srv { --cat: var(--c-srv); } .card.cat-svc { --cat: var(--c-svc); }
+.card.cat-net { --cat: var(--c-net); } .card.cat-srv { --cat: var(--c-srv); } .card.cat-svc { --cat: var(--c-svc); } .card.cat-sys { --cat: var(--c-sys); }
 .card.cat rect.box { fill: color-mix(in srgb, var(--cat) 10%, var(--card)); stroke: color-mix(in srgb, var(--cat) 55%, var(--card-line)); }
 .card.cat .icon { stroke: var(--cat); }
 .card:hover rect.box { stroke: var(--text); }
@@ -256,7 +256,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 <div class="legend" aria-label="Lejant">
   <span><b style="--c:var(--c-net)"></b>Ağ cihazı</span>
   <span><b style="--c:var(--c-srv)"></b>Sunucu</span>
-  <span><b style="--c:var(--c-svc)"></b>Servis</span>
+  <span><b style="--c:var(--c-svc)"></b>Uygulama</span>
+  <span><b style="--c:var(--c-sys)"></b>Sistem servisi</span>
   <span><i style="border-color:var(--cable)"></i>Yerel ağ</span>
   <span><i style="border-color:var(--svcline)"></i>Servis bağı</span>
   <span><i style="border-color:var(--tail);border-top-style:dashed"></i>Tailscale doğrudan</span>
@@ -312,7 +313,6 @@ const KIND_TR = {
   console: "Oyun konsolu", iot: "Akıllı cihaz", lamp: "Akıllı lamba", vacuum: "Robot süpürge", camera: "Kamera",
   printer: "Yazıcı", speaker: "Hoparlör", nas: "NAS / depolama", cloud: "Bulut", roam: "Gezgin cihazlar",
   internet: "İnternet", device: "Tanımlanmamış cihaz", service: "Servis", container: "Container",
-  svcgroup: "Servis grubu",
 };
 const GLYPHS = {   // servis simgeleri (ikon bulunamazsa ya da internet yoksa)
   terminal: "M3 4h18v16H3zM7 9l3 3-3 3M12.5 15h4",
@@ -325,7 +325,7 @@ const GLYPHS = {   // servis simgeleri (ikon bulunamazsa ya da internet yoksa)
   box: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9",
   server: "M4 3h16v7H4zM4 14h16v7H4zM8 6.5h.01M8 17.5h.01M12 6.5h5M12 17.5h5",
 };
-const SVC_KINDS = new Set(["service", "container", "svcgroup"]);
+const SVC_KINDS = new Set(["service", "container"]);
 const NO_LINK_PORTS = [22, 139, 445, 2222, 5900];
 const SOURCE_TR = {
   tailscale: ["Tailscale", "tailnet cihazları ve bağlantı yolları"],
@@ -403,8 +403,8 @@ function portsLabel(ports) { return ports && ports.length ? ":" + ports.slice(0,
 
 /* ---------------- yerleşim ---------------- */
 function isSvc(n) { return SVC_KINDS.has(n.kind); }
-function hasToggle(n) { return n.kind === "svcgroup" || (n.kind === "service" && (n.containers || []).length > 1); }
-function collapsedNode(n) { return n.id in prefs.collapsed ? prefs.collapsed[n.id] : n.kind === "svcgroup"; }
+function hasToggle(n) { return n.kind === "service" && (n.containers || []).length > 1; }
+function collapsedNode(n) { return !!prefs.collapsed[n.id]; }
 function cardW(n) { return n.kind === "container" ? KW : isSvc(n) ? SW : CW; }
 function cardH(n) { return n.kind === "container" ? KH : isSvc(n) ? SH : CH; }
 function visibleKids(n) {
@@ -421,7 +421,7 @@ function kidSort(a, b) {
   const sa = isSvc(a), sb = isSvc(b);
   if (sa !== sb) return sa ? 1 : -1;                      // önce cihazlar, sonra servisler
   if (sa) {
-    if ((a.kind === "svcgroup") !== (b.kind === "svcgroup")) return a.kind === "svcgroup" ? 1 : -1;
+    if ((a.source === "system") !== (b.source === "system")) return a.source === "system" ? 1 : -1;   // uygulamalar önce
     if (a.online !== b.online) return a.online ? -1 : 1;
     return a.label.localeCompare(b.label, "tr");
   }
@@ -436,10 +436,11 @@ function measure(n) {
   n.blocks = [];
   if (!kids.length) { n.bw = n.cw; n.bh = n.ch; return; }
   // Servisler hep aynı sütunda kalır (açılan servisin container'ları kendi altında girintili);
-  // cihazlar ve servisler ayrı sütunlara dizilir
+  // cihazlar, uygulamalar ve sistem servisleri ayrı sütunlara dizilir
   const big = kids.filter((k) => !isSvc(k) && (visibleKids(k).length || MAJOR.has(k.kind)));
   for (const k of big) { measure(k); n.blocks.push({ type: "node", node: k, w: k.bw, h: k.bh }); }
-  for (const group of [kids.filter((k) => !isSvc(k) && !big.includes(k)), kids.filter(isSvc)]) {
+  const sys = (k) => k.source === "system";
+  for (const group of [kids.filter((k) => !isSvc(k) && !big.includes(k)), kids.filter((k) => isSvc(k) && !sys(k)), kids.filter(sys)]) {
     for (let i = 0; i < group.length; i += MAXROWS) {
       const items = group.slice(i, i + MAXROWS);
       items.forEach(measureTree);
@@ -493,20 +494,9 @@ function place(n, x, y, edges) {
 }
 function build(data) {
   byId = new Map();
-  for (const n of data.nodes) { n.kids = []; delete n.x; delete n._vp; byId.set(n.id, n); }
-  // Sadece arayüzde: birden çok sistem servisi "Sistem" grubunda, çok container'lı uygulamaların container'ları alt düğüm
-  const extra = [], sys = {};
-  for (const n of data.nodes) if (n.kind === "service" && n.source === "system") (sys[n.parent] = sys[n.parent] || []).push(n);
-  for (const [host, list] of Object.entries(sys)) {
-    const h = byId.get(host);
-    if (!h || list.length < 2) continue;
-    const g = { id: host + "#sistem", kind: "svcgroup", label: "Sistem", parent: host, site: h.site, host,
-      online: list.some((x) => x.online), glyph: "server", members: list.map((x) => x.id), virtual: true,
-      ports: [...new Set(list.flatMap((x) => x.ports || []))].sort((a, b) => a - b), ips: [], services: [], tags: [],
-      health: list.some((x) => x.health === "fail") ? "partial" : null };
-    extra.push(g);
-    list.forEach((x) => { x._vp = g.id; });
-  }
+  for (const n of data.nodes) { n.kids = []; delete n.x; byId.set(n.id, n); }
+  // Sadece arayüzde: çok container'lı uygulamaların container'ları alt düğüm
+  const extra = [];
   for (const n of data.nodes) if (n.kind === "service" && (n.containers || []).length > 1) {
     for (const c of n.containers) extra.push({ id: n.id + "#" + c.name, kind: "container", label: c.name, parent: n.id,
       site: n.site, host: n.host, online: n.online && c.state === "running", state: c.state, status: c.status,
@@ -514,7 +504,7 @@ function build(data) {
   }
   for (const n of extra) { n.kids = []; byId.set(n.id, n); }
   ALL = [...data.nodes, ...extra];
-  for (const n of ALL) { const p = byId.get(n._vp || n.parent); if (p && p !== n) p.kids.push(n); }
+  for (const n of ALL) { const p = byId.get(n.parent); if (p && p !== n) p.kids.push(n); }
 }
 function layout() {
   const sites = DATA.sites.map((s) => ({ ...s, roots: DATA.nodes.filter((n) => n.site === s.id && n.parent === "internet") }))
@@ -666,7 +656,6 @@ function drawCard(parent, n, q, fa) {
 }
 
 function svcStatus(n) {
-  if (n.kind === "svcgroup") return n.online ? (n.health ? ["warn", "Bazıları yanıt vermiyor"] : ["on", "Çalışıyor"]) : ["", "Çalışmıyor"];
   if (n.state && n.state !== "running") return ["", n.state === "exited" ? "Durdu" : n.state];
   if (!n.online) return ["", "Ulaşılamıyor"];
   if (n.health === "fail") return ["bad", "Yanıt vermiyor"];
@@ -682,7 +671,7 @@ function drawIcon(g, n, x, y, size) {
   }
 }
 function drawSvcCard(parent, n, q, fa) {
-  const cls = ["card", "svc-card", "cat", "cat-svc"];
+  const cls = ["card", "svc-card", "cat", n.source === "system" ? "cat-sys" : "cat-svc"];
   if (n.kind === "container") cls.push("container");
   if (!n.online) cls.push("offline");
   if (selected === n.id) cls.push("selected");
@@ -700,10 +689,10 @@ function drawSvcCard(parent, n, q, fa) {
   el("circle", { class: "led", cx: small ? 24 : 37, cy: small ? 10 : 11, r: small ? 3.5 : 4.5, fill: color }, g);
   const tx = small ? 33 : 47, room = hasToggle(n) ? 15 : 19;
   text(g, tx, small ? 16 : 21, clip(n.label, small ? 18 : room), "name");
-  const sub = n.state && n.state !== "running" ? stt.toLowerCase() : (n.ports || []).length ? portsLabel(n.ports) : (n.kind === "svcgroup" ? `${(n.members || []).length} servis` : stt.toLowerCase());
+  const sub = n.state && n.state !== "running" ? stt.toLowerCase() : (n.ports || []).length ? portsLabel(n.ports) : stt.toLowerCase();
   text(g, tx, small ? 31 : 38, clip(sub, 24), "ip");
   if (hasToggle(n)) {
-    const col = collapsedNode(n), cnt = n.kind === "svcgroup" ? (n.members || []).length : n.containers.length;
+    const col = collapsedNode(n), cnt = n.containers.length;
     const tg = el("g", { class: "toggle", transform: `translate(${n.cw - 40},${(n.ch - 24) / 2})` }, g);
     el("rect", { width: 32, height: 24, rx: 7 }, tg);
     text(tg, 9, 16, String(cnt), "", { "text-anchor": "middle" });
@@ -761,9 +750,6 @@ function renderServicePanel(n) {
   if (links.length) html += `<h3>Aç</h3><ul class="svc-list">${links.map(([u, l]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener"><span>${esc(n.label)}</span><small>${esc(l)}</small></a></li>`).join("")}</ul>`;
   if ((n.containers || []).length > 1) {
     html += `<h3>Container'lar</h3><ul class="svc-list">` + n.containers.map((c) => `<li><a href="#" data-open="${esc(n.id + "#" + c.name)}"><span>${esc(c.name)}</span><small>${c.state === "running" ? (c.ports || []).map((p) => ":" + p).join(" ") : "durdu"}</small></a></li>`).join("") + `</ul>`;
-  }
-  if (n.kind === "svcgroup") {
-    html += `<h3>Servisler</h3><ul class="svc-list">` + (n.members || []).map((id) => byId.get(id)).filter(Boolean).map((m) => `<li><a href="#" data-open="${esc(m.id)}"><span>${esc(m.label)}</span><small>${(m.ports || []).map((p) => ":" + p).join(" ")}</small></a></li>`).join("") + `</ul>`;
   }
   if (API_OK && !n.virtual) html += `<div class="actions"><button class="btn line" id="bEdit">Düzenle</button></div>`;
   $("#pbody").innerHTML = html;
@@ -845,6 +831,8 @@ function renderPanel(n) {
   add("Son görülme", n.last_seen ? `${ago(n.last_seen)} <small>(${fmtTime(n.last_seen)})</small>` : (n.mac ? "henüz çevrimiçi görülmedi" : ""));
   let html = `<h2>${esc(n.label)}</h2><div class="kind">${esc(KIND_TR[n.kind] || n.kind)}${siteName(n.site) ? " · " + esc(siteName(n.site)) : ""}${n.edited ? " · düzenlendi" : ""}</div>`;
   if ((n.tags || []).length) html += `<div class="chips" style="margin-bottom:12px">${n.tags.map((t) => `<span class="chip static">#${esc(t)}</span>`).join("")}</div>`;
+  if (n.same_hint && API_OK) html += `<div class="note">Bu cihaz, az önce kaybolan <b>${esc(n.same_hint.label)}</b> ile aynı telefon olabilir: telefonlar her Wi-Fi ağında farklı (rastgele) MAC kullanır.
+    <div class="actions"><button class="btn primary" id="bSame">Aynı cihaz</button><button class="btn line" id="bNotSame">Farklı cihaz</button></div></div>`;
   html += `<dl>${rows.join("")}</dl>`;
   if (n.note) html += `<p class="note">${esc(n.note)}</p>`;
   if (n.stale) html += `<p class="note">Bu bölgeden son taramada veri alınamadı; gösterilen bilgiler son başarılı taramadan.</p>`;
@@ -872,6 +860,12 @@ function renderPanel(n) {
   else if (!API_OK && n.mac) html += `<p class="hint">Düzenleme için Nodesk servisine ulaşılamıyor.</p>`;
   $("#pbody").innerHTML = html;
   const be = $("#bEdit"); if (be) be.onclick = () => { editing = true; renderPanel(n); };
+  const putOv = async (patch) => {
+    try { await api("PUT", "/api/device?id=" + encodeURIComponent(n.id), { ...(n.override || {}), ...patch }); await load(true); }
+    catch (e) { alert("Kaydedilemedi: " + e.message); }
+  };
+  if ($("#bSame")) $("#bSame").onclick = () => putOv({ same_as: n.same_hint.id });
+  if ($("#bNotSame")) $("#bNotSame").onclick = () => putOv({ not_same: n.same_hint.id });
   $$("[data-open]", $("#pbody")).forEach((a) => a.onclick = (e) => { e.preventDefault(); openPanel(a.dataset.open); });
 }
 function descendants(id) {
@@ -886,11 +880,14 @@ function renderEditor(n) {
     .sort((a, b) => a.label.localeCompare(b.label, "tr"));
   const ov = n.override || {};
   const manual = (n.services || []).filter((s) => s.source === "manual");
+  const twins = DATA.nodes.filter((x) => x.mac && x.id !== n.id && x.id.startsWith("mac:"))
+    .sort((a, b) => a.label.localeCompare(b.label, "tr"));
   let html = `<h2>${esc(n.label)}</h2><div class="kind">Düzenleniyor · boş bırakılan alanlar otomatik kalır</div>
   <form id="edit">
     <div class="field"><label for="eName">Ad</label><input id="eName" maxlength="60" value="${esc(ov.name || "")}" placeholder="${esc(n.auto_label || n.label)}"></div>
     <div class="field"><label for="eType">Tür</label><select id="eType"><option value="">Otomatik (${esc(KIND_TR[n.auto_kind] || n.auto_kind || "?")})</option>${types.map((t) => `<option value="${t}"${t === ov.type ? " selected" : ""}>${esc(KIND_TR[t] || t)}</option>`).join("")}</select></div>
     <div class="field"><label for="eParent">Bağlı olduğu cihaz</label><select id="eParent"><option value="">Otomatik (bulunduğu yer)</option>${parents.map((p) => `<option value="${esc(p.id)}"${p.id === ov.parent ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></div>
+    ${n.id.startsWith("mac:") ? `<div class="field"><label for="eSame">Aynı cihaz <small>(telefonun başka Wi-Fi ağındaki MAC'i)</small></label><select id="eSame"><option value="">—</option>${twins.map((p) => `<option value="${esc(p.id)}"${p.id === ov.same_as ? " selected" : ""}>${esc(p.label)} · ${esc(p.mac)}</option>`).join("")}</select></div>` : ""}
     <div class="field"><label for="eTags">Etiketler <small>(virgülle ayır)</small></label><input id="eTags" value="${esc((ov.tags || []).join(", "))}" placeholder="örn. salon, IoT"></div>
     <div class="field"><label for="eNote">Not</label><textarea id="eNote" maxlength="500">${esc(ov.note || "")}</textarea></div>
     <div class="field"><span class="lbl">Elle eklenen servisler</span><div id="eSvcs"></div>
@@ -922,7 +919,7 @@ function renderEditor(n) {
     const body = {
       name: $("#eName").value.trim(), type: $("#eType").value,
       parent: $("#eParent").value, tags: $("#eTags").value, note: $("#eNote").value.trim(),
-      hidden: $("#eHidden").checked,
+      hidden: $("#eHidden").checked, same_as: $("#eSame") ? $("#eSame").value : "", not_same: ov.not_same || "",
       services: $$(".svc-edit", box).map((r) => { const i = r.querySelectorAll("input"); return { name: i[0].value, port: i[1].value.trim(), url: i[2].value.trim() }; }).filter((s) => s.name.trim()),
     };
     save(body);

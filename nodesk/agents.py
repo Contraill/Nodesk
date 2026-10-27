@@ -11,7 +11,8 @@ from . import store
 ROUTER_INSTALLER = r"""#!/bin/sh
 # Nodesk router ajanı kurulumu (otomatik üretildi). Tekrar çalıştırmak güvenli.
 # Yaptıkları: topo-collect ve nodesk-agent'ı kurar, cron'a 5 dakikalık satır ekler,
-# eski (SSH) yöntemin anahtar satırını kaldırır. Mevcut ayarlarına dokunmaz.
+# eski (SSH) yöntemin anahtar satırını kaldırır. ucode-mod-socket kuruluysa salt dinleyen
+# nodesk-listen servisini de kurar. Mevcut ayarlarına dokunmaz.
 set -e
 
 if command -v curl >/dev/null 2>&1; then
@@ -71,6 +72,32 @@ NODESK_EOF
 chmod 755 /usr/sbin/nodesk-agent.new
 mv /usr/sbin/nodesk-agent.new /usr/sbin/nodesk-agent
 
+if [ -f /usr/lib/ucode/socket.so ]; then
+    cat > /usr/sbin/nodesk-listen.new <<'NODESK_EOF'
+@LISTEN@
+NODESK_EOF
+    chmod 755 /usr/sbin/nodesk-listen.new
+    mv /usr/sbin/nodesk-listen.new /usr/sbin/nodesk-listen
+    cat > /etc/init.d/nodesk-listen <<'NODESK_EOF'
+#!/bin/sh /etc/rc.common
+# Nodesk: router'ın duyduğu DHCP/mDNS yayınlarını kaydeder (salt dinler, paket göndermez)
+START=99
+USE_PROCD=1
+start_service() {
+    procd_open_instance
+    procd_set_param command /usr/bin/ucode /usr/sbin/nodesk-listen
+    procd_set_param respawn 3600 5 5
+    procd_close_instance
+}
+NODESK_EOF
+    chmod 755 /etc/init.d/nodesk-listen
+    /etc/init.d/nodesk-listen enable || true
+    if /etc/init.d/nodesk-listen restart; then echo "dinleyici (nodesk-listen): çalışıyor"
+    else echo "UYARI: dinleyici başlatılamadı (ajan yine de çalışır)"; fi
+else
+    echo "dinleyici atlandı: ucode-mod-socket yok (apk add ucode-mod-socket)"
+fi
+
 CRON=/etc/crontabs/root
 touch "$CRON"
 if grep -q '/usr/sbin/nodesk-agent' "$CRON"; then
@@ -100,6 +127,7 @@ echo "otomatik güncelleme: açık (Pi yeni sürüm olduğunu söyleyince ajan k
 echo "topo-collect sürümü: $(sed -n 's/^TOPO_VERSION=//p' /usr/sbin/topo-collect)"
 echo "cron: $(grep -c '' "$CRON") satır"
 [ -f "$AK" ] && echo "authorized_keys: $(grep -c '' "$AK") satır"
+echo "Kaldırmak için: /etc/init.d/nodesk-listen disable; /etc/init.d/nodesk-listen stop; rm -f /etc/init.d/nodesk-listen /usr/sbin/nodesk-listen /usr/sbin/nodesk-agent /usr/sbin/topo-collect /etc/nodesk-agent.conf; sed -i '/nodesk-agent/d' /etc/crontabs/root"
 exit 0
 """
 
@@ -194,6 +222,11 @@ def topo_text():
         return f.read().rstrip("\n")
 
 
+def listen_text():
+    with open(os.path.join(store.APP_DIR, "router", "nodesk-listen"), encoding="utf-8") as f:
+        return f.read().rstrip("\n")
+
+
 def topo_version():
     for line in topo_text().splitlines():
         if line.startswith("TOPO_VERSION="):
@@ -231,7 +264,7 @@ def installer(kind, base, name, token):
     url, iurl = ingest_url(base, name, token), install_url(base, name, token)
     if kind == "router":
         return (ROUTER_INSTALLER.replace("@URL@", url).replace("@INSTALL_URL@", iurl)
-                .replace("@TOPO@", topo_text()))
+                .replace("@TOPO@", topo_text()).replace("@LISTEN@", listen_text()))
     return (LINUX_INSTALLER.replace("@URL@", url).replace("@INSTALL_URL@", iurl)
             .replace("@LINUX_VERSION@", LINUX_AGENT_VERSION))
 

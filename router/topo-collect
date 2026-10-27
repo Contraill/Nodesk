@@ -6,7 +6,7 @@
 # İlk kurulum (bir kez) Laptop'tan; sonraki sürümleri ajan Pi'den kendisi alır:
 #   ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh
 
-TOPO_VERSION=5
+TOPO_VERSION=6
 
 echo "#VERSION"
 echo "$TOPO_VERSION"
@@ -64,6 +64,12 @@ UC
     rm -f /tmp/nodesk-names.uc "$NAMES.new"
 fi
 cat "$NAMES" 2>/dev/null
+# nodesk-listen'in son rapordan beri duyduğu yayınlar (DHCP istekleri, mDNS duyuruları)
+HEARD=/tmp/nodesk-heard.txt
+if [ -f "$HEARD" ] && mv "$HEARD" "$HEARD.sending"; then
+    cat "$HEARD.sending"
+    rm -f "$HEARD.sending"
+fi
 
 echo "#LISTEN"
 # Router'ın dinlediği TCP portları (LuCI, DNS, SSH...): sadece yerel adres:port, onaltılık

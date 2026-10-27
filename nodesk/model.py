@@ -77,23 +77,35 @@ ROUTER_PORTS = {22: ("dropbear", "SSH"), 53: ("dnsmasq", "DNS"), 80: ("uhttpd", 
                 443: ("uhttpd", "LuCI"), 8080: ("uhttpd", "LuCI")}
 
 
-def parse_router_names(lines):
-    """Router ajanının #NAMES satırları ("ip nb|mdns hex") -> {ip: ad alanları}"""
-    out = {}
-    for line in lines or []:
+def router_name_obs(sections):
+    """Router raporunun #NAMES satırları ("ip nb|mdns|dhcp hex") -> pasif kayda gözlemler.
+    nb/mdns: router'ın ad sorusuna yanıtlar ve duyduğu mDNS; dhcp: duyduğu DHCP istekleri."""
+    mac_of = {}
+    for e in sources.parse_arpscan("\n".join(sections.get("ARPSCAN_WAN") or [])):
+        mac_of[e["ip"]] = e["mac"]
+    for line in (sections.get("LEASES") or []) + (sections.get("NEIGH") or []):
         p = line.split()
-        if len(p) != 3 or not util.is_ipv4(p[0]):
+        if len(p) >= 4 and util.norm_mac(p[1]) and util.is_ipv4(p[2]):          # kira: zaman mac ip ad
+            mac_of[p[2]] = util.norm_mac(p[1])
+        elif len(p) >= 5 and p[3] == "lladdr" and util.is_ipv4(p[0]) and util.norm_mac(p[4]):
+            mac_of[p[0]] = util.norm_mac(p[4])
+    out = []
+    for line in sections.get("NAMES") or []:
+        p = line.split()
+        if len(p) != 3:
             continue
-        o = out.setdefault(p[0], {"ip": p[0]})
+        ip, kind, hx = p
         try:
-            data = bytes.fromhex(p[2])
-            if p[1] == "nb":
-                o["nb_name"] = probe.parse_nbstat(data)
-            elif p[1] == "mdns":
-                passive.mdns_obs(data, o)
+            data = bytes.fromhex(hx)
+            if kind == "dhcp" and len(data) >= 240 and data[236:240] == b"\x63\x82\x53\x63":
+                out += passive._parse_dhcp(data)
+            elif kind == "nb":
+                out.append({"mac": mac_of.get(ip), "ip": ip, "via": "probe", "nb_name": probe.parse_nbstat(data)})
+            elif kind == "mdns":
+                out.append(passive.mdns_obs(data, {"mac": mac_of.get(ip), "ip": ip, "via": "mdns"}))
         except (ValueError, struct.error, IndexError):
-            pass
-    return {ip: {k: v for k, v in o.items() if k in NAME_KEYS and v} for ip, o in out.items()}
+            continue
+    return [o for o in out if o.get("mac")]
 
 
 def parse_proc_listen(lines):
@@ -267,6 +279,44 @@ def service_nodes(nodes, ov_dev, ov_apps, casaos, health, icon_files):
             ids.append(key)
         host["service_ids"] = ids
     return out, sorted(wanted)
+
+
+def same_device_groups(state, online, cfg_dev, ov_dev):
+    """Aynı cihazın farklı MAC'leri (state kimlikleri) -> [[nid, ...], ...]
+
+    Telefonlar her Wi-Fi ağında ayrı rastgele MAC kullanır; ev içinde modemden extender'a
+    geçince başka bir cihaz gibi görünür. Kanıtlar:
+      * config.toml'da aynı adla yazılmış MAC'ler (kullanıcının açık isteği)
+      * arayüzden "aynı cihaz" seçimi (same_as)
+      * rastgele MAC'lerde aynı DHCP ya da mDNS adı, ve ikisi aynı anda çevrimiçi değil
+    """
+    up = {}
+
+    def find(x):
+        while up.get(x, x) != x:
+            x = up[x]
+        return x
+
+    snaps = {nid: st.get("snapshot") or {} for nid, st in state.items() if nid.startswith("mac:")}
+    keys = {}
+    for nid, snap in snaps.items():
+        conf_name = (cfg_dev.get(nid[4:]) or {}).get("name")
+        if conf_name:
+            keys.setdefault(("conf", conf_name.lower()), []).append(nid)
+        if util.is_local_mac(nid[4:]):
+            names = snap.get("names") or {}
+            for k in ("dhcp_name", "mdns_name"):
+                if names.get(k):
+                    keys.setdefault(("name", names[k].lower()), []).append(nid)
+    pairs = [(g[0], n) for (kind, _), g in keys.items()
+             if len(g) > 1 and (kind == "conf" or sum(map(online, g)) <= 1) for n in g[1:]]
+    pairs += [(nid, ov["same_as"]) for nid, ov in ov_dev.items() if nid in snaps and ov.get("same_as") in snaps]
+    for a, b in pairs:
+        up[find(a)] = find(b)
+    groups = {}
+    for nid in snaps:
+        groups.setdefault(find(nid), []).append(nid)
+    return [sorted(g) for g in groups.values() if len(g) > 1]
 
 
 def age_min(received, now):
@@ -519,7 +569,10 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 ips.append(m.group(2))
         router_kw["ips"] = ips
         router_kw["via"] = ["tailscale", "ajan"]
-        rnames = parse_router_names(router_sec.get("NAMES"))
+        heard = raw.get("passive_ev2") or {}
+
+        def rnames(mac):
+            return {k: v for k, v in (heard.get(mac) or {}).items() if k in NAME_KEYS and v}
         for e in sources.parse_arpscan("\n".join(router_sec.get("ARPSCAN_WAN", []))):
             is_gw = e["ip"] == modem2_ip
             seen[f"mac:{e['mac']}"] = dict(
@@ -527,7 +580,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 ips=[e["ip"]], site="ev2", kind="modem" if is_gw else None,
                 label=ev2.get("modem_name") if is_gw else None,
                 parent_hint=None if is_gw else "ev2-gw", is_root=is_gw, online=True,
-                via=["router arp"], names=rnames.get(e["ip"]) or {})
+                via=["router arp"], names=rnames(e["mac"]))
         lan = {}
         for line in router_sec.get("LEASES", []):
             p = line.split()
@@ -544,7 +597,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 d = lan.setdefault(mac, {"ip": m.group(1), "hostname": None})
                 d["reachable"] = True
         for mac, d in lan.items():
-            names = {**rnames.get(d["ip"], {}), **({"dhcp_name": d["hostname"]} if d["hostname"] else {})}
+            names = {**rnames(mac), **({"dhcp_name": d["hostname"]} if d["hostname"] else {})}
             seen[f"mac:{mac}"] = dict(
                 mac=mac, vendor=util.vendor_for(mac, oui), ips=[d["ip"]], site="ev2",
                 parent_hint="router", online=bool(d.get("reachable")), names=names,
@@ -683,12 +736,36 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             if ovg.get("name"):
                 nodes[gw]["label"] = ovg["name"]
 
+    # Aynı cihazın MAC'leri tek düğüm: kimlik (id, düzenlemeler) sabit, adres/konum en güncelinden
+    def online_now(nid):
+        return bool(seen.get(nid, {}).get("online"))
+
+    merged, skip = {}, set()
+    for g in same_device_groups(state, online_now, cfg_dev, ov_dev):
+        canon = min(g, key=lambda n: (n not in ov_dev and n[4:] not in cfg_dev, state[n].get("first_seen") or ""))
+        live = max(g, key=lambda n: (online_now(n), state[n].get("last_seen") or ""))
+        snap = dict(state[live]["snapshot"])
+        snap["names"] = dict(snap.get("names") or {})
+        for n in g:
+            for k, v in (state[n]["snapshot"].get("names") or {}).items():
+                snap["names"].setdefault(k, v)
+        snap["aliases"] = sorted({m for n in g for m in [n[4:]] + (state[n]["snapshot"].get("aliases") or [])}
+                                 - {snap.get("mac")})
+        merged[canon] = {"snapshot": snap, "online": online_now(live), "live": live,
+                         "first_seen": min(state[n].get("first_seen") or "~" for n in g),
+                         "last_seen": max(state[n].get("last_seen") or "" for n in g) or None}
+        skip |= set(g) - {canon}
+
     for nid, st in state.items():
+        if nid in skip:
+            continue
+        st = merged.get(nid, st)
         snap = dict(st["snapshot"])
         mac = snap.get("mac")
+        own = [nid[4:]] if nid.startswith("mac:") else []
         conf = cfg.get("devices", {}).get("self", {}) if nid == "self" else \
-            ({} if snap.get("roam") else (cfg_dev.get(mac) or next(
-                (cfg_dev[a] for a in snap.get("aliases") or [] if a in cfg_dev), {}) if mac else {}))
+            ({} if snap.get("roam") else next(
+                (cfg_dev[a] for a in own + [mac] + (snap.get("aliases") or []) if a in cfg_dev), {}))
         ov = ov_dev.get(nid, {})
         names = snap.pop("names", None) or {}
         hint = snap.pop("parent_hint", None)
@@ -712,7 +789,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 s["hidden"] = True
         for k in ("label", "kind", "is_root"):
             snap.pop(k, None)
-        online = bool(seen.get(nid, {}).get("online"))
+        online = st["online"] if nid in merged else online_now(nid)
         site = snap.get("site")
         nodes[nid] = {
             **snap, "id": nid, "label": label, "kind": kind, "parent": parent, "online": online,
@@ -720,7 +797,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             "first_seen": st.get("first_seen"), "last_seen": st.get("last_seen"),
             "random_mac": util.is_local_mac(mac) if mac else None,
             "short_vendor": util.short_vendor(snap.get("vendor")),
-            "stale": nid not in seen and ((site == "ev1" and ev1_failed) or
+            "stale": st.get("live", nid) not in seen and ((site == "ev1" and ev1_failed) or
                                           (site == "ev2" and not router_fresh)),
             "tags": ov.get("tags") or conf.get("tags") or [], "note": ov.get("note") or snap.get("note"),
             "hidden": bool(ov.get("hidden")), "edited": bool(ov), "override": ov or None,
@@ -728,6 +805,21 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                            fallback_label(snap.get("vendor"), mac, (snap.get("ips") or [None])[0])),
             "auto_kind": conf.get("type") or snap.get("kind") or guess_type(snap.get("vendor"), mac, names),
         }
+
+    # Öneri (onay kullanıcıda): rastgele MAC'li bir cihaz kaybolduktan hemen sonra aynı türde yeni
+    # biri geldiyse büyük ihtimalle aynı telefon başka Wi-Fi ağına geçmiştir
+    near = dt.timedelta(minutes=window + 30)
+    for n in nodes.values():
+        if not (n.get("random_mac") and n["online"] and n.get("first_seen")):
+            continue
+        t0 = util.parse_iso(n["first_seen"])
+        cands = [o for o in nodes.values() if o is not n and o.get("random_mac") and not o["online"]
+                 and o.get("site") == n.get("site") and o["kind"] == n["kind"] and o.get("last_seen")
+                 and (o.get("first_seen") or "") < n["first_seen"]
+                 and abs(util.parse_iso(o["last_seen"]) - t0) <= near
+                 and o["id"] != (n.get("override") or {}).get("not_same")]
+        if len(cands) == 1:
+            n["same_hint"] = {"id": cands[0]["id"], "label": cands[0]["label"]}
 
     # Geçersiz ya da döngü oluşturan ebeveynleri düzelt
     for n in nodes.values():

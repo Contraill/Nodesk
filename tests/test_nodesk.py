@@ -156,6 +156,9 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(tv["names"]["dhcp_name"], "Samsung")
         self.assertEqual(self.ids["mac:c0:49:43:1c:cc:12"]["names"]["nb_name"], "HGW")
         self.assertEqual(self.ids["mac:60:7e:a4:07:f9:d8"]["names"], {}, "bozuk satır atlanır")
+        robo = self.ids["mac:b0:4a:39:74:6b:d6"]
+        self.assertEqual(robo["names"]["dhcp_name"], "roborock-vacuum-a27", "router'ın duyduğu DHCP isteği")
+        self.assertEqual(robo["kind"], "vacuum")
 
     def test_router_services(self):
         by = {n["label"]: n for n in self.data["nodes"] if n["kind"] == "service" and n["parent"] == "router"}
@@ -206,13 +209,15 @@ class DuplicateTest(unittest.TestCase):
         "b4:e6:2a:c2:32:4a": {"name": "LG TV 1", "type": "tv"},
         "38:8c:50:9f:be:1c": {"name": "LG TV 2", "type": "tv"}}}
 
-    def build(self, state):
+    def build(self, state, cfg=None, extra_passive=None, extra_ip=None, extra_arp=(), overrides=None):
         raw = {"ifaces": [{"ifname": "eth0", "ip": "192.168.44.2", "prefix": 24, "mac": "88:a2:9e:35:f8:b1"}],
-               "arp": [{"ip": ip, "mac": m, "vendor": None} for ip, m in self.ARP], "neigh": [],
-               "passive": self.PASSIVE, "passive_ip": self.PASSIVE_IP}
+               "arp": [{"ip": ip, "mac": m, "vendor": None} for ip, m in [*self.ARP, *extra_arp]], "neigh": [],
+               "passive": {**self.PASSIVE, **(extra_passive or {})},
+               "passive_ip": {**self.PASSIVE_IP, **(extra_ip or {})}}
         settings = json.loads(json.dumps(store.DEFAULT_SETTINGS))
         settings["sources"]["router"] = False
-        data, state = model.build(raw, self.CFG, settings, {}, state, {}, util.parse_iso(self.T))
+        data, state = model.build(raw, cfg or self.CFG, settings, overrides or {"devices": {}}, state, {},
+                                  util.parse_iso(self.T))
         return {n["id"]: n for n in data["nodes"]}, state
 
     def old_state(self):
@@ -246,6 +251,52 @@ class DuplicateTest(unittest.TestCase):
         ids, _ = self.build(self.old_state())
         self.assertNotIn("ip:192.168.44.6", ids)
         self.assertEqual(ids["mac:70:54:b4:5a:b6:4e"]["parent"], "mac:52:ff:20:53:86:18")
+
+    # Aynı S24: F1611A Wi-Fi'ında a6:8e.., Keenetic Wi-Fi'ında d2:61.. (Android'in ağ başına MAC'i)
+    S24_P = {"a6:8e:da:14:ea:d0": {"ips": {"192.168.44.8": "2026-10-27T18:00:00+00:00"},
+                                   "last": "2026-10-27T18:00:00+00:00", "mdns_name": "Android_IZKLG79Q"},
+             "d2:61:e5:6d:9a:c3": {"ips": {"192.168.44.10": "2026-10-27T18:20:00+00:00"},
+                                   "last": "2026-10-27T18:20:00+00:00", "dhcp_name": "Ali-adli-kisiye-ait-S24"}}
+    S24_IP = {"192.168.44.10": {"real_mac": "d2:61:e5:6d:9a:c3", "l2_mac": "52:ff:20:53:86:18",
+                                "last": "2026-10-27T18:20:00+00:00"}}
+    S24_STATE = {"mac:a6:8e:da:14:ea:d0": {"first_seen": "2026-10-27T14:00:00+00:00",
+                                           "last_seen": "2026-10-27T18:10:00+00:00",
+                                           "snapshot": {"mac": "a6:8e:da:14:ea:d0", "site": "ev1",
+                                                        "ips": ["192.168.44.8"]}}}
+
+    def s24(self, cfg=None, overrides=None):
+        return self.build(json.loads(json.dumps(self.S24_STATE)), cfg, self.S24_P, self.S24_IP,
+                          [("192.168.44.10", "52:ff:20:53:86:18")], overrides)
+
+    def test_phone_on_two_wifis_by_config_name(self):
+        cfg = {**self.CFG, "devices": {**self.CFG["devices"], "a6:8e:da:14:ea:d0": {"name": "S24"},
+                                       "d2:61:e5:6d:9a:c3": {"name": "S24"}}}
+        ids, _ = self.s24(cfg, {"devices": {"mac:a6:8e:da:14:ea:d0": {"name": "S24 Ali"}}})
+        s24 = [n for n in ids.values() if n["label"].startswith("S24")]
+        self.assertEqual([n["id"] for n in s24], ["mac:a6:8e:da:14:ea:d0"], "kimlik düzenlenen MAC'te kalır")
+        self.assertEqual(s24[0]["label"], "S24 Ali")
+        self.assertEqual(s24[0]["mac"], "d2:61:e5:6d:9a:c3", "adres ve konum şu anki MAC'ten")
+        self.assertEqual(s24[0]["aliases"], ["a6:8e:da:14:ea:d0"])
+        self.assertEqual(s24[0]["parent"], "mac:52:ff:20:53:86:18")
+        self.assertTrue(s24[0]["online"])
+
+    def test_phone_hint_and_manual_merge(self):
+        ids, _ = self.s24()
+        self.assertEqual(ids["mac:d2:61:e5:6d:9a:c3"]["same_hint"]["id"], "mac:a6:8e:da:14:ea:d0",
+                         "biri kayboldu, diğeri hemen geldi: öneri")
+        ids, _ = self.s24(overrides={"devices": {"mac:d2:61:e5:6d:9a:c3": {"same_as": "mac:a6:8e:da:14:ea:d0"}}})
+        self.assertNotIn("mac:a6:8e:da:14:ea:d0", ids)
+        self.assertTrue(ids["mac:d2:61:e5:6d:9a:c3"]["online"])
+        ids, _ = self.s24(overrides={"devices": {"mac:d2:61:e5:6d:9a:c3": {"not_same": "mac:a6:8e:da:14:ea:d0"}}})
+        self.assertNotIn("same_hint", ids["mac:d2:61:e5:6d:9a:c3"], "reddedilen öneri tekrar gelmez")
+
+    def test_same_dhcp_name_merges_only_when_not_both_online(self):
+        snap = lambda mac, name: {"snapshot": {"mac": mac, "names": {"dhcp_name": name}}}
+        state = {"mac:02:00:00:00:00:01": snap("02:00:00:00:00:01", "Galaxy-S24"),
+                 "mac:02:00:00:00:00:02": snap("02:00:00:00:00:02", "Galaxy-S24")}
+        self.assertEqual(model.same_device_groups(state, lambda n: n.endswith("1"), {}, {}),
+                         [["mac:02:00:00:00:00:01", "mac:02:00:00:00:00:02"]])
+        self.assertEqual(model.same_device_groups(state, lambda n: True, {}, {}), [], "aynı anda açık: iki cihaz")
 
     def test_different_names_not_merged(self):
         self.assertFalse(model.twin_mac("50:ff:20:73:86:18", "50:ff:20:11:22:33"), "iki ayrı Keenetic")
@@ -489,7 +540,7 @@ class ApiTest(unittest.TestCase):
 
     def test_ingest_asks_old_agent_to_update(self):
         token = store.Store(store.Paths(self.home)).agents()["agents"]["router"]["token"]
-        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n5", "#VERSION\n2", 1)
+        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n6", "#VERSION\n2", 1)
         st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=old.encode(), ctype="text/plain")
         self.assertEqual((st, body.strip()), (200, "ok update"))
         cur = open(os.path.join(FIX, "router.txt")).read()
@@ -531,7 +582,7 @@ class ScriptsTest(unittest.TestCase):
             s = agents.installer(kind, "http://100.64.0.1:8088", "x", "tok")
             r = subprocess.run(["sh", "-n"], input=s, text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(agents.topo_version(), "5")
+        self.assertEqual(agents.topo_version(), "6")
 
     def test_router_installer_sandbox(self):
         """Router kurulum scriptini sahte kök dizinde BusyBox ile iki kez çalıştır."""

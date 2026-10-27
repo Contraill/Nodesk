@@ -1,0 +1,67 @@
+#!/usr/bin/ucode
+// Nodesk: router'ın kendi ağlarında duyduğu yayınları kaydeder. Salt dinler, paket göndermez.
+//   wan    : H3600P tarafındaki cihazların DHCP istekleri (UDP 67): telefonlar ağa her
+//            katıldığında adını burada söyler. Bir de mDNS duyuruları.
+//   br-lan : mDNS duyuruları (DHCP adları zaten dnsmasq kiralarında).
+// Soketler SO_BINDTODEVICE ile arayüze bağlı: dnsmasq'ın LAN DHCP trafiğine dokunmaz
+// (dnsmasq WAN'da zaten DHCP vermez).
+// Her farklı paket bir kez /tmp/nodesk-heard.txt'ye yazılır; topo-collect onu Pi'ye gönderir,
+// ayrıştırmayı Pi yapar. Deneme: ucode /usr/sbin/nodesk-listen 30  (30 sn dinleyip çıkar)
+import * as socket from 'socket';
+import { md5 } from 'digest';
+import { open, readfile, stat } from 'fs';
+
+const OUT = '/tmp/nodesk-heard.txt', MAX = 262144;
+
+function listen(dev, port, kind) {
+	let s = socket.create(socket.AF_INET, socket.SOCK_DGRAM);
+	if (!s)
+		return null;
+	s.setopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1);
+	if (!s.setopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, dev) || !s.bind({ address: '0.0.0.0', port: port })) {
+		s.close();
+		return null;
+	}
+	if (port == 5353)
+		s.setopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
+			{ multiaddr: '224.0.0.251', ifindex: +trim(readfile(`/sys/class/net/${dev}/ifindex`) ?? '0') });
+	return { s: s, kind: kind };
+}
+
+let ls = filter([listen('wan', 67, 'dhcp'), listen('wan', 5353, 'mdns'), listen('br-lan', 5353, 'mdns')], (x) => x);
+if (!length(ls))
+	exit(1);
+let kind = {};
+for (let x in ls)
+	kind[x.s.fileno()] = x.kind;
+let socks = map(ls, (x) => x.s);
+
+const until = ARGV[0] ? time() + +ARGV[0] : 0;
+let seen = {}, count = 0;
+while (!until || time() < until) {
+	for (let ev in socket.poll(until ? 1000 : 60000, ...socks) ?? []) {
+		if (!(ev[1] & socket.POLLIN))
+			continue;
+		let a = {}, d = ev[0].recv(4096, socket.MSG_DONTWAIT, a), k = kind[ev[0].fileno()];
+		// sadece DHCP istekleri (op 1) ve mDNS yanıtları/duyuruları (QR biti)
+		if (!d || length(d) < 12 || (k == 'dhcp' ? ord(d, 0) != 1 : !(ord(d, 2) & 0x80)))
+			continue;
+		let h = md5(d);
+		if (seen[h])
+			continue;
+		seen[h] = time();
+		if (++count > 4000) {   // aynı duyuruları 6 saatte bir yeniden yaz, bellek sınırlı kalsın
+			for (let x in keys(seen))
+				if (seen[x] < time() - 21600)
+					delete seen[x];
+			count = length(seen);
+		}
+		if ((stat(OUT)?.size ?? 0) < MAX) {
+			let f = open(OUT, 'a');
+			if (f) {
+				f.write(`${a.address} ${k} ${hexenc(d)}\n`);
+				f.close();
+			}
+		}
+	}
+}

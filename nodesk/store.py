@@ -144,6 +144,12 @@ class Store:
             clean["icon"] = icon
         if patch.get("hidden"):
             clean["hidden"] = True
+        for k in ("same_as", "not_same"):   # aynı cihazın başka MAC'i / öneriyi reddet
+            v = str(patch.get(k) or "")
+            if v and (not v.startswith("mac:") or len(v) > 30 or v == node_id):
+                raise ValueError(f"geçersiz {k}")
+            if v:
+                clean[k] = v
         services = []
         for s in patch.get("services") or []:
             name = str(s.get("name") or "").strip()[:40]

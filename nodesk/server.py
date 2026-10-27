@@ -54,6 +54,10 @@ class App:
         if fixtures and os.path.exists(os.path.join(fixtures, "passive.json")):
             self.passive.data = util.read_json(os.path.join(fixtures, "passive.json"), {})
             self.passive.ipinfo = util.read_json(os.path.join(fixtures, "passive_ip.json"), {}) or {}
+        # Ev 2: router'ın duyduğu ve sorduğu adlar (router raporlarından, kalıcı)
+        self.heard = passive.Passive(os.path.join(self.paths.data, "passive_ev2.json"), None, None,
+                                     self.cfg.get("general", {}).get("forget_after_days", 14))
+        self.import_router_names()
         self.update_info = util.read_json(self.paths.update, {}) or {}
         self.updating = False
         self.icons_path = os.path.join(self.paths.data, "icons.json")
@@ -171,12 +175,22 @@ class App:
             self.passive.observe(obs)
         r.mark("probe", True, count=len(found))
 
+    def import_router_names(self):
+        rep = self.store.reports().get("router")
+        if not rep or not rep.get("sections"):
+            return
+        for obs in model.router_name_obs(rep["sections"]):
+            self.heard.observe(obs)
+        if not self.fixtures:
+            self.heard.prune_and_save()
+
     def attach_live(self, raw, settings):
         """Her yeniden hesaplamada güncel olan kaynaklar: pasif dinleme ve ajan raporları."""
         raw = dict(raw)
         src = settings["sources"]
         raw["passive"] = self.passive.snapshot() if src["passive"] else None
         raw["passive_ip"] = self.passive.snapshot_ip() if src["passive"] else {}
+        raw["passive_ev2"] = self.heard.snapshot()
         reports = self.store.reports()
         if not src["router"]:
             reports.pop("router", None)
@@ -467,6 +481,8 @@ class Handler(BaseHTTPRequestHandler):
                 if "#END" not in text:
                     return self.fail("rapor eksik (#END yok)")
                 app.store.save_report(name, text, self.remote())
+                if app.store.agents()["agents"][name]["kind"] == "router":
+                    app.import_router_names()
                 threading.Thread(target=app.rebuild, daemon=True).start()
                 kind = app.store.agents()["agents"][name]["kind"]
                 want = agents.expected_version(kind)
