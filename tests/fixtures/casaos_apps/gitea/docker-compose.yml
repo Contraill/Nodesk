@@ -1,0 +1,16 @@
+name: gitea
+services:
+  gitea:
+    image: gitea/gitea:1.27.3
+    x-casaos:
+      envs: []
+x-casaos:
+  architectures:
+    - arm64
+  author: CasaOS Team
+  description:
+    en_us: Git with a cup of tea
+  main: gitea
+  title:
+    en_us: Gitea
+  port_map: "3002"

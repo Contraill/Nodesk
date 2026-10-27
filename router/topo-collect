@@ -1,13 +1,12 @@
 #!/bin/sh
-# nodesk: router tarafı veri toplayıcı (salt okunur).
-# Pi'deki kısıtlı SSH anahtarı sadece bu scripti çalıştırabilir
-# (/etc/dropbear/authorized_keys içindeki command= ayarı).
+# Nodesk: router tarafı veri toplayıcı (salt okunur).
+# /usr/sbin/nodesk-agent tarafından 5 dakikada bir çalıştırılır; çıktısı Pi'ye gönderilir.
 # Hiçbir ayarı değiştirmez; sadece okur ve yazdırır.
 #
 # Kurulum/güncelleme: Laptop'tan
 #   ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh
 
-TOPO_VERSION=1
+TOPO_VERSION=2
 
 echo "#VERSION"
 echo "$TOPO_VERSION"

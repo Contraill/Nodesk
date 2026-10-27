@@ -1,0 +1,18 @@
+[
+ {"Names":["/media-app-frontend"],"Image":"media-app-frontend:latest","State":"running","Status":"Up 3 days",
+  "Ports":[{"IP":"0.0.0.0","PrivatePort":80,"PublicPort":3000,"Type":"tcp"},{"IP":"::","PrivatePort":80,"PublicPort":3000,"Type":"tcp"}],
+  "Labels":{"com.docker.compose.project":"media-app","com.docker.compose.service":"frontend"},"HostConfig":{"NetworkMode":"media-app_default"}},
+ {"Names":["/media-app-backend"],"Image":"media-app-backend:latest","State":"running","Status":"Up 3 days",
+  "Ports":[{"IP":"0.0.0.0","PrivatePort":8000,"PublicPort":8000,"Type":"tcp"},{"IP":"::","PrivatePort":8000,"PublicPort":8000,"Type":"tcp"}],
+  "Labels":{"com.docker.compose.project":"media-app","com.docker.compose.service":"backend"},"HostConfig":{"NetworkMode":"media-app_default"}},
+ {"Names":["/big-bear-gitea-mirror"],"Image":"ghcr.io/raylabshq/gitea-mirror:v3.36.2","State":"running","Status":"Up 3 days",
+  "Ports":[{"IP":"0.0.0.0","PrivatePort":4321,"PublicPort":4321,"Type":"tcp"}],
+  "Labels":{"com.docker.compose.project":"big-bear-gitea-mirror"},"HostConfig":{"NetworkMode":"big-bear-gitea-mirror_default"}},
+ {"Names":["/gitea"],"Image":"gitea/gitea:1.27.3","State":"running","Status":"Up 3 days",
+  "Ports":[{"IP":"0.0.0.0","PrivatePort":22,"PublicPort":2222,"Type":"tcp"},{"IP":"0.0.0.0","PrivatePort":3000,"PublicPort":3002,"Type":"tcp"}],
+  "Labels":{"com.docker.compose.project":"gitea"},"HostConfig":{"NetworkMode":"bridge"}},
+ {"Names":["/nodesk-web"],"Image":"nginx:1.27-alpine","State":"running","Status":"Up 2 hours","Ports":[],
+  "Labels":{"com.docker.compose.project":"nodesk-web","nodesk.ports":"8088"},"HostConfig":{"NetworkMode":"host"}},
+ {"Names":["/old-test"],"Image":"hello-world","State":"exited","Status":"Exited (0) 2 weeks ago","Ports":[],
+  "Labels":{},"HostConfig":{"NetworkMode":"bridge"}}
+]

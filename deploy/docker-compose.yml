@@ -10,17 +10,19 @@ services:
     image: nginx:1.27-alpine
     container_name: nodesk-web
     restart: unless-stopped
-    ports:
-      - "8088:80"
+    # Host ağı: /api/ isteklerini Pi'deki nodesk.service'e (127.0.0.1:8089) iletebilmek için
+    network_mode: host
+    labels:
+      nodesk.ports: "8088"
     volumes:
       - @NODESK_HOME@/app/web:/usr/share/nginx/html:ro
       - @NODESK_HOME@/www:/usr/share/nginx/html/live:ro
-      - @NODESK_HOME@/app/deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    mem_limit: 32m
+      # Klasör olarak bağlanır: git dosyayı değiştirince container yeni hâlini görür
+      - @NODESK_HOME@/app/deploy/nginx:/etc/nginx/conf.d:ro
     x-casaos:
       envs: []
       ports:
-        - container: "80"
+        - container: "8088"
           description:
             en_us: Web UI
       volumes:

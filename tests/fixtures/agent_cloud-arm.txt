@@ -1,0 +1,13 @@
+#AGENT
+kind=linux
+version=1
+#HOST
+cloud-arm
+100.64.0.6
+#DOCKER
+{"Command":"\"/docker-entrypoint.…\"","CreatedAt":"2026-10-01 10:00:00 +0000 UTC","ID":"abc","Image":"caddy:2","Labels":"com.docker.compose.project=edge,com.docker.compose.service=caddy","LocalVolumes":"1","Mounts":"caddy_data","Names":"edge-caddy","Networks":"edge_default","Ports":"0.0.0.0:443->443/tcp, :::443->443/tcp, 0.0.0.0:80->80/tcp","RunningFor":"3 weeks ago","Size":"0B","State":"running","Status":"Up 3 weeks"}
+{"Command":"\"/app\"","ID":"def","Image":"ghcr.io/example/api:1.4","Labels":"com.docker.compose.project=edge,com.docker.compose.service=api","Names":"edge-api","Networks":"edge_default","Ports":"127.0.0.1:9000->9000/tcp","State":"running","Status":"Up 3 weeks"}
+#PORTS
+LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1,fd=3))
+LISTEN 0 4096 0.0.0.0:443 0.0.0.0:* users:(("docker-proxy",pid=2,fd=4))
+#END

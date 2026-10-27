@@ -1,0 +1,10 @@
+name: big-bear-gitea-mirror
+services:
+  big-bear-gitea-mirror:
+    image: ghcr.io/raylabshq/gitea-mirror:v3.36.2
+x-casaos:
+  main: big-bear-gitea-mirror
+  description:
+    en_us: Mirror GitHub to Gitea
+  title:
+    en_us: Gitea Mirror

@@ -1,13 +1,21 @@
 [Unit]
-Description=nodesk: ag topolojisi verisini topla
+Description=Nodesk: ag topolojisi haritasi (toplayici + API)
 After=network-online.target tailscaled.service docker.service
 Wants=network-online.target
 
 [Service]
-Type=oneshot
+Type=simple
 Environment=NODESK_HOME=@NODESK_HOME@
+Environment=PYTHONPATH=@NODESK_HOME@/app
+Environment=PYTHONUNBUFFERED=1
 WorkingDirectory=@NODESK_HOME@
-ExecStart=/usr/bin/python3 @NODESK_HOME@/app/collector/collect.py
-TimeoutStartSec=150
+ExecStart=/usr/bin/python3 -m nodesk serve
+Restart=on-failure
+RestartSec=15
 Nice=10
 IOSchedulingClass=idle
+# Root gerekir: ARP taraması ve pasif dinleme (ham soket), Docker soketi, tailscale.
+MemoryMax=150M
+
+[Install]
+WantedBy=multi-user.target

@@ -2,8 +2,11 @@
 #
 # Kurulumda bu dosya /DATA/AppData/nodesk/config.toml olarak kopyalanır.
 # Güncellemeler o kopyaya DOKUNMAZ; isimlerin ve ayarların korunur.
-# Değişiklikten sonra yeniden başlatma gerekmez: sonraki turda (en geç 5 dk)
-# harita güncellenir. Hemen görmek için:  sudo nodesk run
+# Değişiklikten sonra yeniden başlatma gerekmez: sonraki taramada harita güncellenir.
+# Hemen görmek için:  sudo nodesk run  (ya da haritada "Şimdi tara")
+#
+# Cihaz adı, türü, üst cihazı, etiketleri ve elle servisler artık haritadan da
+# düzenlenebilir (karta tıkla -> Düzenle). Haritadaki düzenlemeler bu dosyadakileri ezer.
 
 [general]
 oui_file = "/usr/share/arp-scan/ieee-oui.txt"
@@ -27,9 +30,10 @@ router_name = "home-router"
 router_ts_name = "home-router"
 lan_dev = "br-lan"
 
-[router]
-host = "192.168.77.1"
-user = "root"
+# Docker Compose / CasaOS uygulamalarının haritadaki adı (proje adı = ad).
+# Yazılmayanlar CasaOS'taki başlıkla, o da yoksa proje adıyla görünür.
+[apps]
+"media-app" = "Orbis"
 
 [oracle]
 name = "Oracle Cloud"

@@ -1,0 +1,4 @@
+[{"dst":"192.168.44.1","dev":"eth0","lladdr":"6c:11:ba:f9:55:ab","state":["REACHABLE"]},
+ {"dst":"192.168.44.110","dev":"eth0","lladdr":"9c:8e:cd:01:02:03","state":["STALE"]},
+ {"dst":"172.17.0.2","dev":"docker0","lladdr":"02:42:ac:11:00:02","state":["REACHABLE"]},
+ {"dst":"192.168.44.5","dev":"eth0","lladdr":"88:a2:9e:35:f8:bc","state":["STALE"]}]

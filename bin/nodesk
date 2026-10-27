@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# nodesk yönetim aracı (Pi'de çalışır).
+# Nodesk yönetim aracı (Pi'de çalışır).
 #
-#   sudo nodesk install        ilk kurulum / onarım (tekrar çalıştırmak güvenli)
-#   sudo nodesk update         depodan son sürümü al ve uygula
-#   sudo nodesk rollback       bir önceki sürüme dön
-#   sudo nodesk status         durum özeti
-#   sudo nodesk run            şimdi topla
-#   sudo nodesk logs [N]       son N günlük satırı
-#   sudo nodesk router-script  router kurulum scriptini yazdır (Laptop'tan kullanılır)
-#   sudo nodesk uninstall      kaldır (veri klasörünü silmez)
+#   sudo nodesk install              ilk kurulum / onarım (tekrar çalıştırmak güvenli)
+#   sudo nodesk update               depodan son sürümü al ve uygula
+#   sudo nodesk rollback             bir önceki sürüme dön
+#   sudo nodesk status               durum özeti
+#   sudo nodesk run                  şimdi tara
+#   sudo nodesk logs [N]             son N günlük satırı
+#   sudo nodesk router-script        router ajanı kurulum scripti (Laptop'tan kullanılır)
+#   sudo nodesk agent add <ad>       sunucu ajanı ekle, kurulum komutunu göster
+#   sudo nodesk agent list|remove    ajanları listele / sil
+#   sudo nodesk uninstall            kaldır (veri klasörünü silmez)
 set -euo pipefail
 
 NODESK_HOME="${NODESK_HOME:-/DATA/AppData/nodesk}"
@@ -18,6 +20,7 @@ DATA="$NODESK_HOME/data"
 WWW="$NODESK_HOME/www"
 APP_ID="nodesk-web"
 PORT=8088
+API="http://127.0.0.1:8089"
 BRANCH="${NODESK_BRANCH:-main}"
 UNIT_DIR="${NODESK_UNIT_DIR:-/etc/systemd/system}"
 PI_TS_IP_FALLBACK="100.64.0.1"
@@ -34,8 +37,19 @@ app_version() { cat "$APP/VERSION" 2>/dev/null || echo "?"; }
 app_rev() { git -C "$APP" rev-parse --short HEAD 2>/dev/null || echo "?"; }
 pi_ip() { tailscale ip -4 2>/dev/null | head -1 || true; }
 render() { sed "s#@NODESK_HOME@#$NODESK_HOME#g" "$1"; }
+py() { PYTHONPATH="$APP" NODESK_HOME="$NODESK_HOME" python3 "$@"; }
+api() { curl -fsS -m 15 "$@"; }
+api_json() {
+    local m="$1" p="$2" body="${3:-}"
+    [ -n "$body" ] || body='{}'
+    curl -fsS -m 15 -X "$m" -H 'Content-Type: application/json' -d "$body" "$API$p"
+}
 
 # ------------------------------------------------------------------ kontroller
+web_running() {
+    [ -n "$(docker ps --filter "label=com.docker.compose.project=$APP_ID" --filter status=running -q 2>/dev/null)" ]
+}
+
 preflight() {
     step "Ön kontroller"
     [ -d "$APP/.git" ] || die "$APP bir git deposu değil. Önce depoyu oraya klonla (README'deki ilk kurulum)."
@@ -43,69 +57,106 @@ preflight() {
         || die "Python 3.11+ gerekli (tomllib)."
     ok "python3 $(python3 -c 'import platform; print(platform.python_version())')"
     local missing=()
-    for c in git tailscale docker arp-scan ssh ssh-keygen systemctl curl; do
+    for c in git tailscale docker arp-scan ss systemctl systemd-run curl; do
         command -v "$c" >/dev/null 2>&1 || missing+=("$c")
     done
     [ ${#missing[@]} -eq 0 ] || die "Eksik araç(lar): ${missing[*]}  (örn. sudo apt install arp-scan)"
-    ok "git, tailscale, docker, arp-scan, ssh mevcut"
+    ok "git, tailscale, docker, arp-scan, ss, curl mevcut"
     [ -r /usr/share/arp-scan/ieee-oui.txt ] && ok "üretici veritabanı mevcut" \
         || warn "/usr/share/arp-scan/ieee-oui.txt yok; üretici adları boş kalır"
-    local users
-    users=$(docker ps --filter "publish=$PORT" --format '{{.Names}}' 2>/dev/null || true)
-    if [ -n "$users" ] && ! web_running; then
-        die "$PORT portunu başka bir container kullanıyor: $users"
+    if web_running; then
+        ok "port $PORT: Nodesk web arayüzü zaten çalışıyor"
+    else
+        local users
+        users=$(docker ps --filter "publish=$PORT" --format '{{.Names}}' 2>/dev/null || true)
+        [ -z "$users" ] || die "$PORT portunu başka bir container kullanıyor: $users"
+        if ss -ltnH "sport = :$PORT" 2>/dev/null | grep -q .; then
+            die "$PORT portu başka bir süreç tarafından kullanılıyor (ss -ltnp | grep :$PORT)"
+        fi
+        ok "port $PORT uygun"
     fi
-    if [ -z "$users" ] && ss -ltnH "sport = :$PORT" 2>/dev/null | grep -q .; then
-        die "$PORT portu başka bir süreç tarafından kullanılıyor (ss -ltnp | grep :$PORT)"
+    if ss -ltnpH "sport = :8089" 2>/dev/null | grep -v python3 | grep -q .; then
+        die "8089 portu (Nodesk API, sadece 127.0.0.1) başka bir süreç tarafından kullanılıyor"
     fi
-    ok "port $PORT uygun"
 }
 
 # ------------------------------------------------------------------ kurulum adımları
+migrate_config() {
+    # Örnek dosyaya sonradan eklenen bölümleri kullanıcının config.toml'una ekle (varsa dokunma)
+    py - "$APP/config.example.toml" "$NODESK_HOME/config.toml" <<'PY'
+import re, sys, tomllib
+ex_path, cfg_path = sys.argv[1], sys.argv[2]
+ex_text = open(ex_path, encoding="utf-8").read()
+cfg_text = open(cfg_path, encoding="utf-8").read()
+cfg = tomllib.loads(cfg_text)
+added = []
+for table in ("apps",):
+    if table in cfg:
+        continue
+    m = re.search(rf"(?ms)^(#[^\n]*\n)*\[{table}\]\n.*?(?=^\[|\Z)", ex_text)
+    if m:
+        cfg_text = cfg_text.rstrip("\n") + "\n\n" + m.group(0).rstrip("\n") + "\n"
+        added.append(table)
+if added:
+    tomllib.loads(cfg_text)  # bozuk dosya yazma
+    open(cfg_path, "w", encoding="utf-8").write(cfg_text)
+    print("config.toml'a eklendi: " + ", ".join(added))
+PY
+}
+
 setup_dirs() {
     step "Klasörler ve ayarlar"
     mkdir -p "$KEYS" "$DATA" "$WWW"
-    chmod 700 "$KEYS"
+    chmod 700 "$KEYS" "$DATA"
+    chmod 755 "$WWW"
     if [ -f "$NODESK_HOME/config.toml" ]; then
+        local msg; msg=$(migrate_config)
+        [ -n "$msg" ] && ok "$msg"
         ok "config.toml korunuyor"
     else
         cp "$APP/config.example.toml" "$NODESK_HOME/config.toml"
         ok "config.toml oluşturuldu (örnekten)"
     fi
-    if [ ! -f "$KEYS/router_ed25519" ]; then
-        ssh-keygen -q -t ed25519 -N "" -C "topo@home-pi" -f "$KEYS/router_ed25519"
-        ok "router anahtarı oluşturuldu"
-    else
-        ok "router anahtarı mevcut"
+    if [ -f "$KEYS/router_ed25519" ]; then
+        rm -f "$KEYS/router_ed25519" "$KEYS/router_ed25519.pub" "$DATA/known_hosts"
+        ok "eski router SSH anahtarı silindi (artık router kendisi rapor gönderiyor)"
     fi
     if [ -f "$KEYS/deploy_ed25519" ]; then
         git -C "$APP" config core.sshCommand \
             "ssh -i $KEYS/deploy_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
         ok "git güncellemeleri deploy anahtarını kullanacak"
     fi
-    chmod 755 "$APP/bin/nodesk" "$APP/collector/collect.py" "$APP/router/topo-collect"
+    chmod 755 "$APP/bin/nodesk" "$APP/router/topo-collect"
     ln -sfn "$APP/bin/nodesk" /usr/local/bin/nodesk
     ok "komut: /usr/local/bin/nodesk"
 }
 
 setup_units() {
-    step "Zamanlayıcı (systemd)"
-    local changed=0 f tmp
-    for f in nodesk.service nodesk.timer; do
-        tmp=$(mktemp)
-        render "$APP/deploy/systemd/$f" > "$tmp"
-        if ! cmp -s "$tmp" "$UNIT_DIR/$f"; then
-            install -m 644 "$tmp" "$UNIT_DIR/$f"; changed=1
-        fi
-        rm -f "$tmp"
+    step "Servis (systemd)"
+    if [ -f "$UNIT_DIR/nodesk.timer" ]; then
+        systemctl disable --now nodesk.timer >/dev/null 2>&1 || true
+        rm -f "$UNIT_DIR/nodesk.timer"
+        ok "eski 5 dakikalık zamanlayıcı kaldırıldı (tarama artık servisin içinde)"
+    fi
+    local tmp changed=0
+    tmp=$(mktemp)
+    render "$APP/deploy/systemd/nodesk.service" > "$tmp"
+    if ! cmp -s "$tmp" "$UNIT_DIR/nodesk.service"; then
+        install -m 644 "$tmp" "$UNIT_DIR/nodesk.service"; changed=1
+    fi
+    rm -f "$tmp"
+    systemctl daemon-reload
+    systemctl enable nodesk.service >/dev/null 2>&1
+    # Kod da değişmiş olabilir (update): her kurulumda yeniden başlat
+    systemctl restart nodesk.service
+    [ $changed -eq 1 ] && ok "servis tanımı güncellendi" || ok "servis tanımı güncel"
+    local _
+    for _ in $(seq 1 30); do
+        if api "$API/api/state" >/dev/null 2>&1; then ok "servis çalışıyor (API 127.0.0.1:8089)"; return 0; fi
+        sleep 1
     done
-    [ $changed -eq 1 ] && systemctl daemon-reload && ok "systemd birimleri güncellendi" || ok "systemd birimleri güncel"
-    systemctl enable --now nodesk.timer >/dev/null 2>&1
-    ok "zamanlayıcı etkin ($(systemctl is-active nodesk.timer))"
-}
-
-web_running() {
-    [ -n "$(docker ps --filter "label=com.docker.compose.project=$APP_ID" --filter status=running -q 2>/dev/null)" ]
+    journalctl -u nodesk.service -n 20 --no-pager -o cat || true
+    die "Servis başlamadı (yukarıdaki günlüğe bak)"
 }
 
 wait_web() {
@@ -125,7 +176,10 @@ setup_web() {
     method=$(cat "$DATA/deploy_method" 2>/dev/null || echo "")
 
     if cmp -s "$tmp" "$compose" && web_running; then
-        rm -f "$tmp"; ok "web arayüzü çalışıyor, değişiklik yok"; return 0
+        rm -f "$tmp"
+        docker exec "$APP_ID" nginx -s reload >/dev/null 2>&1 || true   # nginx.conf değişmiş olabilir
+        ok "web arayüzü çalışıyor"
+        return 0
     fi
     install -m 644 "$tmp" "$compose"; rm -f "$tmp"
 
@@ -142,53 +196,88 @@ setup_web() {
         fi
         warn "CasaOS üzerinden kurulamadı; docker compose ile kuruluyor"
     fi
-    docker compose -p "$APP_ID" -f "$compose" up -d --remove-orphans >/dev/null
+    docker compose -p "$APP_ID" -f "$compose" up -d --remove-orphans 2>&1 | grep -vi "memory limit" || true
     wait_web || die "Web arayüzü $PORT portunda yanıt vermiyor (docker logs $APP_ID)"
     echo docker > "$DATA/deploy_method"
-    ok "web arayüzü docker compose ile çalışıyor (CasaOS panelinde container olarak görünür)"
+    ok "web arayüzü çalışıyor (docker compose)"
 }
 
-router_ok() {
-    local out
-    out=$(timeout 30 ssh -i "$KEYS/router_ed25519" -o BatchMode=yes -o ConnectTimeout=8 \
-        -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$DATA/known_hosts" \
-        root@192.168.77.1 topo-collect 2>/dev/null) || return 1
-    local want have
-    want=$(sed -n 's/^TOPO_VERSION=//p' "$APP/router/topo-collect")
-    have=$(printf '%s\n' "$out" | sed -n '/^#VERSION$/{n;p;}')
-    [ "$have" = "$want" ] && return 0
-    return 2
+router_cmd() {
+    local ip; ip=$(pi_ip); ip=${ip:-$PI_TS_IP_FALLBACK}
+    echo "    ssh pi@$ip sudo nodesk router-script | ssh root@$ROUTER_TS_IP sh"
 }
 
 check_router() {
-    step "Router bağlantısı"
-    local rc=0 ip
-    ip=$(pi_ip); ip=${ip:-$PI_TS_IP_FALLBACK}
-    router_ok || rc=$?
-    case $rc in
-        0) ok "router scripti çalışıyor ve güncel" ;;
-        2) warn "router scripti ESKİ. Laptop'tan şunu çalıştır:"
-           echo "    ssh pi@$ip sudo nodesk router-script | ssh root@$ROUTER_TS_IP sh" ;;
-        *) warn "router henüz ayarlanmamış (ya da ulaşılamıyor). Laptop'tan şunu çalıştır:"
-           echo "    ssh pi@$ip sudo nodesk router-script | ssh root@$ROUTER_TS_IP sh"
-           echo "  Sonra Pi'de: sudo nodesk run" ;;
-    esac
+    step "Router ajanı"
+    local info
+    info=$(api "$API/api/agents" 2>/dev/null | py -c '
+import json, sys
+a = {x["name"]: x for x in json.load(sys.stdin)}
+r = a.get("router")
+print(r["received"] if r and r.get("received") else "")' 2>/dev/null || true)
+    if [ -n "$info" ]; then
+        ok "router son raporu: $info"
+    else
+        warn "router henüz rapor göndermedi. Laptop'tan şunu çalıştır (tek seferlik):"
+        router_cmd
+    fi
+}
+
+scan_and_wait() {
+    local before
+    before=$(api "$API/api/state" | py -c 'import json,sys; print(json.load(sys.stdin)["scan"].get("last_end") or "")')
+    api_json POST /api/scan >/dev/null || true
+    local _
+    for _ in $(seq 1 120); do
+        sleep 1
+        if api "$API/api/state" | py -c '
+import json, sys
+s = json.load(sys.stdin)["scan"]
+sys.exit(0 if not s["running"] and (s.get("last_end") or "") != sys.argv[1] else 1)' "$before" 2>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+summary_lines() {
+    [ -f "$WWW/data.json" ] || { echo "  harita: henüz veri yok"; return; }
+    py - "$WWW/data.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+nodes = [n for n in d["nodes"] if n["kind"] not in ("internet",) and not n.get("placeholder")]
+on = sum(1 for n in nodes if n.get("online"))
+print(f"  harita      : {d['generated']}, {on}/{len(nodes)} cihaz çevrimiçi")
+by = {}
+for n in nodes:
+    by.setdefault(n.get("site") or "-", []).append(n)
+names = {s["id"]: s["name"] for s in d["sites"]}
+for site, ns in by.items():
+    print(f"    {names.get(site, site):14}: {len(ns)} cihaz ({sum(1 for n in ns if n.get('online'))} çevrimiçi)")
+src = d.get("sources") or {}
+bad = [f"{k} ({v.get('error')})" for k, v in src.items() if v and v.get("ok") is False]
+if bad:
+    print("  sorunlu kaynaklar: " + ", ".join(bad))
+for a in d.get("agents", []):
+    age = a.get("age_min")
+    print(f"  ajan {a['name']:12}: " + (f"son rapor {age:.0f} dk önce" if age is not None else "rapor yok"))
+up = (d.get("app") or {}).get("update")
+if up:
+    print(f"  güncelleme  : {up['latest']} mevcut  ->  sudo nodesk update")
+for e in d.get("errors", []):
+    print(f"  ! {e}")
+PY
 }
 
 first_run() {
-    step "Toplama"
-    if systemctl start nodesk.service; then
-        journalctl -u nodesk.service -n 30 --no-pager -o cat --since "-3min" 2>/dev/null \
-            | grep '^\[nodesk\]' | tail -8 || true
-        ok "toplama tamamlandı"
-    else
-        warn "toplama hata verdi: sudo nodesk logs"
-    fi
+    step "Tarama"
+    if scan_and_wait; then ok "tarama tamamlandı"; summary_lines
+    else warn "tarama 2 dakikada bitmedi: sudo nodesk logs"; fi
 }
 
 summary() {
     local ip; ip=$(pi_ip); ip=${ip:-$PI_TS_IP_FALLBACK}
-    step "Hazır: nodesk $(app_version) ($(app_rev))"
+    step "Hazır: Nodesk $(app_version) ($(app_rev))"
     echo "  Harita: http://$ip:$PORT   (evde: http://$(hostname -I | awk '{print $1}'):$PORT)"
 }
 
@@ -198,8 +287,8 @@ cmd_install() {
     setup_dirs
     setup_units
     setup_web
-    check_router
     first_run
+    check_router
     summary
 }
 
@@ -233,6 +322,8 @@ cmd_rollback() {
     local prev
     prev=$(cat "$DATA/previous_rev" 2>/dev/null) || die "Geri dönülecek önceki sürüm kaydı yok."
     cd "$APP"
+    git cat-file -e "$prev:nodesk/server.py" 2>/dev/null \
+        || die "Önceki sürüm ($(git show "$prev:VERSION" 2>/dev/null || echo ?)) eski kurulum biçiminde; ona geri dönülemez. Sorun varsa: sudo nodesk logs"
     echo "Geri dönülüyor: $(app_version) ($(app_rev)) → $(git show "$prev:VERSION" 2>/dev/null) (${prev:0:7})"
     git checkout -q --detach "$prev"
     rm -f "$DATA/previous_rev" "$DATA/update.json"
@@ -242,87 +333,66 @@ cmd_rollback() {
 
 # ------------------------------------------------------------------ durum / araçlar
 cmd_status() {
-    echo "${B}nodesk $(app_version)${N} ($(app_rev)$(git -C "$APP" symbolic-ref -q HEAD >/dev/null || echo ', sabitlenmiş sürüm'))"
-    echo "  zamanlayıcı : $(systemctl is-active nodesk.timer 2>/dev/null || true), sıradaki: $(systemctl show nodesk.timer -p NextElapseUSecRealtime --value 2>/dev/null || echo ?)"
-    echo "  son çalışma : $(systemctl show nodesk.service -p ExecMainExitTimestamp --value 2>/dev/null || echo ?) (sonuç: $(systemctl show nodesk.service -p Result --value 2>/dev/null || echo ?))"
-    if web_running; then echo "  web         : çalışıyor (port $PORT, $(cat "$DATA/deploy_method" 2>/dev/null || echo ?))"
-    else echo "  web         : ${R}çalışmıyor${N}"; fi
-    if [ -f "$WWW/data.json" ]; then
-        python3 - "$WWW/data.json" <<'PY'
+    echo "${B}Nodesk $(app_version)${N} ($(app_rev)$(git -C "$APP" symbolic-ref -q HEAD >/dev/null || echo ', sabitlenmiş sürüm'))"
+    local code
+    code=$(cat <<'PY'
 import json, sys
-d = json.load(open(sys.argv[1]))
-nodes = [n for n in d["nodes"] if n.get("kind") not in ("internet", "cloud", "roam")]
-print(f"  harita      : {d['generated']}, {sum(n.get('online', False) for n in nodes)}/{len(nodes)} çevrimiçi")
-rs = d.get("router_script") or {}
-print(f"  router      : script {rs.get('installed') or 'ulaşılamadı'} (gereken {rs.get('expected')})")
-up = (d.get("app") or {}).get("update")
-if up:
-    print(f"  güncelleme  : {up['latest']} mevcut  ->  sudo nodesk update")
-for e in d.get("errors", []):
-    print(f"  ! {e}")
+s = json.load(sys.stdin)
+st, sc = s["settings"], s["scan"]
+auto = "açık" if st["auto"] else "KAPALI"
+print(f"  servis      : çalışıyor, otomatik tarama {auto}, {st['interval_min']} dakikada bir")
+print(f"  son tarama  : {sc.get('last_end') or '-'}  sıradaki: {sc.get('next') or '-'}")
+off = [k for k, v in st["sources"].items() if not v]
+if off:
+    print("  kapalı kaynaklar: " + ", ".join(off))
 PY
+)
+    if api "$API/api/state" >/dev/null 2>&1; then
+        api "$API/api/state" | py -c "$code"
     else
-        echo "  harita      : henüz veri yok"
+        echo "  servis      : ${R}çalışmıyor${N} (sudo nodesk logs)"
     fi
+    if web_running; then echo "  web         : çalışıyor (port $PORT)"
+    else echo "  web         : ${R}çalışmıyor${N}"; fi
+    summary_lines
 }
 
 cmd_run() {
     need_root run
-    systemctl start nodesk.service || true
-    journalctl -u nodesk.service -n 30 --no-pager -o cat --since "-3min" | grep '^\[nodesk\]' | tail -10 || true
+    api "$API/api/state" >/dev/null 2>&1 || die "Servis çalışmıyor: sudo systemctl status nodesk"
+    echo "Taranıyor…"
+    scan_and_wait && summary_lines || warn "tarama 2 dakikada bitmedi"
 }
 
-cmd_logs() { journalctl -u nodesk.service -n "${1:-50}" --no-pager; }
+cmd_logs() { journalctl -u nodesk.service -n "${1:-50}" --no-pager -o cat; }
 
-# Router'da çalıştırılacak kurulum scriptini yazdırır. Kullanım (Laptop):
-#   ssh pi@<pi> sudo nodesk router-script | ssh root@<router> sh
 cmd_router_script() {
     need_root router-script
-    [ -f "$KEYS/router_ed25519.pub" ] || die "Önce: sudo nodesk install"
-    local pub line
-    pub=$(cat "$KEYS/router_ed25519.pub")
-    line="command=\"/usr/sbin/topo-collect\",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty $pub"
-    cat <<EOS
-#!/bin/sh
-# nodesk router kurulumu (otomatik üretildi). Tekrar çalıştırmak güvenli.
-set -e
-cat > /usr/sbin/topo-collect.new <<'NODESK_TOPO_EOF'
-$(cat "$APP/router/topo-collect")
-NODESK_TOPO_EOF
-chmod 755 /usr/sbin/topo-collect.new
-mv /usr/sbin/topo-collect.new /usr/sbin/topo-collect
+    py -m nodesk agent-script router
+}
 
-f=/etc/dropbear/authorized_keys
-KEY='$line'
-touch "\$f"; chmod 600 "\$f"
-if grep -qF 'topo@home-pi' "\$f"; then
-    if grep -qxF "\$KEY" "\$f"; then
-        echo "anahtar zaten kayıtlı"
-    else
-        cp "\$f" /tmp/authorized_keys.yedek
-        grep -vF 'topo@home-pi' "\$f" > "\$f.new" || true
-        echo "\$KEY" >> "\$f.new"; chmod 600 "\$f.new"; mv "\$f.new" "\$f"
-        echo "anahtar yenilendi (yedek: /tmp/authorized_keys.yedek)"
-    fi
-else
-    cp "\$f" /tmp/authorized_keys.yedek
-    if [ -s "\$f" ] && [ -n "\$(tail -c1 "\$f")" ]; then echo >> "\$f"; fi
-    echo "\$KEY" >> "\$f"
-    echo "anahtar eklendi (yedek: /tmp/authorized_keys.yedek)"
-fi
-echo "topo-collect sürümü: \$(sed -n 's/^TOPO_VERSION=//p' /usr/sbin/topo-collect)"
-echo "authorized_keys: \$(wc -l < "\$f") satır"
-cut -c1-50 "\$f"
-EOS
+cmd_agent() {
+    need_root agent
+    case "${1:-}" in
+        add)
+            [ -n "${2:-}" ] || die "kullanım: sudo nodesk agent add <ad>   (örn. cloud-arm)"
+            py -m nodesk agent-add "$2" "${3:-linux}"
+            echo "Yukarıdaki komutu o sunucuda çalıştır. Ajan 5 dakikada bir rapor gönderir." ;;
+        list) py -m nodesk agent-list ;;
+        remove)
+            [ -n "${2:-}" ] || die "kullanım: sudo nodesk agent remove <ad>"
+            py -m nodesk agent-remove "$2" ;;
+        *) die "kullanım: sudo nodesk agent add|list|remove [ad]" ;;
+    esac
 }
 
 cmd_uninstall() {
     need_root uninstall
-    read -r -p "nodesk kaldırılsın mı? Veri klasörü ($NODESK_HOME) silinmez. [e/H] " a
+    read -r -p "Nodesk kaldırılsın mı? Veri klasörü ($NODESK_HOME) silinmez. [e/H] " a
     [ "$a" = "e" ] || [ "$a" = "E" ] || { echo "Vazgeçildi."; exit 0; }
-    systemctl disable --now nodesk.timer >/dev/null 2>&1 || true
+    systemctl disable --now nodesk.service nodesk.timer >/dev/null 2>&1 || true
     rm -f "$UNIT_DIR/nodesk.service" "$UNIT_DIR/nodesk.timer"; systemctl daemon-reload
-    ok "zamanlayıcı kaldırıldı"
+    ok "servis kaldırıldı"
     if [ "$(cat "$DATA/deploy_method" 2>/dev/null)" = casaos ] && command -v casaos-cli >/dev/null; then
         casaos-cli app-management uninstall "$APP_ID" -n >/dev/null 2>&1 || true
     fi
@@ -331,10 +401,11 @@ cmd_uninstall() {
     rm -f /usr/local/bin/nodesk
     echo "Kalanlar:"
     echo "  Pi     : sudo rm -rf $NODESK_HOME"
-    echo "  Router : ssh root@$ROUTER_TS_IP \"sed -i '/topo@home-pi/d' /etc/dropbear/authorized_keys; rm -f /usr/sbin/topo-collect\""
+    echo "  Router : ssh root@$ROUTER_TS_IP \"sed -i '/nodesk-agent/d' /etc/crontabs/root; /etc/init.d/cron restart; rm -f /usr/sbin/nodesk-agent /usr/sbin/topo-collect /etc/nodesk-agent.conf\""
+    echo "  Sunucu : systemctl disable --now nodesk-agent.timer; rm -f /etc/systemd/system/nodesk-agent.* /usr/local/sbin/nodesk-agent; rm -rf /etc/nodesk"
 }
 
-usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; }
 
 case "${1:-}" in
     install)        cmd_install ;;
@@ -344,6 +415,7 @@ case "${1:-}" in
     run)            cmd_run ;;
     logs)           shift; cmd_logs "${1:-50}" ;;
     router-script)  cmd_router_script ;;
+    agent)          shift; cmd_agent "$@" ;;
     uninstall)      cmd_uninstall ;;
     version|-v|--version) echo "$(app_version) ($(app_rev))" ;;
     ""|help|-h|--help) usage ;;
