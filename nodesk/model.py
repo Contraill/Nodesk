@@ -111,6 +111,100 @@ def system_services(ports):
              "proc": p["proc"]} for p in ports or []]
 
 
+ICON_CDN = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/{}.png"
+ICON_SLUGS = [   # (aranan, ikon adı) -> imaj, proje, container ya da süreç adında geçerse
+    ("gitea", "gitea"), ("casaos", "casaos"), ("pihole", "pi-hole"), ("pi-hole", "pi-hole"),
+    ("homeassistant", "home-assistant"), ("home-assistant", "home-assistant"),
+    ("jellyfin", "jellyfin"), ("plex", "plex"), ("portainer", "portainer"),
+    ("nextcloud", "nextcloud"), ("grafana", "grafana"), ("prometheus", "prometheus"),
+    ("uptime-kuma", "uptime-kuma"), ("vaultwarden", "vaultwarden"), ("immich", "immich"),
+    ("syncthing", "syncthing"), ("transmission", "transmission"), ("qbittorrent", "qbittorrent"),
+    ("adguard", "adguard-home"), ("postgres", "postgres"), ("redis", "redis"), ("mongo", "mongodb"),
+    ("code-server", "code-server"), ("filebrowser", "filebrowser"), ("homarr", "homarr"),
+    ("n8n", "n8n"), ("ollama", "ollama"), ("open-webui", "open-webui"), ("traefik", "traefik"),
+    ("wg-easy", "wireguard"), ("wireguard", "wireguard"), ("cups", "cups"), ("caddy", "caddy"),
+    ("nginx", "nginx"), ("tailscale", "tailscale"),
+]
+GLYPHS = [  # yerleşik çizgi simgeler (internet gerekmez)
+    (("sshd", "dropbear", "ssh"), "terminal"), (("smbd", "samba"), "folder"),
+    (("vnc",), "screen"), (("postgres", "mariadb", "mysql", "redis", "mongo"), "database"),
+    (("dnsmasq", "pihole", "adguard"), "dns"), (("nodesk",), "nodesk"),
+]
+
+
+def service_icon(project, items, casaos, override):
+    """-> (uzak ikon adresi ya da None, yerleşik simge adı)"""
+    words = " ".join(filter(None, [project] + [f"{c.get('image', '')} {c.get('name', '')} "
+                                               f"{c.get('proc', '')}" for c in items])).lower()
+    glyph = next((g for keys, g in GLYPHS if any(k in words for k in keys)), "app")
+    if override:
+        return override, glyph
+    if project and (casaos.get(project) or {}).get("icon"):
+        return casaos[project]["icon"], glyph
+    for key, slug in ICON_SLUGS:
+        if key in words and glyph not in ("terminal", "folder", "screen", "nodesk"):
+            return ICON_CDN.format(slug), glyph
+    return None, glyph
+
+
+def slug(s):
+    return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")[:40] or "x"
+
+
+def service_nodes(nodes, ov_dev, ov_apps, casaos, health, icon_files):
+    """Her cihazın servislerini o cihaza bağlı ayrı düğümlere çevirir."""
+    out, wanted = {}, set()
+    for host in list(nodes.values()):
+        groups = {}
+        for s in host.get("services") or []:
+            if s["source"] == "docker":
+                key = f"svc:{host['id']}:{s['app']}" if s.get("app") else f"svc:{host['id']}:c:{s['name']}"
+            elif s["source"] == "system":
+                key = f"svc:{host['id']}:sys:{s['proc']}"
+            else:
+                key = f"svc:{host['id']}:m:{slug(s['name'])}"
+            groups.setdefault(key, []).append(s)
+        ids = []
+        for key, items in groups.items():
+            first, ov = items[0], ov_dev.get(key, {})
+            app = first.get("app") if first["source"] == "docker" else None
+            auto = (first.get("app_name") or first["name"]) if app else first["name"]
+            running = [c for c in items if (c.get("state") or "running") == "running"]
+            ports = sorted({p for c in (running or items) for p in c.get("ports") or []})
+            hstate = None
+            if host["id"] == "self" and running and ports and health:
+                checks = [health.get(p) for p in ports if p in health]
+                if checks:
+                    hstate = "ok" if all(checks) else ("partial" if any(checks) else "fail")
+            icon_url, glyph = service_icon(app, items, casaos, ov.get("icon"))
+            icon_local = icon_files.get(icon_url) if icon_url else None
+            if icon_url and not icon_local:
+                wanted.add(icon_url)
+            hidden = bool(ov.get("hidden") or (app and ov_apps.get(app, {}).get("hidden")) or
+                          any(c.get("hidden") for c in items))
+            source = {"docker": "Docker" + (" (compose/CasaOS uygulaması)" if app else ""),
+                      "system": "Pi'de sistem servisi" if host["id"] == "self" else "Sistem servisi",
+                      "manual": "Elle eklendi"}[first["source"]]
+            out[key] = {
+                "id": key, "kind": "service", "label": ov.get("name") or auto, "auto_label": auto,
+                "parent": host["id"], "site": host.get("site"), "host": host["id"],
+                "online": bool(host.get("online") and running) and hstate != "fail",
+                "state": "running" if running else (items[0].get("state") or "exited"),
+                "health": hstate, "ports": ports, "app": app, "source": first["source"],
+                "source_label": source, "url": next((c.get("url") for c in items if c.get("url")), None),
+                "containers": [{"name": c["name"], "image": c.get("image"), "state": c.get("state"),
+                                "status": c.get("status"), "ports": c.get("ports") or []}
+                               for c in items] if first["source"] == "docker" else [],
+                "icon": icon_local, "icon_url": icon_url, "glyph": glyph,
+                "ips": [], "services": [], "tags": ov.get("tags") or [], "note": ov.get("note"),
+                "hidden": hidden, "edited": bool(ov), "override": ov or None,
+                "stale": host.get("stale"),
+            }
+            ids.append(key)
+        host["service_ids"] = ids
+    return out, sorted(wanted)
+
+
 def age_min(received, now):
     t = util.parse_iso(received)
     return (now - t).total_seconds() / 60 if t else None
@@ -131,7 +225,8 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
     problems = []
 
     def app_name(p):
-        return (ov_apps.get(p, {}).get("name") or cfg_apps.get(p) or casaos.get(p) or p)
+        return (ov_apps.get(p, {}).get("name") or cfg_apps.get(p) or
+                (casaos.get(p) or {}).get("title") or p)
 
     sites = [
         {"id": "ev1", "name": ev1.get("name", "Ev 1")},
@@ -310,6 +405,9 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
     }
     router_script["ok"] = (None if router_script["installed"] is None
                            else router_script["installed"] == router_script["expected"])
+    # 3 ve sonrası kendini günceller; daha eskisinin bir kez elle güncellenmesi gerekir
+    router_script["self_update"] = (router_script["installed"] or "0").isdigit() and \
+        int(router_script["installed"] or 0) >= 3
 
     # ------------------------------------------------ Tailscale düğümleri
     for name, info in ts_nodes.items():
@@ -459,6 +557,10 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 break
             cur, hops = nodes.get(cur, {}).get("parent"), hops + 1
 
+    svc_nodes, icon_wanted = service_nodes(nodes, ov_dev, ov_apps, casaos, raw.get("health") or {},
+                                           extra.get("icon_files") or {})
+    nodes.update(svc_nodes)
+
     ts_to_node = {n["tailscale"]["name"]: n["id"] for n in nodes.values() if n.get("tailscale")}
     overlay = [{"from": o["from"], "to": ts_to_node[o["to_ts"]], "kind": o["kind"]}
                for o in overlay if o["to_ts"] in ts_to_node]
@@ -476,5 +578,8 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         "errors": problems,
         "agents": sorted(agents_out, key=lambda a: a["name"]),
         "router_script": router_script,
+        "icon_wanted": icon_wanted,
+        "baseline": min((st.get("first_seen") for st in state.values() if st.get("first_seen")),
+                        default=now_s),
     }
     return data, state

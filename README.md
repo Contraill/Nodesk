@@ -2,7 +2,7 @@
 
 HomeNet için hafif bir ağ topolojisi haritası. Kapsadığı yerler: iki ev (F1611A + home-pi, H3600P + home-router), Oracle Cloud ve tailnet. Pi'de çalışır ve CasaOS'ta "Nodesk" olarak görünür.
 
-**Port taraması yapmaz. Pi hiçbir cihaza bağlanmaz:** uzaktaki cihazlar (router, sunucular) kendi verilerini 5 dakikada bir Pi'ye gönderir.
+**Port taraması yapmaz. Pi hiçbir cihaza bağlanmaz:** uzaktaki cihazlar (router, sunucular) kendi verilerini 5 dakikada bir Tailscale/LAN üzerinden Pi'ye gönderir. Ajanlar yeni sürümü de Pi'den kendileri alır. Bir ajan bir kez kurulduktan sonra o cihaza SSH ile girmek gerekmez.
 
 | Kaynak | Ne verir |
 |---|---|
@@ -16,6 +16,12 @@ HomeNet için hafif bir ağ topolojisi haritası. Kapsadığı yerler: iki ev (F
 | Sunucu ajanları | Oracle sunucularındaki container'lar ve servisler |
 
 ## Haritada yapılabilenler
+
+- **Servisler ayrı düğümlerdir:** her servis kendi ikonuyla, çalıştığı cihazdan dallanır.
+  - Çok container'lı uygulamalar (örn. Orbis → frontend, backend) ve Pi'nin sistem servisleri (CasaOS, Samba, SSH, VNC) açılıp kapanan gruplardır.
+  - Durum ışığı: yeşil çalışıyor, sarı kısmen yanıt veriyor, kırmızı yanıt vermiyor, gri durdu. Sağlık kontrolü sadece Pi'nin kendi servis portlarına, Pi'nin içinden bakar.
+  - İkonlar CasaOS'tan ya da açık bir ikon kütüphanesinden gelir. Pi onları bir kez indirir, böylece haritayı açan cihazın internete çıkması gerekmez. Kendi ikonunu servisi düzenleyerek verebilirsin.
+  - Araç çubuğundaki **Servisler** düğmesi hepsini gizler/gösterir.
 
 - **Bir karta tıkla → Düzenle.** Ad, tür, bağlı olduğu cihaz, etiketler, not, gizleme ve elle servis eklenebilir. Değişiklikler MAC adresine bağlı saklanır, IP değişse de kalır.
 - **Servisler** kartta uygulamaya göre gruplanır. Grup başlığına tıklayınca açılır/kapanır. Paneldeki ✎ ile uygulama adı değiştirilir.
@@ -47,7 +53,7 @@ sudo git -c core.sshCommand="ssh -i /DATA/AppData/nodesk/keys/deploy_ed25519 -o 
 sudo /DATA/AppData/nodesk/app/bin/nodesk install
 ```
 
-**4. Laptop:** Router ajanını kur. Bu tek bir komut ve tekrar çalıştırmak güvenli. Mevcut cron satırlarına ve SSH anahtarlarına dokunmaz.
+**4. Laptop:** Router ajanını kur. Bu tek bir komut ve tekrar çalıştırmak güvenli. Mevcut cron satırlarına ve SSH anahtarlarına dokunmaz. Bu, router'a SSH ile girmen gereken tek seferdir; sonraki sürümleri ajan Pi'den kendisi alır.
 
 ```bash
 ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh
@@ -69,7 +75,7 @@ Harita yeni sürümü 6 saatte bir denetler ve üstte bildirir. İki yolu var:
   sudo nodesk rollback    # sorun çıkarsa bir önceki sürüme döner (0.2.0 ve sonrası)
   ```
 
-`config.toml`, haritada yapılan düzenlemeler, geçmiş ve anahtarlar güncellemede korunur. Router scripti değişirse harita uyarır; o zaman 4. adımdaki komutu tekrar çalıştır.
+`config.toml`, haritada yapılan düzenlemeler, geçmiş ve anahtarlar güncellemede korunur. Ajanlar (router dahil) yeni sürümü bir sonraki raporlarında Pi'den kendileri alır. Bu davranış Ayarlar → Ajanlar bölümünden kapatılabilir. Sadece 0.3.0'dan eski bir router ajanı kendini güncelleyemez; harita bunu bildirir ve 4. adımın bir kez daha çalıştırılması yeter.
 
 ## Komutlar
 

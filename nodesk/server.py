@@ -5,6 +5,7 @@ dışarıya nginx (nodesk-web container'ı, 8088) üzerinden /api/ olarak açıl
 """
 
 import datetime as dt
+import hashlib
 import json
 import os
 import shutil
@@ -14,6 +15,7 @@ import threading
 import time
 import traceback
 import urllib.parse
+import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -53,6 +55,12 @@ class App:
             self.passive.data = util.read_json(os.path.join(fixtures, "passive.json"), {})
         self.update_info = util.read_json(self.paths.update, {}) or {}
         self.updating = False
+        self.icons_path = os.path.join(self.paths.data, "icons.json")
+        self.icon_files = {}     # uzak adres -> "live/icons/x.png"
+        for url, v in (util.read_json(self.icons_path, {}) or {}).items():
+            if v.get("file") and os.path.exists(os.path.join(self.paths.www, "icons", v["file"])):
+                self.icon_files[url] = "live/icons/" + v["file"]
+        self.icon_thread = None
 
     # ------------------------------------------------------------ sürüm
     def version(self):
@@ -131,6 +139,12 @@ class App:
         raw["casaos"] = sources.casaos_titles(r, projects)
         skip = {p for c in raw["docker"] or [] if c["host_network"] for p in c["ports"]}
         raw["host_ports"] = sources.host_ports(r, skip) if src["host_ports"] else None
+        ports = {p for c in raw["docker"] or [] if c["state"] == "running" for p in c["ports"]}
+        # SSH/Samba/VNC'ye bağlanmak her seferinde sistem günlüğüne satır düşürür; onları atla
+        ports |= {p for s in raw["host_ports"] or [] if s["proc"] in ("casaos-gateway", "casaos")
+                  for p in s["ports"]}
+        hosts = ["127.0.0.1"] + [i["ip"] for i in raw["ifaces"] if i["ifname"] == iface]
+        raw["health"] = sources.check_ports(r, ports, hosts) if src.get("health", True) else {}
         raw["status"] = r.status
         return raw
 
@@ -145,6 +159,53 @@ class App:
         raw["reports"] = reports
         return raw
 
+    # ------------------------------------------------------------ ikonlar
+    ICON_TYPES = {"image/png": ".png", "image/svg+xml": ".svg", "image/jpeg": ".jpg",
+                  "image/webp": ".webp", "image/x-icon": ".ico", "image/vnd.microsoft.icon": ".ico"}
+
+    def fetch_icons(self, urls):
+        """Servis ikonlarını Pi'ye indirip /live/icons altından sunar (tarayıcının internete
+        çıkması gerekmez). Arka planda; bittiğinde haritayı yeniden hesaplar."""
+        if self.icon_thread and self.icon_thread.is_alive():
+            return
+        self.icon_thread = threading.Thread(target=self._fetch_icons, args=(list(urls),),
+                                            name="icons", daemon=True)
+        self.icon_thread.start()
+
+    def _fetch_icons(self, urls):
+        index = util.read_json(self.icons_path, {}) or {}
+        now = util.utcnow()
+        got = False
+        os.makedirs(os.path.join(self.paths.www, "icons"), exist_ok=True)
+        for url in urls[:40]:
+            prev = index.get(url) or {}
+            last = util.parse_iso(prev.get("failed"))
+            if not url.startswith("https://") or (last and (now - last).total_seconds() < 86400):
+                continue
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "nodesk"})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    ctype = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                    body = r.read(300 * 1024 + 1)
+                ext = self.ICON_TYPES.get(ctype)
+                if not ext or len(body) > 300 * 1024 or not body:
+                    raise ValueError(f"uygun değil ({ctype}, {len(body)} bayt)")
+                name = hashlib.sha1(url.encode()).hexdigest()[:16] + ext
+                tmp = os.path.join(self.paths.www, "icons", "." + name)
+                with open(tmp, "wb") as f:
+                    f.write(body)
+                os.chmod(tmp, 0o644)
+                os.replace(tmp, os.path.join(self.paths.www, "icons", name))
+                index[url] = {"file": name, "fetched": util.iso(now)}
+                self.icon_files[url] = "live/icons/" + name
+                got = True
+            except Exception as e:   # ikon yoksa yerleşik simge kullanılır
+                index[url] = {"failed": util.iso(now), "error": str(e)[:120]}
+                log(f"ikon indirilemedi: {url} ({e})")
+        util.write_json(self.icons_path, index)
+        if got:
+            self.rebuild()
+
     def rebuild(self):
         if self.raw is None:
             return None
@@ -154,7 +215,11 @@ class App:
             state = util.read_json(self.paths.state, {}) or {}
             now = util.utcnow()
             data, state = model.build(raw, self.cfg, settings, self.store.overrides(), state,
-                                      self.oui, now, {"topo_expected": agents.topo_version()})
+                                      self.oui, now, {"topo_expected": agents.topo_version(),
+                                                      "icon_files": dict(self.icon_files)})
+            wanted = data.pop("icon_wanted", [])
+            if wanted and (not self.fixtures or os.environ.get("NODESK_FETCH_ICONS")):
+                self.fetch_icons(wanted)
             pstatus = {"ok": self.passive.running or bool(self.fixtures),
                        "count": len(raw["passive"] or {}), "error": self.passive.error}
             if not settings["sources"]["passive"]:
@@ -182,9 +247,10 @@ class App:
             self.status["sources"] = self.raw.get("status", {})
             data = self.rebuild()
             self.status.update(last_ok=True, last_error=None)
-            n = [x for x in data["nodes"] if not x.get("placeholder") and x["kind"] != "internet"]
-            log(f"{len(n)} cihaz ({sum(1 for x in n if x['online'])} çevrimiçi), "
-                f"{len(data['errors'])} uyarı")
+            n = [x for x in data["nodes"] if not x.get("placeholder") and x["kind"] not in ("internet", "service")]
+            sv = [x for x in data["nodes"] if x["kind"] == "service"]
+            log(f"{len(n)} cihaz ({sum(1 for x in n if x['online'])} çevrimiçi), {len(sv)} servis "
+                f"({sum(1 for x in sv if x['online'])} çalışıyor), {len(data['errors'])} uyarı")
             for e in data["errors"]:
                 log(f"  ! {e}")
             return True
@@ -374,6 +440,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self.fail("rapor eksik (#END yok)")
                 app.store.save_report(name, text, self.remote())
                 threading.Thread(target=app.rebuild, daemon=True).start()
+                kind = app.store.agents()["agents"][name]["kind"]
+                want = agents.expected_version(kind)
+                have = agents.reported_version(kind, util.parse_sections(text))
+                if app.store.settings().get("agent_auto_update", True) and have != want:
+                    log(f"ajan {name}: sürüm {have} -> {want}, kendini güncelleyecek")
+                    return self.send_text("ok update\n")
                 return self.send_text("ok\n")
             if method == "POST" and path == "/api/update/check":
                 self.json_body()

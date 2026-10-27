@@ -26,6 +26,7 @@ fi
 umask 077
 cat > /etc/nodesk-agent.conf <<'NODESK_EOF'
 NODESK_URL='@URL@'
+NODESK_INSTALL_URL='@INSTALL_URL@'
 NODESK_EOF
 umask 022
 
@@ -38,14 +39,34 @@ mv /usr/sbin/topo-collect.new /usr/sbin/topo-collect
 cat > /usr/sbin/nodesk-agent.new <<'NODESK_EOF'
 #!/bin/sh
 # Nodesk router ajanı: topo-collect çıktısını Pi'ye gönderir (cron, 5 dakikada bir).
+# Pi "ok update" derse yeni sürümü Pi'den (Tailscale/LAN, HTTP) alıp kendini günceller;
+# bunun için kimsenin router'a SSH ile girmesi gerekmez.
 . /etc/nodesk-agent.conf || exit 1
 OUT=/tmp/nodesk-agent.txt
+RESP=/tmp/nodesk-agent.resp
 /usr/sbin/topo-collect > "$OUT" 2>/dev/null
+rm -f "$RESP"
 if command -v curl >/dev/null 2>&1; then
-    curl -fsS -m 25 -H 'Content-Type: text/plain' --data-binary "@$OUT" "$NODESK_URL" >/dev/null
+    curl -fsS -m 25 -H 'Content-Type: text/plain' --data-binary "@$OUT" -o "$RESP" "$NODESK_URL" || exit 1
 else
-    uclient-fetch -q --timeout=25 -O /dev/null --post-file="$OUT" "$NODESK_URL"
+    uclient-fetch -q --timeout=25 -O "$RESP" --post-file="$OUT" "$NODESK_URL" || exit 1
 fi
+if [ -z "$NODESK_UPDATING" ] && [ -n "$NODESK_INSTALL_URL" ] && grep -q '^ok update' "$RESP" 2>/dev/null; then
+    NEW=/tmp/nodesk-install.sh
+    rm -f "$NEW"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsS -m 30 -o "$NEW" "$NODESK_INSTALL_URL"
+    else
+        uclient-fetch -q --timeout=30 -O "$NEW" "$NODESK_INSTALL_URL"
+    fi
+    if head -n 1 "$NEW" 2>/dev/null | grep -q '^#!/bin/sh' && grep -q 'NODESK_EOF' "$NEW"; then
+        logger -t nodesk-agent "Pi'den yeni sürüm alındı, kuruluyor"
+        NODESK_UPDATING=1 sh "$NEW" > /tmp/nodesk-install.log 2>&1 \
+            && logger -t nodesk-agent "güncellendi" || logger -t nodesk-agent "güncelleme başarısız (/tmp/nodesk-install.log)"
+    fi
+    rm -f "$NEW"
+fi
+exit 0
 NODESK_EOF
 chmod 755 /usr/sbin/nodesk-agent.new
 mv /usr/sbin/nodesk-agent.new /usr/sbin/nodesk-agent
@@ -70,11 +91,12 @@ if [ -f "$AK" ] && grep -qF 'topo@home-pi' "$AK"; then
     echo "eski SSH yönteminin anahtar satırı kaldırıldı (yedek: /tmp/authorized_keys.yedek)"
 fi
 
-if /usr/sbin/nodesk-agent; then
+if NODESK_UPDATING=1 /usr/sbin/nodesk-agent; then
     echo "ilk rapor Pi'ye gönderildi"
 else
     echo "UYARI: Pi'ye ulaşılamadı; cron 5 dakikada bir tekrar deneyecek"
 fi
+echo "otomatik güncelleme: açık (Pi yeni sürüm olduğunu söyleyince ajan kendini günceller)"
 echo "topo-collect sürümü: $(sed -n 's/^TOPO_VERSION=//p' /usr/sbin/topo-collect)"
 echo "cron: $(grep -c '' "$CRON") satır"
 [ -f "$AK" ] && echo "authorized_keys: $(grep -c '' "$AK") satır"
@@ -93,6 +115,7 @@ mkdir -p /etc/nodesk
 umask 077
 cat > /etc/nodesk/agent.conf <<'NODESK_EOF'
 NODESK_URL='@URL@'
+NODESK_INSTALL_URL='@INSTALL_URL@'
 NODESK_EOF
 umask 022
 
@@ -101,8 +124,9 @@ cat > /usr/local/sbin/nodesk-agent <<'NODESK_EOF'
 # Nodesk sunucu ajanı: Docker container'ları ve dinleyen portları Pi'ye gönderir.
 . /etc/nodesk/agent.conf || exit 1
 OUT=$(mktemp)
+RESP=$(mktemp)
 {
-    echo "#AGENT"; echo "kind=linux"; echo "version=1"
+    echo "#AGENT"; echo "kind=linux"; echo "version=@LINUX_VERSION@"
     echo "#HOST"; hostname
     command -v tailscale >/dev/null 2>&1 && tailscale ip -4 2>/dev/null | head -1
     echo "#DOCKER"
@@ -110,9 +134,18 @@ OUT=$(mktemp)
     echo "#PORTS"; ss -ltnpH 2>/dev/null
     echo "#END"
 } > "$OUT"
-curl -fsS -m 25 -H 'Content-Type: text/plain' --data-binary "@$OUT" "$NODESK_URL" >/dev/null
+curl -fsS -m 25 -H 'Content-Type: text/plain' --data-binary "@$OUT" -o "$RESP" "$NODESK_URL"
 rc=$?
-rm -f "$OUT"
+if [ $rc -eq 0 ] && [ -z "$NODESK_UPDATING" ] && [ -n "$NODESK_INSTALL_URL" ] && grep -q '^ok update' "$RESP"; then
+    NEW=$(mktemp)
+    if curl -fsS -m 30 -o "$NEW" "$NODESK_INSTALL_URL" && head -n 1 "$NEW" | grep -q '^#!/bin/sh' \
+            && grep -q 'NODESK_EOF' "$NEW"; then
+        logger -t nodesk-agent "Pi'den yeni sürüm alındı, kuruluyor" 2>/dev/null
+        NODESK_UPDATING=1 sh "$NEW" >/var/log/nodesk-agent-install.log 2>&1
+    fi
+    rm -f "$NEW"
+fi
+rm -f "$OUT" "$RESP"
 exit $rc
 NODESK_EOF
 chmod 755 /usr/local/sbin/nodesk-agent
@@ -146,7 +179,7 @@ else
     echo "zamanlayıcı: cron (/etc/cron.d/nodesk-agent)"
 fi
 
-if /usr/local/sbin/nodesk-agent; then
+if NODESK_UPDATING=1 /usr/local/sbin/nodesk-agent; then
     echo "ilk rapor Pi'ye gönderildi"
 else
     echo "UYARI: Pi'ye ulaşılamadı; 5 dakikada bir tekrar denenecek"
@@ -168,19 +201,43 @@ def topo_version():
     return None
 
 
+LINUX_AGENT_VERSION = "2"   # LINUX_INSTALLER değişince artır
+
+
+def expected_version(kind):
+    return topo_version() if kind == "router" else LINUX_AGENT_VERSION
+
+
+def reported_version(kind, sections):
+    sections = sections or {}
+    if kind == "router":
+        v = (sections.get("VERSION") or [""])[0].strip()
+        return v or None
+    for line in sections.get("AGENT", []):
+        if line.startswith("version="):
+            return line.split("=", 1)[1].strip() or None
+    return None
+
+
+def install_url(base, name, token):
+    return f"{base.rstrip('/')}/api/agent/install?name={name}&token={token}"
+
+
 def ingest_url(base, name, token):
     return f"{base.rstrip('/')}/api/ingest?agent={name}&token={token}"
 
 
 def installer(kind, base, name, token):
-    url = ingest_url(base, name, token)
+    url, iurl = ingest_url(base, name, token), install_url(base, name, token)
     if kind == "router":
-        return ROUTER_INSTALLER.replace("@URL@", url).replace("@TOPO@", topo_text())
-    return LINUX_INSTALLER.replace("@URL@", url)
+        return (ROUTER_INSTALLER.replace("@URL@", url).replace("@INSTALL_URL@", iurl)
+                .replace("@TOPO@", topo_text()))
+    return (LINUX_INSTALLER.replace("@URL@", url).replace("@INSTALL_URL@", iurl)
+            .replace("@LINUX_VERSION@", LINUX_AGENT_VERSION))
 
 
 def install_commands(kind, base, name, token):
-    url = f"{base.rstrip('/')}/api/agent/install?name={name}&token={token}"
+    url = install_url(base, name, token)
     if kind == "router":
         return {
             "laptop": "ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh",

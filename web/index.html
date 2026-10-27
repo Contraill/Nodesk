@@ -13,7 +13,7 @@
   --bg: #EEF1EC; --frame: #F8FAF6; --frame-line: #C3CCC6; --card: #FFFFFF; --card-line: #C9D2CD;
   --text: #17222B; --muted: #5E6C76; --cable: #8C9AA3; --on: #1F9C78; --tail: #5B57D6;
   --relay: #B7801C; --off: #A3ADB3; --exit: #5B57D6; --hl: #E0B020; --panel: #FFFFFF; --danger: #C2412D;
-  --field: #F3F5F2;
+  --field: #F3F5F2; --svcline: #7A9DB0;
   --shadow: 0 1px 0 rgba(23,34,43,.06), 0 6px 18px rgba(23,34,43,.07);
   --sans: "Barlow Semi Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -23,7 +23,7 @@
     --bg: #141C24; --frame: #18222B; --frame-line: #2E3B47; --card: #1F2A34; --card-line: #33424F;
     --text: #DCE4E8; --muted: #8B9AA6; --cable: #50616E; --on: #5BC8A6; --tail: #8E8CF0;
     --relay: #E6B85C; --off: #55636E; --exit: #8E8CF0; --hl: #F0C94A; --panel: #1B252F; --danger: #F07A63;
-    --field: #24303B;
+    --field: #24303B; --svcline: #4A6D80;
     --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
   }
 }
@@ -31,7 +31,7 @@
   --bg: #141C24; --frame: #18222B; --frame-line: #2E3B47; --card: #1F2A34; --card-line: #33424F;
   --text: #DCE4E8; --muted: #8B9AA6; --cable: #50616E; --on: #5BC8A6; --tail: #8E8CF0;
   --relay: #E6B85C; --off: #55636E; --exit: #8E8CF0; --hl: #F0C94A; --panel: #1B252F; --danger: #F07A63;
-  --field: #24303B;
+  --field: #24303B; --svcline: #4A6D80;
   --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
 }
 * { box-sizing: border-box; }
@@ -130,6 +130,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .svc-tree { stroke: var(--card-line); stroke-width: 1.2; fill: none; }
 .svc-stopped .svc-name { fill: var(--muted); text-decoration: line-through; }
 .card .ts-badge { font: 600 11px var(--sans); }
+.cable.svc { stroke: var(--svcline); stroke-width: 1.3; }
+.svc-card rect.box { rx: 12; }
+.svc-card .tile { fill: color-mix(in srgb, var(--text) 7%, transparent); }
+.svc-card .name { font-size: 14.5px; }
+.svc-card .icon { stroke-width: 1.7; }
+.svc-card.container .name { font-size: 13px; font-weight: 500; }
+.svc-card .toggle rect { fill: color-mix(in srgb, var(--text) 8%, transparent); }
+.svc-card .toggle:hover rect { fill: color-mix(in srgb, var(--text) 16%, transparent); }
+.svc-card .toggle text { font: 600 11.5px var(--sans); fill: var(--muted); }
+.svc-card .toggle path { stroke: var(--muted); stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.svc-badge { font: 600 11.5px var(--sans); fill: var(--muted); }
+.svc-icon-sm { width: 22px; height: 22px; border-radius: 6px; flex: none; }
 .hub rect { fill: var(--card); stroke: var(--tail); stroke-width: 1.6; }
 .hub text { font: 700 16px var(--sans); fill: var(--tail); }
 .inet rect { fill: var(--text); } .inet text { font: 700 16px var(--sans); fill: var(--bg); }
@@ -151,6 +163,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .drawer dl { display: grid; grid-template-columns: 116px 1fr; gap: 7px 12px; margin: 0 0 6px; font-size: 15px; }
 .drawer dt { color: var(--muted); }
 .drawer dd { margin: 0; overflow-wrap: anywhere; }
+.drawer dd a { color: var(--tail); text-decoration: none; font-weight: 600; }
+.drawer dd a:hover { text-decoration: underline; }
 .drawer p.hint, .drawer .note { font-size: 14.5px; line-height: 1.45; color: var(--muted); }
 .drawer .note { background: color-mix(in srgb, var(--text) 5%, transparent); border-radius: 8px; padding: 9px 11px; }
 .drawer pre { font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere;
@@ -197,6 +211,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .scrim.show { display: block; }
 @media (max-width: 640px) {
   .brand h1 { font-size: 19px; }
+  .brand { flex-wrap: wrap; row-gap: 2px; }
+  .brand .meta { white-space: normal; font-size: 13px; }
   .tools input[type=search] { width: 100px; }
   .btn .lbl { display: none; }
   .legend { display: none; }
@@ -216,6 +232,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
     <span class="sep"></span>
     <button class="btn" id="bFilter" title="Filtrele"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12l-4.5 5.5V13l-3-1.5v-3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="lbl">Filtre</span><span class="badge" id="fCount" hidden></span></button>
     <button class="btn" id="tTail" aria-pressed="false" title="Tailscale bağlantılarını göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="2" fill="currentColor"/><circle cx="13" cy="3.5" r="2" fill="currentColor"/><circle cx="13" cy="12.5" r="2" fill="currentColor"/><path d="M5 7l6-3M5 9l6 3" stroke="currentColor" stroke-dasharray="2 2" fill="none"/></svg><span class="lbl">Tailnet</span></button>
+    <button class="btn" id="tSvc" aria-pressed="true" title="Servisleri göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span class="lbl">Servisler</span></button>
     <button class="btn" id="tOff" aria-pressed="true" title="Şu an görünmeyen cihazları göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="currentColor" stroke-dasharray="2.5 2"/></svg><span class="lbl">Çevrimdışı</span></button>
     <span class="sep"></span>
     <button class="btn" id="bScan" title="Şimdi tara" data-api><svg id="scanIcon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">Tara</span></button>
@@ -227,6 +244,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 <div class="legend" aria-label="Lejant">
   <span><i style="border-color:var(--cable)"></i>Yerel ağ</span>
+  <span><i style="border-color:var(--svcline)"></i>Servis</span>
   <span><i style="border-color:var(--tail);border-top-style:dashed"></i>Tailscale doğrudan</span>
   <span><i style="border-color:var(--relay);border-top-style:dashed"></i>Tailscale aktarıcı</span>
   <span><i style="border-color:var(--exit);border-top-width:3px"></i>Exit node trafiği</span>
@@ -279,8 +297,22 @@ const KIND_TR = {
   pc: "Masaüstü bilgisayar", laptop: "Dizüstü bilgisayar", phone: "Telefon", tablet: "Tablet", tv: "Televizyon",
   console: "Oyun konsolu", iot: "Akıllı cihaz", lamp: "Akıllı lamba", vacuum: "Robot süpürge", camera: "Kamera",
   printer: "Yazıcı", speaker: "Hoparlör", nas: "NAS / depolama", cloud: "Bulut", roam: "Gezgin cihazlar",
-  internet: "İnternet", device: "Tanımlanmamış cihaz",
+  internet: "İnternet", device: "Tanımlanmamış cihaz", service: "Servis", container: "Container",
+  svcgroup: "Servis grubu",
 };
+const GLYPHS = {   // servis simgeleri (ikon bulunamazsa ya da internet yoksa)
+  terminal: "M3 4h18v16H3zM7 9l3 3-3 3M12.5 15h4",
+  folder: "M3 6h6l2 2h10v11H3zM3 10h18",
+  screen: "M3 4h18v12H3zM8 20h8M12 16v4",
+  database: "M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
+  dns: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9M12 3c-2.5 2.6-3.8 5.6-3.8 9s1.3 6.4 3.8 9",
+  nodesk: "M4 20h16M7 20V10h10v10M12 10V4",
+  app: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  box: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9",
+  server: "M4 3h16v7H4zM4 14h16v7H4zM8 6.5h.01M8 17.5h.01M12 6.5h5M12 17.5h5",
+};
+const SVC_KINDS = new Set(["service", "container", "svcgroup"]);
+const NO_LINK_PORTS = [22, 139, 445, 2222, 5900];
 const SOURCE_TR = {
   tailscale: ["Tailscale", "tailnet cihazları ve bağlantı yolları"],
   arp: ["Ev 1 ARP taraması", "Pi'den yerel ağa ~256 ARP paketi"],
@@ -290,6 +322,7 @@ const SOURCE_TR = {
   host_ports: ["Docker dışı servisler", "CasaOS, Samba, SSH gibi Pi servisleri"],
   router: ["Router ajanı", "Ev 2: DHCP, ARP ve H3600P ağı (router 5 dk'da bir gönderir)"],
   agents: ["Sunucu ajanları", "Oracle sunucularındaki servisler"],
+  health: ["Servis sağlık kontrolü", "Pi'deki servislerin portları yanıt veriyor mu (sadece Pi'nin kendisinde)"],
 };
 const VIA_TR = { arp: "ARP taraması", neigh: "komşu tablosu", passive: "pasif dinleme", self: "bu cihaz",
   tailscale: "Tailscale", ajan: "ajan", "router arp": "router ARP", "router dhcp": "router DHCP" };
@@ -298,12 +331,13 @@ const ORDER = ["router", "ap", "server", "nas", "cloud-vm", "pc", "laptop", "tv"
 const MAJOR = new Set(["router", "ap", "server", "nas"]);
 
 /* ---------------- ölçüler ---------------- */
-const CW = 200, CWS = 228, CH = 52, GX = 22, GY = 46, SPINE = 18, ROWGAP = 10, MAXROWS = 6;
-const SVC_H = 22, FRAME_TOP = 58, FRAME_PAD = 26, SITE_GAP = 46;
+const SW = 186, SH = 48, KW = 172, KH = 38;
+const CW = 200, CH = 52, GX = 22, GY = 46, SPINE = 18, ROWGAP = 10, MAXROWS = 6;
+const FRAME_TOP = 58, FRAME_PAD = 26, SITE_GAP = 46;
 
 /* ---------------- durum ---------------- */
-let DATA = null, STATE = null, API_OK = false, byId = new Map(), selected = null, editing = false;
-const prefs = { tail: false, off: true, collapsed: {}, filters: { sites: [], kinds: [], tags: [], status: "", hidden: false }, dismissed: {} };
+let DATA = null, STATE = null, API_OK = false, byId = new Map(), ALL = [], selected = null, editing = false;
+const prefs = { tail: false, off: true, svc: true, collapsed: {}, filters: { sites: [], kinds: [], tags: [], status: "", hidden: false }, dismissed: {} };
 try { const p = JSON.parse(localStorage.getItem("nodesk-prefs") || "{}"); Object.assign(prefs, p); prefs.filters = Object.assign({ sites: [], kinds: [], tags: [], status: "", hidden: false }, p.filters || {}); } catch (e) {}
 const savePrefs = () => { try { localStorage.setItem("nodesk-prefs", JSON.stringify(prefs)); } catch (e) {} };
 let view = { x: 0, y: 0, k: 1 }, fitted = false, bounds = null;
@@ -349,45 +383,32 @@ async function copyText(t, btn) {
 }
 
 /* ---------------- servis grupları ---------------- */
-function serviceGroups(n) {
-  const groups = new Map();
-  for (const s of n.services || []) {
-    if (s.hidden) continue;
-    const key = s.app || ("_solo:" + s.name);
-    if (!groups.has(key)) groups.set(key, { key, app: s.app, name: s.app_name || s.name, items: [], source: s.source });
-    groups.get(key).items.push(s);
-  }
-  const order = (g) => g.app === "_system" ? 3 : g.app === "_manual" ? 2 : 1;
-  return [...groups.values()].sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name, "tr"));
-}
-function isCollapsed(n, g) {
-  const k = n.id + "|" + g.key;
-  if (k in prefs.collapsed) return prefs.collapsed[k];
-  return g.app === "_system";
-}
-function svcRows(n) {
-  const rows = [];
-  for (const g of serviceGroups(n)) {
-    const solo = g.items.length === 1 && (g.items[0].name === g.name || !g.app || g.app === g.items[0].name);
-    if (solo && g.app !== "_system" && g.app !== "_manual") { rows.push({ type: "solo", s: g.items[0], g }); continue; }
-    const col = isCollapsed(n, g);
-    rows.push({ type: "head", g, collapsed: col });
-    if (!col) g.items.forEach((s, i) => rows.push({ type: "child", s, g, last: i === g.items.length - 1 }));
-  }
-  return rows;
-}
 function portsLabel(ports) { return ports && ports.length ? ":" + ports.slice(0, 2).join(" :") + (ports.length > 2 ? " …" : "") : ""; }
 
 /* ---------------- yerleşim ---------------- */
-function cardW(n) { return (n.services || []).some((s) => !s.hidden) ? CWS : CW; }
-function cardH(n) { const r = svcRows(n).length; return r ? CH + 6 + r * SVC_H : CH; }
-function visibleKids(n) { return (n.kids || []).filter((k) => isVisible(k) || k.kids.some(isVisible)); }
+function isSvc(n) { return SVC_KINDS.has(n.kind); }
+function hasToggle(n) { return n.kind === "svcgroup" || (n.kind === "service" && (n.containers || []).length > 1); }
+function collapsedNode(n) { return n.id in prefs.collapsed ? prefs.collapsed[n.id] : n.kind === "svcgroup"; }
+function cardW(n) { return n.kind === "container" ? KW : isSvc(n) ? SW : CW; }
+function cardH(n) { return n.kind === "container" ? KH : isSvc(n) ? SH : CH; }
+function visibleKids(n) {
+  if (hasToggle(n) && collapsedNode(n)) return [];
+  return (n.kids || []).filter((k) => isVisible(k) || k.kids.some(isVisible));
+}
 function isVisible(n) {
+  if (isSvc(n) && !prefs.svc) return false;
   if (n.hidden && !prefs.filters.hidden) return false;
   if (!prefs.off && !n.online && !MAJOR.has(n.kind) && !n.placeholder) return false;
   return true;
 }
 function kidSort(a, b) {
+  const sa = isSvc(a), sb = isSvc(b);
+  if (sa !== sb) return sa ? 1 : -1;                      // önce cihazlar, sonra servisler
+  if (sa) {
+    if ((a.kind === "svcgroup") !== (b.kind === "svcgroup")) return a.kind === "svcgroup" ? 1 : -1;
+    if (a.online !== b.online) return a.online ? -1 : 1;
+    return a.label.localeCompare(b.label, "tr");
+  }
   const oa = ORDER.indexOf(a.kind), ob = ORDER.indexOf(b.kind);
   if (oa !== ob) return (oa < 0 ? 99 : oa) - (ob < 0 ? 99 : ob);
   if (a.online !== b.online) return a.online ? -1 : 1;
@@ -398,7 +419,7 @@ function measure(n) {
   const kids = visibleKids(n).sort(kidSort);
   n.blocks = [];
   if (!kids.length) { n.bw = n.cw; n.bh = n.ch; return; }
-  const big = kids.filter((k) => visibleKids(k).length || MAJOR.has(k.kind) || (k.services || []).length);
+  const big = kids.filter((k) => visibleKids(k).length || MAJOR.has(k.kind));
   const small = kids.filter((k) => !big.includes(k));
   for (const k of big) { measure(k); n.blocks.push({ type: "node", node: k, w: k.bw, h: k.bh }); }
   for (let i = 0; i < small.length; i += MAXROWS) {
@@ -424,7 +445,7 @@ function place(n, x, y, edges) {
       const sx = bx + 7; let yy = top;
       for (const k of b.items) {
         k.x = bx + SPINE; k.y = yy;
-        const my = yy + CH / 2, r = 6;
+        const my = yy + k.ch / 2, r = 6;
         edges.push({ d: `M${px},${pb}V${busY}H${sx}V${my - r}Q${sx},${my} ${sx + r},${my}H${k.x}`, off: !k.online, to: k });
         yy += k.ch + ROWGAP;
       }
@@ -434,8 +455,28 @@ function place(n, x, y, edges) {
 }
 function build(data) {
   byId = new Map();
-  for (const n of data.nodes) { n.kids = []; delete n.x; byId.set(n.id, n); }
-  for (const n of data.nodes) { const p = byId.get(n.parent); if (p && p !== n) p.kids.push(n); }
+  for (const n of data.nodes) { n.kids = []; delete n.x; delete n._vp; byId.set(n.id, n); }
+  // Sadece arayüzde: birden çok sistem servisi "Sistem" grubunda, çok container'lı uygulamaların container'ları alt düğüm
+  const extra = [], sys = {};
+  for (const n of data.nodes) if (n.kind === "service" && n.source === "system") (sys[n.parent] = sys[n.parent] || []).push(n);
+  for (const [host, list] of Object.entries(sys)) {
+    const h = byId.get(host);
+    if (!h || list.length < 2) continue;
+    const g = { id: host + "#sistem", kind: "svcgroup", label: "Sistem", parent: host, site: h.site, host,
+      online: list.some((x) => x.online), glyph: "server", members: list.map((x) => x.id), virtual: true,
+      ports: [...new Set(list.flatMap((x) => x.ports || []))].sort((a, b) => a - b), ips: [], services: [], tags: [],
+      health: list.some((x) => x.health === "fail") ? "partial" : null };
+    extra.push(g);
+    list.forEach((x) => { x._vp = g.id; });
+  }
+  for (const n of data.nodes) if (n.kind === "service" && (n.containers || []).length > 1) {
+    for (const c of n.containers) extra.push({ id: n.id + "#" + c.name, kind: "container", label: c.name, parent: n.id,
+      site: n.site, host: n.host, online: n.online && c.state === "running", state: c.state, status: c.status,
+      ports: c.ports || [], image: c.image, glyph: "box", virtual: true, ips: [], services: [], tags: [] });
+  }
+  for (const n of extra) { n.kids = []; byId.set(n.id, n); }
+  ALL = [...data.nodes, ...extra];
+  for (const n of ALL) { const p = byId.get(n._vp || n.parent); if (p && p !== n) p.kids.push(n); }
 }
 function layout() {
   const sites = DATA.sites.map((s) => ({ ...s, roots: DATA.nodes.filter((n) => n.site === s.id && n.parent === "internet") }))
@@ -487,6 +528,7 @@ function passesFilter(n) {
 }
 function matches(n, q) {
   const hay = [n.label, n.mac, n.vendor, n.hostname, n.kind, KIND_TR[n.kind], ...(n.ips || []), n.tailscale && n.tailscale.ip,
+    ...(n.ports || []), ...(n.containers || []).map((c) => c.name), n.image,
     ...(n.tags || []), ...Object.values(n.names || {}).flat(), ...(n.services || []).flatMap((s) => [s.name, s.app_name, ...(s.ports || [])])]
     .join(" ").toLowerCase();
   return hay.includes(q);
@@ -519,7 +561,7 @@ function render() {
     const cx = r.x + r.cw / 2, sx = inet.x + inet.w / 2, sy = inet.y + inet.h;
     el("path", { class: "cable uplink", d: `M${sx},${sy}C${sx},${sy + 60} ${cx},${r.y - 70} ${cx},${r.y}` }, gUp);
   }
-  const tsNodes = DATA.nodes.filter((n) => n.tailscale && n.x !== undefined);
+  const tsNodes = ALL.filter((n) => n.tailscale && n.x !== undefined);
   if (tsNodes.length) {
     const hub = { x: inet.x + inet.w + 60, y: 44, w: 120, h: 36 };
     const hg = el("g", { class: "hub" }, gTail);
@@ -530,8 +572,8 @@ function render() {
       el("path", { class: "tail " + tsPath(n), d: `M${hx},${hy}C${hx},${hy + 140} ${tx},${ty - 140} ${tx},${ty}` }, gTail);
     }
   }
-  for (const e of edges) el("path", { class: "cable" + (e.off ? " off" : "") + (fa && !passesFilter(e.to) ? " faded" : ""), d: e.d }, gEdges);
-  for (const n of DATA.nodes) if (n.x !== undefined && n.kind !== "internet") drawCard(gCards, n, q, fa);
+  for (const e of edges) el("path", { class: "cable" + (isSvc(e.to) ? " svc" : "") + (e.off ? " off" : "") + (fa && !passesFilter(e.to) ? " faded" : ""), d: e.d }, gEdges);
+  for (const n of ALL) if (n.x !== undefined && n.kind !== "internet") (isSvc(n) ? drawSvcCard : drawCard)(gCards, n, q, fa);
 
   for (const o of DATA.overlay || []) {
     const a = byId.get(o.from), b = byId.get(o.to);
@@ -578,26 +620,57 @@ function drawCard(parent, n, q, fa) {
     el("rect", { x: n.cw - 30, y: -8, width: 22, height: 16, rx: 8, fill: "var(--card)", stroke: col, "stroke-width": 1.4 }, g);
     text(g, n.cw - 19, 4, "ts", "ts-badge", { "text-anchor": "middle", fill: col });
   }
-  let yy = CH + 4;
-  for (const r of svcRows(n)) {
-    if (r.type === "head") {
-      const gg = el("g", { class: "svc-group", "data-group": r.g.key }, g);
-      el("rect", { class: "svc-bg", x: 8, y: yy, width: n.cw - 16, height: SVC_H - 3, rx: 5 }, gg);
-      el("path", { class: "svc-tree", d: r.collapsed ? `M15,${yy + 6}l4,4l-4,4` : `M13,${yy + 8}l4,4l4,-4`, stroke: "var(--muted)" }, gg);
-      text(gg, 27, yy + 14, clip(r.g.name, 18), "svc-name");
-      const meta = r.collapsed ? portsLabel(r.g.items.flatMap((s) => s.ports || [])) : "";
-      text(gg, n.cw - 15, yy + 14, meta || String(r.g.items.length), meta ? "svc-port" : "svc-count", { "text-anchor": "end" });
-    } else {
-      const s = r.s, child = r.type === "child";
-      const gg = el("g", { class: s.state && s.state !== "running" ? "svc-stopped" : "" }, g);
-      if (child) el("path", { class: "svc-tree", d: `M17,${yy - 3}V${yy + (r.last ? 10 : SVC_H)}M17,${yy + 10}H24` }, gg);
-      else el("rect", { class: "svc-bg", x: 8, y: yy, width: n.cw - 16, height: SVC_H - 3, rx: 5 }, gg);
-      text(gg, child ? 28 : 15, yy + 14, clip(child ? s.name : r.g.name, child ? 19 : 21), "svc-name");
-      text(gg, n.cw - 15, yy + 14, s.state && s.state !== "running" ? "durdu" : portsLabel(s.ports), "svc-port", { "text-anchor": "end" });
-    }
-    yy += SVC_H;
-  }
+  const ns = (n.service_ids || []).length;
+  if (ns && !prefs.svc) text(g, n.cw - 10, n.tailscale ? 41 : 23, `${ns} servis`, "svc-badge", { "text-anchor": "end" });
   const t = el("title", {}, g); t.textContent = n.label;
+}
+
+function svcStatus(n) {
+  if (n.kind === "svcgroup") return n.online ? (n.health ? ["warn", "Bazıları yanıt vermiyor"] : ["on", "Çalışıyor"]) : ["", "Çalışmıyor"];
+  if (n.state && n.state !== "running") return ["", n.state === "exited" ? "Durdu" : n.state];
+  if (!n.online) return ["", "Ulaşılamıyor"];
+  if (n.health === "fail") return ["bad", "Yanıt vermiyor"];
+  if (n.health === "partial") return ["warn", "Kısmen yanıt veriyor"];
+  return ["on", "Çalışıyor"];
+}
+function drawIcon(g, n, x, y, size) {
+  const gl = el("path", { class: "icon", d: GLYPHS[n.glyph] || GLYPHS.app, transform: `translate(${x},${y}) scale(${size / 24})` }, g);
+  if (n.icon) {
+    const img = el("image", { href: n.icon, x, y, width: size, height: size, preserveAspectRatio: "xMidYMid meet" }, g);
+    gl.style.visibility = "hidden";
+    img.addEventListener("error", () => { img.remove(); gl.style.visibility = ""; });
+  }
+}
+function drawSvcCard(parent, n, q, fa) {
+  const cls = ["card", "svc-card"];
+  if (n.kind === "container") cls.push("container");
+  if (!n.online) cls.push("offline");
+  if (selected === n.id) cls.push("selected");
+  if (q) cls.push(matches(n, q) ? "match" : "dim");
+  else if (fa && !passesFilter(n)) cls.push("dim");
+  const [stc, stt] = svcStatus(n);
+  const g = el("g", { class: cls.join(" "), transform: `translate(${n.x},${n.y})`, tabindex: 0, role: "button",
+    "aria-label": `${n.label}, ${KIND_TR[n.kind]}, ${stt}` }, parent);
+  g.dataset.id = n.id;
+  el("rect", { class: "box", width: n.cw, height: n.ch, rx: n.kind === "container" ? 9 : 12 }, g);
+  const small = n.kind === "container", ix = small ? 9 : 9, isz = small ? 18 : 24, tile = small ? 0 : 32;
+  if (tile) el("rect", { class: "tile", x: 7, y: (n.ch - tile) / 2, width: tile, height: tile, rx: 8 }, g);
+  drawIcon(g, n, small ? ix : 7 + (tile - isz) / 2, (n.ch - isz) / 2, isz);
+  const color = { on: "var(--on)", warn: "var(--relay)", bad: "var(--danger)" }[stc] || "var(--off)";
+  el("circle", { class: "led", cx: small ? 24 : 37, cy: small ? 10 : 11, r: small ? 3.5 : 4.5, fill: color }, g);
+  const tx = small ? 33 : 47, room = hasToggle(n) ? 15 : 19;
+  text(g, tx, small ? 16 : 21, clip(n.label, small ? 18 : room), "name");
+  const sub = n.state && n.state !== "running" ? stt.toLowerCase() : (n.ports || []).length ? portsLabel(n.ports) : (n.kind === "svcgroup" ? `${(n.members || []).length} servis` : stt.toLowerCase());
+  text(g, tx, small ? 31 : 38, clip(sub, 24), "ip");
+  if (hasToggle(n)) {
+    const col = collapsedNode(n), cnt = n.kind === "svcgroup" ? (n.members || []).length : n.containers.length;
+    const tg = el("g", { class: "toggle", transform: `translate(${n.cw - 40},${(n.ch - 24) / 2})` }, g);
+    el("rect", { width: 32, height: 24, rx: 7 }, tg);
+    text(tg, 9, 16, String(cnt), "", { "text-anchor": "middle" });
+    el("path", { d: col ? "M19 9l4 3-4 3" : "M18 10l3.5 3.5L25 10" }, tg);
+    const tt = el("title", {}, tg); tt.textContent = col ? "Aç" : "Kapat";
+  }
+  const t = el("title", {}, g); t.textContent = `${n.label} — ${stt}`;
 }
 
 /* ---------------- ayrıntı paneli ---------------- */
@@ -620,7 +693,71 @@ function openPanel(id) {
   $$(".card.selected").forEach((c) => c.classList.remove("selected"));
   const c = $(`.card[data-id="${CSS.escape(id)}"]`); if (c) c.classList.add("selected");
 }
+function svcLinks(n) {
+  const host = byId.get(n.host) || byId.get(n.parent);
+  if (n.url) return [[n.url, n.url.replace(/^https?:\/\//, "")]];
+  return (n.ports || []).filter((p) => !NO_LINK_PORTS.includes(p)).map((p) => [`http://${hostFor(host || n)}:${p}/`, ":" + p]);
+}
+function renderServicePanel(n) {
+  if (editing && !n.virtual) return renderServiceEditor(n);
+  const host = byId.get(n.host) || byId.get(n.parent);
+  const [stc, stt] = svcStatus(n);
+  const rows = [];
+  const add = (k, v, mono) => { if (v !== undefined && v !== null && v !== "") rows.push(`<dt>${k}</dt><dd${mono ? ' class="mono"' : ""}>${v}</dd>`); };
+  add("Durum", `<span class="status ${stc}">${esc(stt)}</span>`);
+  if (host) add("Çalıştığı yer", `<a href="#" data-open="${esc(host.id)}">${esc(host.label)}</a>`);
+  if (n.kind === "container") { const app = byId.get(n.parent); if (app) add("Uygulama", `<a href="#" data-open="${esc(app.id)}">${esc(app.label)}</a>`); }
+  add("Kaynak", esc(n.source_label || ""));
+  add("Portlar", (n.ports || []).map((p) => ":" + p).join(" "), true);
+  if (n.kind === "container") { add("İmaj", esc(n.image), true); add("Docker", esc(n.status)); }
+  if ((n.containers || []).length === 1) { add("Container", esc(n.containers[0].name), true); add("İmaj", esc(n.containers[0].image), true); add("Docker", esc(n.containers[0].status)); }
+  if (n.health === "fail") add("Sağlık", "port(lar) Pi'nin kendisinden bağlantı kabul etmiyor");
+  let html = `<h2 style="display:flex;align-items:center;gap:10px">${n.icon ? `<img class="svc-icon-sm" src="${esc(n.icon)}" alt="" onerror="this.remove()">` : ""}${esc(n.label)}</h2>
+    <div class="kind">${esc(KIND_TR[n.kind])}${host ? " · " + esc(host.label) : ""}${n.edited ? " · düzenlendi" : ""}</div>`;
+  if ((n.tags || []).length) html += `<div class="chips" style="margin-bottom:12px">${n.tags.map((t) => `<span class="chip static">#${esc(t)}</span>`).join("")}</div>`;
+  html += `<dl>${rows.join("")}</dl>`;
+  if (n.note) html += `<p class="note">${esc(n.note)}</p>`;
+  const links = svcLinks(n);
+  if (links.length) html += `<h3>Aç</h3><ul class="svc-list">${links.map(([u, l]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener"><span>${esc(n.label)}</span><small>${esc(l)}</small></a></li>`).join("")}</ul>`;
+  if ((n.containers || []).length > 1) {
+    html += `<h3>Container'lar</h3><ul class="svc-list">` + n.containers.map((c) => `<li><a href="#" data-open="${esc(n.id + "#" + c.name)}"><span>${esc(c.name)}</span><small>${c.state === "running" ? (c.ports || []).map((p) => ":" + p).join(" ") : "durdu"}</small></a></li>`).join("") + `</ul>`;
+  }
+  if (n.kind === "svcgroup") {
+    html += `<h3>Servisler</h3><ul class="svc-list">` + (n.members || []).map((id) => byId.get(id)).filter(Boolean).map((m) => `<li><a href="#" data-open="${esc(m.id)}"><span>${esc(m.label)}</span><small>${(m.ports || []).map((p) => ":" + p).join(" ")}</small></a></li>`).join("") + `</ul>`;
+  }
+  if (API_OK && !n.virtual) html += `<div class="actions"><button class="btn line" id="bEdit">Düzenle</button></div>`;
+  $("#pbody").innerHTML = html;
+  const be = $("#bEdit"); if (be) be.onclick = () => { editing = true; renderPanel(n); };
+  $$("[data-open]", $("#pbody")).forEach((a) => a.onclick = (e) => { e.preventDefault(); openPanel(a.dataset.open); });
+}
+function renderServiceEditor(n) {
+  const ov = n.override || {};
+  $("#pbody").innerHTML = `<h2>${esc(n.label)}</h2><div class="kind">Servis düzenleniyor · boş bırakılan alanlar otomatik kalır</div>
+  <form id="edit">
+    <div class="field"><label for="eName">Ad</label><input id="eName" maxlength="60" value="${esc(ov.name || "")}" placeholder="${esc(n.auto_label || n.label)}"></div>
+    <div class="field"><label for="eIcon">İkon adresi <small>(https://…png ya da svg)</small></label><input id="eIcon" maxlength="300" value="${esc(ov.icon || "")}" placeholder="${esc(n.icon_url || "otomatik")}"></div>
+    <p class="hint" style="margin-top:-4px">İkonu Pi bir kez indirir; haritayı açan cihazın internete çıkması gerekmez. Hazır ikonlar: <span class="mono">cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/&lt;ad&gt;.png</span></p>
+    <div class="field"><label for="eTags">Etiketler <small>(virgülle ayır)</small></label><input id="eTags" value="${esc((ov.tags || []).join(", "))}"></div>
+    <div class="field"><label for="eNote">Not</label><textarea id="eNote" maxlength="500">${esc(ov.note || "")}</textarea></div>
+    <label class="check"><input type="checkbox" id="eHidden"${n.hidden ? " checked" : ""}> Haritada gizle</label>
+    <div class="actions"><button class="btn primary" type="submit">Kaydet</button><button class="btn line" type="button" id="eCancel">Vazgeç</button>
+      ${n.edited ? `<button class="btn danger" type="button" id="eReset">Düzenlemeleri sil</button>` : ""}</div>
+    <div class="err-msg" id="eErr"></div>
+  </form>`;
+  const save = async (body) => {
+    try { await api("PUT", "/api/device?id=" + encodeURIComponent(n.id), body); editing = false; await load(true); }
+    catch (e) { $("#eErr").textContent = "Kaydedilemedi: " + e.message; }
+  };
+  $("#eCancel").onclick = () => { editing = false; renderPanel(n); };
+  if ($("#eReset")) $("#eReset").onclick = () => save({});
+  $("#edit").onsubmit = (ev) => {
+    ev.preventDefault();
+    save({ name: $("#eName").value.trim(), icon: $("#eIcon").value.trim(), tags: $("#eTags").value,
+      note: $("#eNote").value.trim(), hidden: $("#eHidden").checked });
+  };
+}
 function renderPanel(n) {
+  if (isSvc(n)) return renderServicePanel(n);
   if (editing) return renderEditor(n);
   const rows = [];
   const add = (k, v, mono) => { if (v !== undefined && v !== null && v !== "") rows.push(`<dt>${k}</dt><dd${mono ? ' class="mono"' : ""}>${v}</dd>`); };
@@ -655,35 +792,18 @@ function renderPanel(n) {
     if (!t.online && t.last_seen) a2("Son bağlantı", ago(t.last_seen));
     html += `<h3>Tailscale</h3><dl>${tr.join("")}</dl>`;
   }
-  const groups = serviceGroups(n);
-  if (groups.length) {
-    html += `<h3>Servisler</h3><ul class="svc-list">`;
-    const pen = (g) => g.app && !g.app.startsWith("_") && API_OK
-      ? `<button class="btn pen" data-rename-app="${esc(g.app)}" data-current="${esc(g.name)}" title="Uygulamayı adlandır" aria-label="${esc(g.name)} uygulamasını adlandır">✎</button>` : "";
-    for (const g of groups) {
-      const solo = g.items.length === 1 && g.app !== "_system" && g.app !== "_manual";
-      if (!solo) html += `<li class="grp">${esc(g.name)} ${pen(g)}</li>`;
-      for (const s of g.items) {
-        const port = (s.ports || [])[0];
-        const url = s.url || (port && ![22, 2222, 139, 445].includes(port) ? `http://${hostFor(n)}:${port}/` : null);
-        const right = s.state && s.state !== "running" ? "durdu" : (s.ports || []).map((p) => ":" + p).join(" ") || (s.image || "");
-        const label = solo && g.name !== s.name ? `${esc(g.name)}<em>${esc(s.name)}</em>` : esc(s.name);
-        const inner = `<span>${label}</span><small>${esc(right)}</small>`;
-        html += `<li>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${inner}</a>` : `<span class="s">${inner}</span>`}${solo ? pen(g) : ""}</li>`;
-      }
-    }
-    html += `</ul>`;
+  const svcs = (n.service_ids || []).map((id) => byId.get(id)).filter(Boolean);
+  if (svcs.length) {
+    html += `<h3>Servisler</h3><ul class="svc-list">` + svcs.map((m) => {
+      const [stc, stt] = svcStatus(m);
+      return `<li><a href="#" data-open="${esc(m.id)}"><span class="status ${stc}">${esc(m.label)}</span><small>${m.state && m.state !== "running" ? esc(stt.toLowerCase()) : (m.ports || []).map((p) => ":" + p).join(" ")}</small></a></li>`;
+    }).join("") + `</ul>`;
   }
   if (API_OK && !n.placeholder) html += `<div class="actions"><button class="btn line" id="bEdit">Düzenle</button></div>`;
   else if (!API_OK && n.mac) html += `<p class="hint">Düzenleme için Nodesk servisine ulaşılamıyor.</p>`;
   $("#pbody").innerHTML = html;
   const be = $("#bEdit"); if (be) be.onclick = () => { editing = true; renderPanel(n); };
-  $$("[data-rename-app]", $("#pbody")).forEach((b) => b.onclick = async () => {
-    const name = prompt(`"${b.dataset.current}" uygulamasının haritadaki adı (boş bırakırsan varsayılana döner):`, b.dataset.current);
-    if (name === null) return;
-    try { await api("PUT", "/api/app?id=" + encodeURIComponent(b.dataset.renameApp), { name: name.trim() }); await load(true); }
-    catch (e) { alertBox("warn", "Ad kaydedilemedi: " + e.message); }
-  });
+  $$("[data-open]", $("#pbody")).forEach((a) => a.onclick = (e) => { e.preventDefault(); openPanel(a.dataset.open); });
 }
 function descendants(id) {
   const out = new Set([id]); let changed = true;
@@ -693,7 +813,7 @@ function descendants(id) {
 function renderEditor(n) {
   const types = (STATE && STATE.types) || Object.keys(KIND_TR);
   const banned = descendants(n.id);
-  const parents = DATA.nodes.filter((x) => x.site === n.site && !banned.has(x.id) && x.kind !== "internet")
+  const parents = DATA.nodes.filter((x) => x.site === n.site && !banned.has(x.id) && x.kind !== "internet" && !isSvc(x))
     .sort((a, b) => a.label.localeCompare(b.label, "tr"));
   const ov = n.override || {};
   const manual = (n.services || []).filter((s) => s.source === "manual");
@@ -804,6 +924,7 @@ function renderSettings() {
   ${Object.keys(SOURCE_TR).map((k) => `<label class="check" title="${esc(SOURCE_TR[k][1])}"><input type="checkbox" data-src="${k}"${s.sources[k] ? " checked" : ""}> ${esc(SOURCE_TR[k][0])} ${srcLine(k)}</label>`).join("")}
   <h3>Ajanlar</h3>
   <p class="hint">Ajanlar 5 dakikada bir kendi verilerini Pi'ye gönderir; Pi hiçbir cihaza bağlanmaz.</p>
+  <label class="check"><input type="checkbox" id="sAgentUpd"${s.agent_auto_update !== false ? " checked" : ""}> Ajanlar yeni sürümü Pi'den kendileri alsın <small>SSH gerekmez</small></label>
   <div id="agentList">${AGENTS.map(agentHtml).join("") || `<p class="hint">Henüz ajan yok.</p>`}</div>
   <form id="agentAdd" class="row" style="margin-top:6px"><input id="aName" placeholder="ad (örn. cloud-arm)" style="flex:1;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px 8px" maxlength="32" aria-label="Ajan adı">
     <select id="aKind" style="background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px" aria-label="Ajan türü"><option value="linux">Sunucu</option><option value="router">Router</option></select>
@@ -827,6 +948,7 @@ function renderSettings() {
   $("#sAuto").onchange = (e) => put({ auto: e.target.checked });
   $("#sInt").onchange = (e) => put({ interval_min: +e.target.value });
   $("#sWin").onchange = (e) => put({ online_window_min: +e.target.value });
+  $("#sAgentUpd").onchange = (e) => put({ agent_auto_update: e.target.checked });
   $$("[data-src]", $("#sbody")).forEach((c) => c.onchange = () => put({ sources: { [c.dataset.src]: c.checked } }));
   $("#sScan").onclick = scanNow;
   $("#sCheck").onclick = async (e) => {
@@ -909,7 +1031,8 @@ function updateAlerts() {
   const interval = (DATA.settings && DATA.settings.interval_min) || 5;
   if (age > Math.max(15, interval * 3) && (!DATA.settings || DATA.settings.auto)) items.unshift(`Harita ${Math.round(age)} dakikadır güncellenmedi. Pi'de <span class="mono">sudo nodesk status</span> ile kontrol et.`);
   const rs = DATA.router_script || {};
-  if (rs.ok === false) items.push(`Router ajanı eski (kurulu: ${esc(rs.installed)}, gereken: ${esc(rs.expected)}). Laptop'tan: <span class="mono">ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh</span>`);
+  const autoUpd = !DATA.settings || DATA.settings.agent_auto_update !== false;
+  if (rs.ok === false && !(rs.self_update && autoUpd)) items.push(`Router ajanının bu sürümü (${esc(rs.installed)}) kendini güncelleyemiyor. <b>Son kez</b> Laptop'tan çalıştır; sonraki sürümleri kendisi alacak: <span class="mono">ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh</span>`);
   if (items.length) alertBox("warn", `<b>Dikkat</b><ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul>`, "w:" + items.join("|"));
   const up = DATA.app && DATA.app.update;
   $("#updBadge").hidden = !up;
@@ -917,9 +1040,10 @@ function updateAlerts() {
   if (!API_OK) alertBox("warn", "Nodesk servisine ulaşılamıyor: harita salt okunur. Pi'de <span class=\"mono\">sudo nodesk status</span>.", "noapi:" + new Date().toDateString());
 }
 function updateMeta() {
-  const nodes = DATA.nodes.filter((n) => !n.placeholder && n.kind !== "internet");
+  const nodes = DATA.nodes.filter((n) => !n.placeholder && n.kind !== "internet" && !isSvc(n));
   const on = nodes.filter((n) => n.online).length;
-  $("#meta").innerHTML = `<b>${on}</b> / ${nodes.length} çevrimiçi · ${esc(ago(DATA.generated))} tarandı`;
+  const sv = DATA.nodes.filter((n) => n.kind === "service"), bad = sv.filter((n) => n.health === "fail" || n.health === "partial").length;
+  $("#meta").innerHTML = `<b>${on}</b> / ${nodes.length} cihaz · ${sv.filter((n) => n.online).length} / ${sv.length} servis${bad ? ` · <span style="color:var(--relay)">${bad} yanıt vermiyor</span>` : ""} · ${esc(ago(DATA.generated))} tarandı`;
   const a = DATA.app || {};
   $("#meta").title = `Son tarama: ${fmtTime(DATA.generated)}\nNodesk ${a.version || "?"}${a.rev ? " (" + a.rev + ")" : ""}`;
 }
@@ -954,17 +1078,16 @@ function up(e) {
   pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null;
   svg.classList.remove("dragging");
   if (!moved && downAt && pointers.size === 0) {
-    const t = downAt.target, grp = t.closest && t.closest(".svc-group"), c = t.closest && t.closest(".card");
-    if (grp && c) toggleGroup(c.dataset.id, grp.dataset.group);
+    const t = downAt.target, tog = t.closest && t.closest(".toggle"), c = t.closest && t.closest(".card");
+    if (tog && c) toggleNode(c.dataset.id);
     else if (c) openPanel(c.dataset.id);
     else closeDrawers();
   }
   if (pointers.size === 0) downAt = null;
 }
-function toggleGroup(id, key) {
+function toggleNode(id) {
   const n = byId.get(id); if (!n) return;
-  const g = serviceGroups(n).find((x) => x.key === key); if (!g) return;
-  prefs.collapsed[id + "|" + key] = !isCollapsed(n, g); savePrefs(); render();
+  prefs.collapsed[id] = !collapsedNode(n); savePrefs(); render();
 }
 svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", up);
 svg.addEventListener("wheel", (e) => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
@@ -975,7 +1098,8 @@ svg.addEventListener("keydown", (e) => {
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawers(); });
 
 /* ---------------- kontroller ---------------- */
-function syncButtons() { $("#tTail").setAttribute("aria-pressed", prefs.tail); $("#tOff").setAttribute("aria-pressed", prefs.off); }
+function syncButtons() { $("#tTail").setAttribute("aria-pressed", prefs.tail); $("#tOff").setAttribute("aria-pressed", prefs.off); $("#tSvc").setAttribute("aria-pressed", prefs.svc); }
+$("#tSvc").onclick = () => { prefs.svc = !prefs.svc; savePrefs(); syncButtons(); render(); fit(); };
 $("#tTail").onclick = () => { prefs.tail = !prefs.tail; savePrefs(); syncButtons(); render(); };
 $("#tOff").onclick = () => { prefs.off = !prefs.off; savePrefs(); syncButtons(); render(); fit(); };
 $("#bFilter").onclick = () => { if ($("#filters").classList.contains("open")) closeDrawers(); else { renderFilters(); openDrawer("filters"); } };

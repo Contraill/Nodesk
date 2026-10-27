@@ -22,6 +22,7 @@ DEFAULT_SETTINGS = {
     "auto": True,             # otomatik tarama
     "interval_min": 5,        # tarama sıklığı (dakika)
     "online_window_min": 15,  # pasif dinlemede bu kadar dakikadır ses veren cihaz çevrimiçi sayılır
+    "agent_auto_update": True,  # ajanlar (router dahil) yeni sürümü Pi'den kendileri alsın
     "sources": {
         "tailscale": True,    # tailscale status
         "arp": True,          # Ev 1 aktif ARP taraması (arp-scan)
@@ -31,6 +32,7 @@ DEFAULT_SETTINGS = {
         "host_ports": True,   # Pi'de Docker dışı dinleyen servisler
         "router": True,       # router ajanının raporu
         "agents": True,       # diğer sunucuların ajan raporları
+        "health": True,       # Pi servislerinin kendi portları yanıt veriyor mu (127.0.0.1)
     },
 }
 INTERVALS = (1, 2, 5, 10, 15, 30, 60)
@@ -92,6 +94,8 @@ class Store:
             cur = self.settings()
             if "auto" in patch:
                 cur["auto"] = bool(patch["auto"])
+            if "agent_auto_update" in patch:
+                cur["agent_auto_update"] = bool(patch["agent_auto_update"])
             if "interval_min" in patch:
                 v = int(patch["interval_min"])
                 if v not in INTERVALS:
@@ -131,6 +135,11 @@ class Store:
             clean["tags"] = tags[:12]
         if patch.get("note"):
             clean["note"] = str(patch["note"]).strip()[:500]
+        if patch.get("icon"):
+            icon = str(patch["icon"]).strip()[:300]
+            if not icon.startswith("https://"):
+                raise ValueError("ikon adresi https:// ile başlamalı")
+            clean["icon"] = icon
         if patch.get("hidden"):
             clean["hidden"] = True
         services = []

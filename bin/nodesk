@@ -251,9 +251,14 @@ summary_lines() {
     py - "$WWW/data.json" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
-nodes = [n for n in d["nodes"] if n["kind"] not in ("internet",) and not n.get("placeholder")]
+nodes = [n for n in d["nodes"] if n["kind"] not in ("internet", "service") and not n.get("placeholder")]
+svcs = [n for n in d["nodes"] if n["kind"] == "service"]
 on = sum(1 for n in nodes if n.get("online"))
-print(f"  harita      : {d['generated']}, {on}/{len(nodes)} cihaz çevrimiçi")
+print(f"  harita      : {d['generated']}, {on}/{len(nodes)} cihaz çevrimiçi, "
+      f"{sum(1 for n in svcs if n.get('online'))}/{len(svcs)} servis çalışıyor")
+bad = [n["label"] for n in svcs if n.get("health") in ("fail", "partial")]
+if bad:
+    print("  yanıt vermeyen servis: " + ", ".join(bad))
 by = {}
 for n in nodes:
     by.setdefault(n.get("site") or "-", []).append(n)

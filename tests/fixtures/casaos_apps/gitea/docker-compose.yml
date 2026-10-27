@@ -11,6 +11,7 @@ x-casaos:
   description:
     en_us: Git with a cup of tea
   main: gitea
+  icon: https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/Gitea/icon.png
   title:
     en_us: Gitea
   port_map: "3002"

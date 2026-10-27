@@ -236,19 +236,23 @@ def parse_docker_ps_json(lines):
 
 
 def casaos_title(text):
-    """Compose dosyasındaki en üst seviye x-casaos -> title değerini satır satır okur.
+    return casaos_meta(text).get("title")
+
+
+def casaos_meta(text):
+    """Compose dosyasındaki en üst seviye x-casaos -> {title, icon} değerlerini satır satır okur.
 
     Bilerek regex kullanılmaz: girintili uzun dosyalarda geri izleme (backtracking)
     dakikalarca sürebilir ve tüm süreci kilitler (0.2.0'daki hata).
     """
-    in_top, child_indent, title_indent, cand = False, None, None, {}
+    in_top, child_indent, title_indent, cand, meta = False, None, None, {}, {}
     for line in text.splitlines()[:2000]:
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
         indent = len(line) - len(line.lstrip(" \t"))
         if indent == 0:
-            if in_top and (title_indent is not None or cand):
+            if in_top and (title_indent is not None or cand or meta):
                 break
             in_top, child_indent, title_indent = stripped == "x-casaos:", None, None
             continue
@@ -264,19 +268,29 @@ def casaos_title(text):
                     cand[k.strip().lower()] = v
                 continue
             title_indent = None
+        if indent == child_indent and stripped.startswith("icon:"):
+            v = stripped[5:].strip().strip("'\"")
+            if v.startswith("https://"):
+                meta["icon"] = v[:300]
         if indent == child_indent and stripped.startswith("title:"):
             v = stripped[6:].strip().strip("'\"")
             if v:
-                return v[:40]
-            title_indent = indent
-    for k in ("custom", "en_us", "en_gb", "tr_tr"):
-        if cand.get(k):
-            return cand[k][:40]
-    return next(iter(cand.values()), None)
+                meta["title"] = v[:40]
+            else:
+                title_indent = indent
+    if "title" not in meta:
+        for k in ("custom", "en_us", "en_gb", "tr_tr"):
+            if cand.get(k):
+                meta["title"] = cand[k][:40]
+                break
+        else:
+            if cand:
+                meta["title"] = next(iter(cand.values()))[:40]
+    return meta
 
 
 def casaos_titles(r, projects, base="/var/lib/casaos/apps"):
-    """CasaOS uygulama başlıkları: compose dosyasındaki x-casaos title."""
+    """CasaOS uygulama bilgileri: {proje: {title, icon}} (compose dosyasındaki x-casaos)."""
     out = {}
     for p in projects:
         if not p or "/" in p or p.startswith("."):
@@ -293,9 +307,30 @@ def casaos_titles(r, projects, base="/var/lib/casaos/apps"):
             text = util.read_text(path, "") or None
         if not text:
             continue
-        title = casaos_title(text)
-        if title:
-            out[p] = title
+        meta = casaos_meta(text)
+        if meta:
+            out[p] = meta
+    return out
+
+
+def check_ports(r, ports, hosts=("127.0.0.1",)):
+    """Pi'nin KENDİ servis portlarına 127.0.0.1 üzerinden bağlanmayı dener (tarama değil:
+    sadece Docker/ss'in zaten söylediği portlar). {port: True/False}"""
+    if r.fixtures:
+        raw = r.fixture("health.json")
+        data = json.loads(raw) if raw else {}
+        return {int(p): data.get(str(p), True) for p in ports}
+    out = {}
+    for p in sorted(set(ports))[:60]:
+        out[p] = False
+        for h in hosts:   # sadece belirli bir IP'yi dinleyen servisler için Pi'nin LAN IP'si de denenir
+            try:
+                with socket.create_connection((h, p), timeout=1.5):
+                    out[p] = True
+                    break
+            except OSError:
+                pass
+    r.mark("health", True, count=sum(out.values()))
     return out
 
 

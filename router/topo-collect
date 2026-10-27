@@ -3,10 +3,10 @@
 # /usr/sbin/nodesk-agent tarafından 5 dakikada bir çalıştırılır; çıktısı Pi'ye gönderilir.
 # Hiçbir ayarı değiştirmez; sadece okur ve yazdırır.
 #
-# Kurulum/güncelleme: Laptop'tan
+# İlk kurulum (bir kez) Laptop'tan; sonraki sürümleri ajan Pi'den kendisi alır:
 #   ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh
 
-TOPO_VERSION=2
+TOPO_VERSION=3
 
 echo "#VERSION"
 echo "$TOPO_VERSION"

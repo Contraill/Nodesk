@@ -109,6 +109,25 @@ class CollectTest(unittest.TestCase):
         self.assertIn("SSH", names)
         self.assertTrue(arm["agent"]["fresh"])
 
+    def test_service_nodes(self):
+        orbis = self.ids["svc:self:media-app"]
+        self.assertEqual(orbis["kind"], "service")
+        self.assertEqual(orbis["parent"], "self")
+        self.assertEqual(orbis["label"], "Orbis")
+        self.assertEqual(sorted(c["name"] for c in orbis["containers"]), ["media-app-backend", "media-app-frontend"])
+        self.assertEqual(orbis["ports"], [3000, 8000])
+        self.assertEqual(orbis["health"], "partial", "8000 yanıt vermiyor (health.json)")
+        gitea = self.ids["svc:self:gitea"]
+        self.assertTrue(gitea["icon_url"].endswith("/Gitea/icon.png"), "CasaOS ikonu")
+        self.assertEqual(gitea["health"], "ok")
+        self.assertEqual(self.ids["svc:self:sys:smbd"]["glyph"], "folder")
+        self.assertEqual(self.ids["svc:self:sys:sshd"]["glyph"], "terminal")
+        self.assertIn("homarr-labs/dashboard-icons/png/casaos.png", self.ids["svc:self:sys:casaos-gateway"]["icon_url"])
+        stopped = self.ids["svc:self:c:old-test"]
+        self.assertEqual(stopped["state"], "exited")
+        self.assertFalse(stopped["online"])
+        self.assertEqual(self.ids["svc:ts:cloud-arm:edge"]["parent"], "ts:cloud-arm")
+
     def test_sources_status(self):
         for k in ("tailscale", "arp", "neigh", "docker", "host_ports"):
             self.assertTrue(self.data["sources"][k]["ok"], k)
@@ -314,6 +333,25 @@ class ApiTest(unittest.TestCase):
         st, _ = self.call("DELETE", "/api/agent?name=cloud-amd-1", {})
         self.assertEqual(st, 200)
 
+    def test_ingest_asks_old_agent_to_update(self):
+        token = store.Store(store.Paths(self.home)).agents()["agents"]["router"]["token"]
+        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n3", "#VERSION\n2", 1)
+        st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=old.encode(), ctype="text/plain")
+        self.assertEqual((st, body.strip()), (200, "ok update"))
+        cur = open(os.path.join(FIX, "router.txt")).read()
+        st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=cur.encode(), ctype="text/plain")
+        self.assertEqual((st, body.strip()), (200, "ok"))
+
+    def test_service_override(self):
+        st, _ = self.call("PUT", "/api/device?id=svc:self:media-app", {"name": "Orbis Medya", "icon": "https://ornek.com/o.png"})
+        self.assertEqual(st, 200)
+        n = self.data()["svc:self:media-app"]
+        self.assertEqual(n["label"], "Orbis Medya")
+        self.assertEqual(n["icon_url"], "https://ornek.com/o.png")
+        st, _ = self.call("PUT", "/api/device?id=svc:self:media-app", {"icon": "javascript:alert(1)"})
+        self.assertEqual(st, 400)
+        self.call("PUT", "/api/device?id=svc:self:media-app", {})
+
     def test_scan_now(self):
         st, body = self.call("POST", "/api/scan", {})
         self.assertEqual(st, 200)
@@ -325,7 +363,7 @@ class ScriptsTest(unittest.TestCase):
             s = agents.installer(kind, "http://100.64.0.1:8088", "x", "tok")
             r = subprocess.run(["sh", "-n"], input=s, text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(agents.topo_version(), "2")
+        self.assertEqual(agents.topo_version(), "3")
 
     def test_router_installer_sandbox(self):
         """Router kurulum scriptini sahte kök dizinde BusyBox ile iki kez çalıştır."""
@@ -362,6 +400,46 @@ class ScriptsTest(unittest.TestCase):
         conf = open(os.path.join(root, "etc/nodesk-agent.conf")).read()
         self.assertIn("token=tok", conf)
         self.assertEqual(oct(os.stat(os.path.join(root, "etc/nodesk-agent.conf")).st_mode)[-3:], "600")
+        shutil.rmtree(root)
+
+    def test_router_agent_self_update(self):
+        """Pi "ok update" derse ajan kurulum scriptini Pi'den alıp çalıştırır; kapalıysa çalıştırmaz."""
+        bb = shutil.which("busybox")
+        if not bb:
+            self.skipTest("busybox yok")
+        os.makedirs(os.path.join(ROOT, "tests", "out"), exist_ok=True)
+        root = tempfile.mkdtemp(dir=os.path.join(ROOT, "tests", "out"))
+        for d in ("usr/sbin", "etc", "tmp", "bin"):
+            os.makedirs(os.path.join(root, d), exist_ok=True)
+        s = agents.installer("router", "http://pi:8088", "router", "tok")
+        agent = s.split("cat > /usr/sbin/nodesk-agent.new <<'NODESK_EOF'\n", 1)[1].split("\nNODESK_EOF", 1)[0]
+        for a, b in (("/usr/sbin/", f"{root}/usr/sbin/"), ("/etc/", f"{root}/etc/"), ("/tmp/", f"{root}/tmp/")):
+            agent = agent.replace(a, b)
+        with open(f"{root}/usr/sbin/nodesk-agent", "w") as f:
+            f.write(agent)
+        with open(f"{root}/usr/sbin/topo-collect", "w") as f:
+            f.write("#!/bin/sh\necho '#VERSION'\necho 2\necho '#END'\n")
+        os.chmod(f"{root}/usr/sbin/topo-collect", 0o755)
+        with open(f"{root}/etc/nodesk-agent.conf", "w") as f:
+            f.write("NODESK_URL='http://pi/ingest'\nNODESK_INSTALL_URL='http://pi/install'\n")
+        # sahte curl: POST'a "ok update" der, GET'te marker dosyası oluşturan bir kurulum scripti verir
+        with open(f"{root}/bin/curl", "w") as f:
+            f.write(f"""#!/bin/sh
+o=""; post=""
+while [ $# -gt 0 ]; do case "$1" in -o) o="$2"; shift;; --data-binary) post=1;; esac; shift; done
+if [ -n "$post" ]; then printf '%s\\n' "$(cat {root}/answer)" > "$o"
+else printf '#!/bin/sh\\n# NODESK_EOF\\ntouch {root}/updated\\n' > "$o"; fi
+""")
+        os.chmod(f"{root}/bin/curl", 0o755)
+        env = {"PATH": f"{root}/bin:/usr/bin:/bin"}
+        for answer, expect in (("ok", False), ("ok update", True)):
+            open(f"{root}/answer", "w").write(answer)
+            r = subprocess.run([bb, "sh", f"{root}/usr/sbin/nodesk-agent"], env=env, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(os.path.exists(f"{root}/updated"), expect, answer)
+        os.unlink(f"{root}/updated")
+        r = subprocess.run([bb, "sh", f"{root}/usr/sbin/nodesk-agent"], env={**env, "NODESK_UPDATING": "1"})
+        self.assertFalse(os.path.exists(f"{root}/updated"), "kurulum sırasında tekrar güncellemeye girmez")
         shutil.rmtree(root)
 
     def test_cli_syntax(self):
