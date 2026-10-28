@@ -429,6 +429,24 @@ function ago(iso) {
   if (s < 86400 * 2) return Math.round(s / 3600) + " sa önce";
   return Math.round(s / 86400) + " gün önce";
 }
+/* Son 7 günün çevrimiçi şeridi: gün başına 144 dilim (10 dk), UTC günleri */
+function historyHtml(h) {
+  if (!h) return "";
+  const days = Object.keys(h.days).sort().slice(-7), W = 288, rh = 9, gap = 4, lw = 46;
+  let svgs = `<svg width="${lw + W}" height="${days.length * (rh + gap)}" role="img" aria-label="Son 7 günün çevrimiçi geçmişi: yüzde ${h.pct}" style="display:block;max-width:100%">`;
+  days.forEach((d, r) => {
+    const y = r * (rh + gap), bits = BigInt("0x" + h.days[d]);
+    svgs += `<text x="0" y="${y + 8}" style="font:500 10.5px var(--sans);fill:var(--muted)">${esc(new Date(d + "T12:00:00Z").toLocaleDateString("tr-TR", { day: "numeric", month: "short" }))}</text>`;
+    svgs += `<rect x="${lw}" y="${y}" width="${W}" height="${rh}" rx="2" fill="color-mix(in srgb, var(--text) 8%, transparent)"/>`;
+    let run = -1;
+    for (let i = 0; i <= 144; i++) {
+      const on = i < 144 && (bits >> BigInt(143 - i)) & 1n;
+      if (on && run < 0) run = i;
+      if (!on && run >= 0) { svgs += `<rect x="${lw + run * W / 144}" y="${y}" width="${(i - run) * W / 144}" height="${rh}" rx="1.5" fill="var(--on)"/>`; run = -1; }
+    }
+  });
+  return `<h3>Son 7 gün</h3><p class="hint" style="margin:0 0 6px">%${h.pct} çevrimiçi (UTC günleri, 10 dakikalık dilimler)</p>` + svgs + "</svg>";
+}
 function dur(sec) {
   const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
   return d ? `${d} gün ${h} saat` : h ? `${h} saat ${m} dk` : `${m} dk`;
@@ -1091,6 +1109,7 @@ function renderServicePanel(n) {
   if (n.note) html += `<p class="note">${esc(n.note)}</p>`;
   const links = svcLinks(n);
   if (links.length) html += `<h3>Aç</h3><ul class="svc-list">${links.map(([u, l]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener"><span>${esc(n.label)}</span><small>${esc(l)}</small></a></li>`).join("")}</ul>`;
+  html += historyHtml(n.history);
   if ((n.containers || []).length > 1) {
     html += `<h3>Container'lar</h3><ul class="svc-list">` + n.containers.map((c) => `<li><a href="#" data-open="${esc(n.id + "#" + c.name)}"><span>${esc(c.name)}</span><small>${c.state === "running" ? (c.ports || []).map((p) => ":" + p).join(" ") : "durdu"}</small></a></li>`).join("") + `</ul>`;
   }
@@ -1182,6 +1201,7 @@ function renderPanel(n) {
   if (n.same_hint && CAN_EDIT) html += `<div class="note">Bu cihaz, az önce kaybolan <b>${esc(n.same_hint.label)}</b> ile aynı telefon olabilir: telefonlar her Wi-Fi ağında farklı (rastgele) MAC kullanır.
     <div class="actions"><button class="btn primary" id="bSame">Aynı cihaz</button><button class="btn line" id="bNotSame">Farklı cihaz</button></div></div>`;
   html += `<dl>${rows.join("")}</dl>`;
+  html += historyHtml(n.history);
   if (n.note) html += `<p class="note">${esc(n.note)}</p>`;
   if (n.stale) html += `<p class="note">Bu bölgeden son taramada veri alınamadı; gösterilen bilgiler son başarılı taramadan.</p>`;
   if (n.roam) html += `<p class="note">Tailscale cihazı şu an <b>${esc(siteName(n.site))}</b> ağında. Evden ayrılınca ${esc(siteName("mobile") || "Uzak / Mobil")} grubuna döner.</p>`;
@@ -1427,6 +1447,13 @@ function renderSettings() {
   ${Object.keys(SOURCE_TR).map((k) => `<label class="check" title="${esc(SOURCE_TR[k][1])}"><input type="checkbox" data-src="${k}"${s.sources[k] ? " checked" : ""}> ${esc(SOURCE_TR[k][0])} ${srcLine(k)}</label>`).join("")}
   <h3>Gruplar</h3>${groupsHtml()}
   <h3>Erişim</h3>${accessHtml(s)}
+  <h3>Bildirimler</h3>
+  <p class="hint">Telefonuna haber: <b>ntfy</b> (ücretsiz uygulama; bir konu adı seç, örn. https://ntfy.sh/benim-agim-x7q) ya da <b>Telegram</b> botu. Boş bırakılırsa kapalı.</p>
+  <div class="field"><label for="nUrl">ntfy adresi</label><input id="nUrl" value="${esc((s.alerts || {}).ntfy_url || "")}" placeholder="https://ntfy.sh/konu-adi"></div>
+  <div class="field"><label for="nTok">Telegram bot anahtarı</label><input id="nTok" type="password" autocomplete="off" value="${esc((s.alerts || {}).telegram_token || "")}" placeholder="123456:ABC..."></div>
+  <div class="field"><label for="nChat">Telegram sohbet kimliği</label><input id="nChat" value="${esc((s.alerts || {}).telegram_chat || "")}" placeholder="-100123... ya da @kanal"></div>
+  ${[["new_device", "Yeni cihaz ağa katıldı"], ["service_down", "Servis kapandı / düzeldi"], ["agent_silent", "Ajan rapor göndermez oldu / döndü"], ["exit_change", "Exit node değişti"]].map(([k, l]) => `<label class="check"><input type="checkbox" data-ev="${k}"${((s.alerts || {}).events || {})[k] !== false ? " checked" : ""}> ${l}</label>`).join("")}
+  <div class="actions"><button class="btn line" id="nTest" type="button">Deneme gönder</button><span class="hint" id="nRes"></span></div>
   <h3>Renkler</h3>
   <p class="hint">Kartların rol renkleri. Hazır bir tema seç ya da tek tek değiştir; "renksiz" rol nötr görünür. Tüm cihazlarda aynı görünür.</p>
   <div class="chips">${Object.keys(PALETTES).map((p) => `<button class="chip" data-pal="${esc(p)}" aria-pressed="${Object.keys(CAT_TR).every((k) => (PALETTES[p][k] || "") === (COLORS[k] || ""))}">${esc(p)}</button>`).join("")}</div>
@@ -1463,6 +1490,15 @@ function renderSettings() {
   $$("[data-pal]", $("#sbody")).forEach((b) => b.onclick = () => put({ colors: PALETTES[b.dataset.pal] }));
   bindAccess(put, renderSettings);
   bindGroups(put);
+  $("#nUrl").onchange = (e) => put({ alerts: { ntfy_url: e.target.value.trim() } });
+  $("#nTok").onchange = (e) => put({ alerts: { telegram_token: e.target.value.trim() } });
+  $("#nChat").onchange = (e) => put({ alerts: { telegram_chat: e.target.value.trim() } });
+  $$("[data-ev]", $("#sbody")).forEach((c) => c.onchange = () => put({ alerts: { events: { [c.dataset.ev]: c.checked } } }));
+  $("#nTest").onclick = async () => {
+    $("#nRes").textContent = "gönderiliyor…";
+    try { await api("POST", "/api/alerts/test"); $("#nRes").textContent = "gönderildi, telefonuna bak"; }
+    catch (e) { $("#nRes").textContent = e.message; }
+  };
   $$("[data-col]", $("#sbody")).forEach((c) => {
     c.oninput = () => document.documentElement.style.setProperty("--c-" + c.dataset.col, c.value);   // anında önizleme
     c.onchange = () => put({ colors: { [c.dataset.col]: c.value } });

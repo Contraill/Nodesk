@@ -44,6 +44,11 @@ DEFAULT_SETTINGS["colors"] = {"net": "#3b82d6", "srv": "#c2508a", "pc": "#8e66d0
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 # Kim düzenler / kim görür (auth.py). edit: tailnet | password | everyone; view: everyone | login
 DEFAULT_SETTINGS["access"] = {"edit": "tailnet", "view": "everyone", "ts_users": []}
+# Bildirimler (history.py): ntfy ya da Telegram; boşsa kapalı. Gizli: herkese açık veriye yazılmaz.
+DEFAULT_SETTINGS["alerts"] = {"ntfy_url": "", "telegram_token": "", "telegram_chat": "",
+                              "events": {"new_device": True, "service_down": True,
+                                         "agent_silent": True, "exit_change": True}}
+SECRET_SETTINGS = ("alerts", "access")   # yalnızca düzenleyebilenler görür
 INTERVALS = (1, 2, 5, 10, 15, 30, 60)
 DEVICE_TYPES = ("modem", "router", "ap", "server", "cloud-vm", "pc", "laptop", "phone",
                 "tablet", "tv", "console", "iot", "lamp", "vacuum", "camera", "printer",
@@ -137,6 +142,25 @@ class Store:
                     cur.setdefault("ts_site", {})[k] = str(v)[:24]
                 else:
                     cur.setdefault("ts_site", {}).pop(k, None)
+            al = patch.get("alerts") or {}
+            if "ntfy_url" in al:
+                v = str(al["ntfy_url"]).strip()[:300]
+                if v and not re.match(r"^https?://[^\s]+$", v):
+                    raise ValueError("ntfy adresi http(s):// ile başlamalı (örn. https://ntfy.sh/konu)")
+                cur["alerts"]["ntfy_url"] = v
+            if "telegram_token" in al:
+                v = str(al["telegram_token"]).strip()
+                if v and not re.match(r"^[0-9]{5,}:[A-Za-z0-9_-]{20,}$", v):
+                    raise ValueError("Telegram bot anahtarı 123456:ABC... biçiminde olmalı")
+                cur["alerts"]["telegram_token"] = v
+            if "telegram_chat" in al:
+                v = str(al["telegram_chat"]).strip()[:40]
+                if v and not re.match(r"^(-?[0-9]+|@[A-Za-z0-9_]{4,})$", v):
+                    raise ValueError("Telegram sohbet kimliği sayı ya da @kanal olmalı")
+                cur["alerts"]["telegram_chat"] = v
+            for k, v in (al.get("events") or {}).items():
+                if k in DEFAULT_SETTINGS["alerts"]["events"]:
+                    cur["alerts"]["events"][k] = bool(v)
             if "setup_done" in patch:
                 cur["setup_done"] = bool(patch["setup_done"])
             for k, v in (patch.get("colors") or {}).items():

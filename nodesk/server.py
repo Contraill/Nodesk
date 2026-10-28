@@ -20,7 +20,7 @@ import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agents, auth, model, passive, probe, sources, store, util
+from . import agents, auth, history, model, passive, probe, sources, store, util
 
 API_HOST = "127.0.0.1"
 API_PORT = int(os.environ.get("NODESK_API_PORT", "8089"))
@@ -37,6 +37,8 @@ class App:
         self.paths = store.Paths(home)
         self.store = store.Store(self.paths)
         self.auth = auth.Auth(self.paths.auth)
+        self.history = history.History(os.path.join(self.paths.data, "history.json"))
+        self.notifier = history.Notifier(os.path.join(self.paths.data, "alerts_state.json"))
         self.fixtures = fixtures
         self.cfg = store.load_config(self.paths)
         # Grup yapısı (sites.py): eski config.toml'dan bir kez; yeni kurulumda sihirbaz açılır
@@ -297,7 +299,13 @@ class App:
                 pstatus = {"ok": None, "disabled": True}
             data["sources"] = {**raw.get("status", {}), "passive": pstatus}
             data["scan"] = {"last_start": self.status["last_start"], "last_end": self.status["last_end"]}
-            data["settings"] = settings
+            # gizli ayarlar (bildirim anahtarları, erişim listesi) herkese açık veriye yazılmaz
+            data["settings"] = {k: v for k, v in settings.items() if k not in store.SECRET_SETTINGS}
+            self.history.record(data["nodes"], now)
+            for n in data["nodes"]:
+                if not n.get("placeholder") and n["kind"] != "internet":
+                    n["history"] = self.history.summary(n["id"], now)
+            self.notifier.check(data, settings["alerts"])
             data["app"] = self.app_info()
             data["apps"] = {k: v for k, v in self.store.overrides().get("apps", {}).items()}
             util.write_json(self.paths.state, state)
@@ -511,7 +519,19 @@ class Handler(BaseHTTPRequestHandler):
                 data = util.read_json(app.paths.data_private)
                 return self.send_json(data) if data else self.fail("harita henüz hazır değil", 503)
             if method == "GET" and path == "/api/state":
-                return self.send_json(self.state())
+                st = self.state()
+                if not can_edit:
+                    st["settings"] = {k: v for k, v in st["settings"].items() if k not in store.SECRET_SETTINGS}
+                return self.send_json(st)
+            if method == "POST" and path == "/api/alerts/test":
+                self.json_body()
+                cfg = app.store.settings()["alerts"]
+                if not (cfg["ntfy_url"] or (cfg["telegram_token"] and cfg["telegram_chat"])):
+                    return self.fail("önce ntfy adresi ya da Telegram bilgilerini kaydet")
+                app.notifier._send(cfg, "Nodesk deneme", "Bildirimler çalışıyor.")
+                if app.notifier.last_error:
+                    return self.fail("gönderilemedi: " + app.notifier.last_error, 502)
+                return self.send_json({"ok": True})
             if method == "POST" and path == "/api/scan":
                 self.json_body()
                 return self.send_json({"started": app.request_scan(), "status": app.status})

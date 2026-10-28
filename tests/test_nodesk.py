@@ -3,6 +3,7 @@
     python3 -m unittest discover -s tests -v
 """
 
+import datetime as dt
 import json
 import os
 import shutil
@@ -24,7 +25,7 @@ os.environ["NODESK_NOW"] = NOW
 os.environ["NODESK_OUI"] = os.path.join(FIX, "ieee-oui.txt")
 os.environ["NODESK_CONFIG"] = os.path.join(FIX, "config.toml")   # HomeNet benzeri örnek ağ
 
-from nodesk import agents, model, passive, probe, server, sites, sources, store, util  # noqa: E402
+from nodesk import agents, history, model, passive, probe, server, sites, sources, store, util  # noqa: E402
 
 
 def make_home():
@@ -461,6 +462,56 @@ class GenericSitesTest(unittest.TestCase):
         self.assertNotIn("evil", ok[0])
 
 
+class HistoryAlertsTest(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, True)
+
+    def test_history_percent(self):
+        h = history.History(os.path.join(self.d, "h.json"))
+        t0 = util.parse_iso("2026-10-28T00:00:00+00:00")
+        for i in range(12):   # 2 saat, her 10 dakikada bir; ilk saat çevrimiçi
+            h.record([{"id": "mac:a", "kind": "phone", "online": i < 6}], t0 + dt.timedelta(minutes=10 * i))
+        sm = h.summary("mac:a", t0 + dt.timedelta(minutes=110))
+        self.assertEqual(sm["pct"], 50)
+        self.assertEqual(list(sm["days"]), ["2026-10-28"])
+        self.assertIsNone(h.summary("mac:yok", t0))
+        h2 = history.History(os.path.join(self.d, "h2.json"))
+        h2.record([{"id": "mac:b", "kind": "phone", "online": True}], t0 + dt.timedelta(hours=10))
+        self.assertEqual(h2.summary("mac:b", t0 + dt.timedelta(hours=10, minutes=5))["pct"], 100,
+                         "yeni cihaz: gece yarısından değil ilk kaydından say")
+
+    def test_notifier_transitions(self):
+        n = history.Notifier(os.path.join(self.d, "a.json"))
+        dev = lambda i, **k: {"id": i, "kind": "phone", "label": i, "ips": ["10.0.0.9"], **k}
+        svc = lambda i, on: {"id": i, "kind": "service", "label": i, "online": on, "host": "self"}
+        base = {"nodes": [dev("mac:a"), svc("svc:self:gitea", True)], "agents": [{"name": "router", "fresh": True}],
+                "overlay": []}
+        self.assertEqual(n.check(base, {}), [], "ilk çalışmada yalnızca öğrenir")
+        nxt = {"nodes": [dev("mac:a"), dev("mac:yeni"), dev("ip:10.0.0.7"), svc("svc:self:gitea", False)],
+               "agents": [{"name": "router", "fresh": False}], "overlay": [{"from": "mac:a", "to": "self"}]}
+        titles = sorted(t for t, _, _ in n.check(nxt, {}))
+        self.assertEqual(titles, ["Ajan sustu", "Exit node değişti", "Servis kapandı", "Yeni cihaz"],
+                         "geçici ip: kimliği yeni cihaz sayılmaz")
+        self.assertEqual(n.check(nxt, {}), [], "değişmeyen durum tekrar bildirilmez")
+
+    def test_secrets_never_public(self):
+        home = make_home()
+        self.addCleanup(shutil.rmtree, home, True)
+        st = store.Store(store.Paths(home))
+        st.set_settings({"alerts": {"ntfy_url": "https://ntfy.sh/gizli-konu", "telegram_token": "123456:" + "A" * 30,
+                                    "telegram_chat": "-100123"}})
+        app = server.App(home, FIX)
+        app.collect()
+        with open(os.path.join(home, "www", "data.json"), encoding="utf-8") as f:
+            text = f.read()
+        self.assertNotIn("gizli-konu", text)
+        self.assertNotIn("AAAAAAAAAA", text)
+        for bad in ({"ntfy_url": "ftp://x"}, {"telegram_token": "kötü"}, {"telegram_chat": "x y"}):
+            with self.assertRaises(ValueError):
+                st.set_settings({"alerts": bad})
+
+
 class FileSafetyTest(unittest.TestCase):
     def test_corrupt_json_uses_backup(self):
         d = tempfile.mkdtemp()
@@ -731,6 +782,8 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.call("GET", "/api/agents", headers=lan)[0], 401, "ajan anahtarları gizli")
         self.assertEqual(self.call("POST", "/api/scan", {}, headers=lan)[0], 401)
         self.assertEqual(self.call("PUT", dev, {"name": "x"}, headers=ts)[0], 200, "tailnet düzenler")
+        self.assertNotIn("alerts", json.loads(self.call("GET", "/api/state", headers=lan)[1])["settings"],
+                         "bildirim anahtarları misafire gitmez")
         a = json.loads(self.call("GET", "/api/auth", headers=lan)[1])
         self.assertEqual((a["edit"], a["view"], a["access"]), (False, True, None))
         # yalnızca belirli Tailscale hesapları (kimlik whois ile, istemciye sorulmaz)
