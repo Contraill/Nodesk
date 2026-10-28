@@ -1312,6 +1312,91 @@ async function openSettings() {
   catch (e) { $("#sbody").innerHTML = `<h2>Ayarlar</h2><p class="note">Nodesk servisine ulaşılamadı (${esc(e.message)}). Pi'de <span class="mono">sudo nodesk status</span> ile kontrol et.</p>`; return; }
   renderSettings();
 }
+/* Erişim ve Gruplar: Ayarlar'da ve kurulum sihirbazında aynı parçalar */
+function accessHtml(s) {
+  return `  <p class="hint">Şu an ${esc({ parola: "parolayla giriş yapmış olarak", pi: "Pi'nin kendisinden", tailnet: "Tailscale üzerinden", herkes: "herkese açık düzenlemeyle" }[AUTH && AUTH.how] || (AUTH && AUTH.how ? AUTH.how + " hesabıyla" : ""))} düzenliyorsun. Ajanların raporları bu ayarlardan etkilenmez (onlar kendi anahtarıyla gelir).</p>
+  <div class="field"><label for="aEdit">Kim düzenleyebilir</label><select id="aEdit">
+    <option value="tailnet"${s.access.edit === "tailnet" ? " selected" : ""}>Tailscale üzerinden bağlananlar (önerilen)</option>
+    <option value="password"${s.access.edit === "password" ? " selected" : ""}>Yalnızca parolayla giriş yapanlar</option>
+    <option value="everyone"${s.access.edit === "everyone" ? " selected" : ""}>Herkes (ev ağındaki misafirler dahil, önerilmez)</option></select></div>
+  <div class="field"><label for="aUsers">İzinli Tailscale hesapları <small>(virgülle; boşsa tailnet'teki herkes)</small></label><input id="aUsers" value="${esc((s.access.ts_users || []).join(", "))}" placeholder="ornek@gmail.com"${s.access.edit === "tailnet" ? "" : " disabled"}></div>
+  <div class="field"><label for="aView">Haritayı kim görebilir</label><select id="aView">
+    <option value="everyone"${s.access.view === "everyone" ? " selected" : ""}>Ağdaki herkes</option>
+    <option value="login"${s.access.view === "login" ? " selected" : ""}>Yalnızca düzenleyebilenler</option></select></div>
+  <form id="pwForm" class="row"><input id="aPw" type="password" minlength="8" autocomplete="new-password" placeholder="${AUTH && AUTH.password ? "yeni parola" : "parola belirle (en az 8 karakter)"}" aria-label="Parola" style="flex:1;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px 8px">
+    <button class="btn line" type="submit">${AUTH && AUTH.password ? "Parolayı değiştir" : "Parola belirle"}</button></form>`;
+}
+function bindAccess(put, rerender) {
+  $("#aEdit").onchange = (e) => put({ access: { edit: e.target.value } });
+  $("#aUsers").onchange = (e) => put({ access: { ts_users: e.target.value.split(",") } });
+  $("#aView").onchange = (e) => put({ access: { view: e.target.value } });
+  $("#pwForm").onsubmit = async (e) => {
+    e.preventDefault();
+    try { await api("PUT", "/api/password", { password: $("#aPw").value }); AUTH = await api("GET", "/api/auth"); rerender(); }
+    catch (err) { $("#sErr").textContent = "Parola kaydedilemedi: " + err.message; }
+  };
+}
+const SITE_TYPE_TR = { local: "Pi'nin ağı", router: "router ajanı", group: "Tailscale grubu" };
+function siteLabel(x) { return (DATA && siteName(x.id)) || x.name; }
+function groupsHtml() {
+  const S = STATE.sites || [], groups = S.filter((x) => x.type === "group");
+  const def = (groups.find((g) => g.default) || {}).id, tsSite = STATE.settings.ts_site || {};
+  const devs = DATA.nodes.filter((n) => n.tailscale && !isSvc(n) && n.id !== "self" && n.kind !== "router" && !n.placeholder)
+    .sort((a, b) => a.label.localeCompare(b.label, "tr"));
+  let h = `<p class="hint">Haritadaki her çerçeve bir grup. Pi'nin ağı ve her router ajanı kendiliğinden grup olur; Tailscale cihazlarını aşağıdan istediğin gruba koyabilirsin. Grubun adını haritada başlığına tıklayarak değiştirebilirsin.</p>
+    <div class="colors">${S.map((x) => `<div class="color-row"><span class="nm">${esc(siteLabel(x))} <small>· ${esc(SITE_TYPE_TR[x.type] || x.type)}${x.default ? " · atanmamış cihazlar burada" : ""}</small></span>${x.type === "group" && !x.default ? `<button class="btn danger" type="button" data-grp-del="${esc(x.id)}">Sil</button>` : ""}</div>`).join("")}</div>
+    <form id="grpAdd" class="row" style="margin-top:6px"><input id="gName" maxlength="40" placeholder="yeni grup (örn. Bulut)" aria-label="Yeni grubun adı" style="flex:1;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px 8px">
+      <select id="gKind" aria-label="Grubun türü" style="background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px"><option value="cloud">Bulut / sunucular</option><option value="site">Başka bir yer</option></select>
+      <button class="btn line" type="submit">Ekle</button></form>`;
+  if (devs.length) h += `<p class="hint" style="margin:12px 0 4px">Tailscale cihazları hangi grupta görünsün:</p><div class="colors">` +
+    devs.map((n) => `<div class="color-row"><span class="nm">${esc(n.label)}</span><select data-ts="${esc(n.tailscale.name)}" aria-label="${esc(n.label)} grubu" style="background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:4px 6px">${groups.map((g) => `<option value="${esc(g.id)}"${g.id === (tsSite[n.tailscale.name] || def) ? " selected" : ""}>${esc(siteLabel(g))}</option>`).join("")}</select></div>`).join("") + `</div>`;
+  return h;
+}
+function slugId(name, taken) {
+  let b = name.toLocaleLowerCase("tr").replace(/ı/g, "i").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 20) || "grup";
+  let id = b, i = 2;
+  while (taken.has(id)) id = `${b}-${i++}`;
+  return id;
+}
+function bindGroups(put) {
+  const own = STATE.settings.sites || [], groups = (STATE.sites || []).filter((x) => x.type === "group");
+  const def = (groups.find((g) => g.default) || {}).id;
+  $$("[data-ts]", $("#sbody")).forEach((sel) => sel.onchange = () => put({ ts_site: { [sel.dataset.ts]: sel.value === def ? "" : sel.value } }));
+  $("#grpAdd").onsubmit = (e) => {
+    e.preventDefault();
+    const name = $("#gName").value.trim(); if (!name) return;
+    const id = slugId(name, new Set((STATE.sites || []).map((x) => x.id)));
+    put({ sites: [...own, { id, type: "group", kind: $("#gKind").value, name }] });
+  };
+  $$("[data-grp-del]", $("#sbody")).forEach((a) => a.onclick = (e) => {
+    e.preventDefault();
+    if (!confirm("Grup silinsin mi? İçindeki Tailscale cihazları varsayılan gruba geçer.")) return;
+    put({ sites: own.filter((x) => x.id !== a.dataset.grpDel) });
+  });
+}
+/* İlk kurulum sihirbazı: yeni kurulumda (setup_done yoksa) bir kez açılır */
+function renderWizard() {
+  const s = STATE.settings, L = STATE.local || {}, loc = (STATE.sites || []).find((x) => x.type === "local") || {};
+  $("#sbody").innerHTML = `<h2>Nodesk'e hoş geldin</h2>
+    <p class="hint">Birkaç adımda haritanı hazırlayalım. Hepsi sonradan Ayarlar'dan değiştirilebilir.</p>
+    <h3>1 · Bu ağ</h3>
+    <p style="margin:0 0 8px">Pi'nin bağlı olduğu ağ kendiliğinden bulundu: <span class="mono">${esc(L.iface || "?")}</span> · <span class="mono">${esc(L.subnet || "?")}</span> · geçit <span class="mono">${esc(L.gateway || "?")}</span></p>
+    <div class="field"><label for="wName">Bu ağın (evin) adı</label><input id="wName" maxlength="40" value="${esc(siteLabel(loc) || "")}" placeholder="örn. Ev"></div>
+    <h3>2 · Başka ağlar ve sunucular (isteğe bağlı)</h3>
+    <p class="hint">OpenWrt router'ı olan başka bir evi eklemek için Ayarlar &gt; Ajanlar'dan router ajanı ekle; o ev kendi grubu olur. Sunucuların servislerini görmek için sunucu ajanı ekle. Pi hiçbir cihaza bağlanmaz; ajanlar kendileri rapor gönderir.</p>
+    <h3>3 · Gruplar ve Tailscale cihazları</h3>${groupsHtml()}
+    <h3>4 · Erişim</h3>${accessHtml(s)}
+    <div class="actions"><button class="btn primary" id="wDone">Kurulumu bitir</button></div><div class="err-msg" id="sErr"></div>`;
+  const put = async (patch) => {
+    try { STATE.settings = await api("PUT", "/api/settings", patch); STATE = await api("GET", "/api/state"); await load(true); renderWizard(); }
+    catch (e) { $("#sErr").textContent = "Kaydedilemedi: " + e.message; }
+  };
+  $("#wName").onchange = async (e) => { try { await api("PUT", "/api/site?id=" + encodeURIComponent(loc.id), { name: e.target.value.trim() }); await load(true); } catch (err) { $("#sErr").textContent = err.message; } };
+  bindAccess(put, renderWizard);
+  bindGroups(put);
+  $("#wDone").onclick = async () => { try { await api("PUT", "/api/settings", { setup_done: true }); STATE = await api("GET", "/api/state"); closeDrawers(); } catch (e) { $("#sErr").textContent = e.message; } };
+}
 function renderSettings() {
   const s = STATE.settings, sc = STATE.scan, src = STATE.sources || {}, appi = STATE.app || {};
   const live = (DATA && DATA.sources) || {};
@@ -1336,18 +1421,8 @@ function renderSettings() {
   <h3>Kaynaklar</h3>
   <p class="hint">Hiçbiri port taraması yapmaz.</p>
   ${Object.keys(SOURCE_TR).map((k) => `<label class="check" title="${esc(SOURCE_TR[k][1])}"><input type="checkbox" data-src="${k}"${s.sources[k] ? " checked" : ""}> ${esc(SOURCE_TR[k][0])} ${srcLine(k)}</label>`).join("")}
-  <h3>Erişim</h3>
-  <p class="hint">Şu an ${esc({ parola: "parolayla giriş yapmış olarak", pi: "Pi'nin kendisinden", tailnet: "Tailscale üzerinden", herkes: "herkese açık düzenlemeyle" }[AUTH && AUTH.how] || (AUTH && AUTH.how ? AUTH.how + " hesabıyla" : ""))} düzenliyorsun. Ajanların raporları bu ayarlardan etkilenmez (onlar kendi anahtarıyla gelir).</p>
-  <div class="field"><label for="aEdit">Kim düzenleyebilir</label><select id="aEdit">
-    <option value="tailnet"${s.access.edit === "tailnet" ? " selected" : ""}>Tailscale üzerinden bağlananlar (önerilen)</option>
-    <option value="password"${s.access.edit === "password" ? " selected" : ""}>Yalnızca parolayla giriş yapanlar</option>
-    <option value="everyone"${s.access.edit === "everyone" ? " selected" : ""}>Herkes (ev ağındaki misafirler dahil, önerilmez)</option></select></div>
-  <div class="field"><label for="aUsers">İzinli Tailscale hesapları <small>(virgülle; boşsa tailnet'teki herkes)</small></label><input id="aUsers" value="${esc((s.access.ts_users || []).join(", "))}" placeholder="ornek@gmail.com"${s.access.edit === "tailnet" ? "" : " disabled"}></div>
-  <div class="field"><label for="aView">Haritayı kim görebilir</label><select id="aView">
-    <option value="everyone"${s.access.view === "everyone" ? " selected" : ""}>Ağdaki herkes</option>
-    <option value="login"${s.access.view === "login" ? " selected" : ""}>Yalnızca düzenleyebilenler</option></select></div>
-  <form id="pwForm" class="row"><input id="aPw" type="password" minlength="8" autocomplete="new-password" placeholder="${AUTH && AUTH.password ? "yeni parola" : "parola belirle (en az 8 karakter)"}" aria-label="Parola" style="flex:1;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px 8px">
-    <button class="btn line" type="submit">${AUTH && AUTH.password ? "Parolayı değiştir" : "Parola belirle"}</button></form>
+  <h3>Gruplar</h3>${groupsHtml()}
+  <h3>Erişim</h3>${accessHtml(s)}
   <h3>Renkler</h3>
   <p class="hint">Kartların rol renkleri. Hazır bir tema seç ya da tek tek değiştir; "renksiz" rol nötr görünür. Tüm cihazlarda aynı görünür.</p>
   <div class="chips">${Object.keys(PALETTES).map((p) => `<button class="chip" data-pal="${esc(p)}" aria-pressed="${Object.keys(CAT_TR).every((k) => (PALETTES[p][k] || "") === (COLORS[k] || ""))}">${esc(p)}</button>`).join("")}</div>
@@ -1372,7 +1447,7 @@ function renderSettings() {
   $("#sbody").innerHTML = html;
 
   const put = async (patch) => {
-    try { STATE.settings = await api("PUT", "/api/settings", patch); await load(true); renderSettings(); }
+    try { STATE.settings = await api("PUT", "/api/settings", patch); STATE = await api("GET", "/api/state"); await load(true); renderSettings(); }
     catch (e) { $("#sErr").textContent = "Kaydedilemedi: " + e.message; }
   };
   $("#sAuto").onchange = (e) => put({ auto: e.target.checked });
@@ -1381,14 +1456,8 @@ function renderSettings() {
   $("#sAgentUpd").onchange = (e) => put({ agent_auto_update: e.target.checked });
   $$("[data-src]", $("#sbody")).forEach((c) => c.onchange = () => put({ sources: { [c.dataset.src]: c.checked } }));
   $$("[data-pal]", $("#sbody")).forEach((b) => b.onclick = () => put({ colors: PALETTES[b.dataset.pal] }));
-  $("#aEdit").onchange = (e) => put({ access: { edit: e.target.value } });
-  $("#aUsers").onchange = (e) => put({ access: { ts_users: e.target.value.split(",") } });
-  $("#aView").onchange = (e) => put({ access: { view: e.target.value } });
-  $("#pwForm").onsubmit = async (e) => {
-    e.preventDefault();
-    try { await api("PUT", "/api/password", { password: $("#aPw").value }); AUTH = await api("GET", "/api/auth"); renderSettings(); }
-    catch (err) { $("#sErr").textContent = "Parola kaydedilemedi: " + err.message; }
-  };
+  bindAccess(put, renderSettings);
+  bindGroups(put);
   $$("[data-col]", $("#sbody")).forEach((c) => {
     c.oninput = () => document.documentElement.style.setProperty("--c-" + c.dataset.col, c.value);   // anında önizleme
     c.onchange = () => put({ colors: { [c.dataset.col]: c.value } });
@@ -1425,8 +1494,8 @@ function agentHtml(a) {
     <button class="btn line" data-agent-show="${esc(a.name)}">${openAgent === a.name ? "Gizle" : "Kurulum"}</button><button class="btn danger" data-agent-del="${esc(a.name)}" aria-label="Sil">Sil</button></header>`;
   if (openAgent === a.name) {
     const c = a.commands || {};
-    if (c.laptop) h += `<p class="hint" style="margin:8px 0 2px">Laptop'tan (önerilen):</p><pre>${esc(c.laptop)}</pre><button class="btn line" data-copy>Kopyala</button>`;
-    h += `<p class="hint" style="margin:8px 0 2px">${a.kind === "router" ? "Ya da router'da:" : "O sunucuda:"}</p><pre>${esc(c.direct)}</pre><button class="btn line" data-copy>Kopyala</button>`;
+    h += `<p class="hint" style="margin:8px 0 2px">${a.kind === "router" ? "Router'da (OpenWrt):" : "O sunucuda:"}</p><pre>${esc(c.direct)}</pre><button class="btn line" data-copy>Kopyala</button>`;
+    if (c.ssh) h += `<p class="hint" style="margin:8px 0 2px">Ya da router'a SSH ile girebildiğin bir bilgisayardan (ROUTER_IP yerine router'ın adresi):</p><pre>${esc(c.ssh)}</pre><button class="btn line" data-copy>Kopyala</button>`;
     h += `<p class="hint" style="margin-top:6px">Tekrar çalıştırmak güvenli; güncelleme için de aynı komut kullanılır.</p>`;
   }
   return h + `</div>`;
@@ -1652,7 +1721,10 @@ function openLogin(msg) {
     catch (err) { $("#lErr").textContent = err.message; }
   };
 }
-(async () => { await probeApi(); await load(true); })();
+(async () => {
+  await probeApi(); await load(true);
+  if (CAN_EDIT && STATE && STATE.settings.setup_done === false && DATA) { openDrawer("settings"); renderWizard(); }
+})();
 setInterval(() => load(false), 30000);
 setInterval(probeApi, 60000);
 </script>

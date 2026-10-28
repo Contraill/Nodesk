@@ -7,7 +7,7 @@
 #   sudo nodesk status               durum özeti
 #   sudo nodesk run                  şimdi tara
 #   sudo nodesk logs [N]             son N günlük satırı
-#   sudo nodesk router-script        router ajanı kurulum scripti (Laptop'tan kullanılır)
+#   sudo nodesk router-script        router ajanı kurulum scripti (router'da sh ile çalıştırılır)
 #   sudo nodesk agent add <ad>       sunucu ajanı ekle, kurulum komutunu göster
 #   sudo nodesk agent list|remove    ajanları listele / sil
 #   sudo nodesk password             düzenleme parolasını belirle (ev ağından düzenlemek için)
@@ -24,8 +24,6 @@ PORT=8088
 API="http://127.0.0.1:8089"
 BRANCH="${NODESK_BRANCH:-main}"
 UNIT_DIR="${NODESK_UNIT_DIR:-/etc/systemd/system}"
-PI_TS_IP_FALLBACK="100.64.0.1"
-ROUTER_TS_IP="100.64.0.2"
 
 if [ -t 1 ]; then G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; B=$'\e[1m'; N=$'\e[0m'; else G=''; Y=''; R=''; B=''; N=''; fi
 ok()   { printf '%s✓%s %s\n' "$G" "$N" "$*"; }
@@ -204,8 +202,7 @@ setup_web() {
 }
 
 router_cmd() {
-    local ip; ip=$(pi_ip); ip=${ip:-$PI_TS_IP_FALLBACK}
-    echo "    ssh pi@$ip sudo nodesk router-script | ssh root@$ROUTER_TS_IP sh"
+    echo "    Haritada Ayarlar > Ajanlar > router > Kurulum (komutu router'da çalıştır)"
 }
 
 check_router() {
@@ -296,7 +293,7 @@ first_run() {
 }
 
 summary() {
-    local ip; ip=$(pi_ip); ip=${ip:-$PI_TS_IP_FALLBACK}
+    local ip; ip=$(pi_ip); ip=${ip:-$(hostname -I | awk '{print $1}')}
     step "Hazır: Nodesk $(app_version) ($(app_rev))"
     echo "  Harita: http://$ip:$PORT   (evde: http://$(hostname -I | awk '{print $1}'):$PORT)"
 }
@@ -429,7 +426,7 @@ cmd_uninstall() {
     rm -f /usr/local/bin/nodesk
     echo "Kalanlar:"
     echo "  Pi     : sudo rm -rf $NODESK_HOME"
-    echo "  Router : ssh root@$ROUTER_TS_IP \"sed -i '/nodesk-agent/d' /etc/crontabs/root; /etc/init.d/cron restart; rm -f /usr/sbin/nodesk-agent /usr/sbin/topo-collect /etc/nodesk-agent.conf\""
+    echo "  Router : (router'da) /etc/init.d/nodesk-listen disable; /etc/init.d/nodesk-listen stop; sed -i '/nodesk-agent/d' /etc/crontabs/root; /etc/init.d/cron restart; rm -f /etc/init.d/nodesk-listen /usr/sbin/nodesk-listen /usr/sbin/nodesk-agent /usr/sbin/topo-collect /etc/nodesk-agent.conf"
     echo "  Sunucu : systemctl disable --now nodesk-agent.timer; rm -f /etc/systemd/system/nodesk-agent.* /usr/local/sbin/nodesk-agent; rm -rf /etc/nodesk"
 }
 

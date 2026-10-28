@@ -293,7 +293,8 @@ def install_commands(kind, base, name, token):
     url = install_url(base, name, token)
     if kind == "router":
         return {
-            "laptop": "ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh",
             "direct": f"uclient-fetch -qO- '{url}' | sh",
+            # router'a SSH ile girebilen herhangi bir bilgisayardan (adres: router'ın IP'si)
+            "ssh": f"ssh root@ROUTER_IP \"uclient-fetch -qO- '{url}' | sh\"",
         }
     return {"direct": f"curl -fsSL '{url}' | sudo sh"}

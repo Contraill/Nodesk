@@ -1,10 +1,12 @@
 #VERSION
-8
+9
 #ADDR
 1: lo    inet 127.0.0.1/8 scope host lo\       valid_lft forever preferred_lft forever
 7: br-lan    inet 192.168.77.1/24 brd 192.168.77.255 scope global br-lan\       valid_lft forever preferred_lft forever
 8: wan    inet 192.168.1.100/24 brd 192.168.1.255 scope global wan\       valid_lft forever preferred_lft forever
 12: tailscale0    inet 100.64.0.2/32 scope global tailscale0\       valid_lft forever preferred_lft forever
+#ROUTE
+default via 192.168.1.1 dev wan  src 192.168.1.100 
 #LEASES
 1793126941 1c:af:4a:55:4b:2c 192.168.77.209 Samsung 01:1c:af:4a:55:4b:2c
 1793127000 aa:bb:cc:00:11:22 192.168.77.150 * 01:aa:bb:cc:00:11:22

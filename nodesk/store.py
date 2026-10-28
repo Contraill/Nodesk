@@ -14,7 +14,7 @@ import secrets
 import threading
 import tomllib
 
-from . import util
+from . import sites as sitesmod, util
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -129,6 +129,16 @@ class Store:
             if "ts_users" in acc:
                 users = acc["ts_users"] if isinstance(acc["ts_users"], list) else str(acc["ts_users"]).split(",")
                 cur["access"]["ts_users"] = sorted({str(u).strip().lower()[:100] for u in users if str(u).strip()})[:20]
+            if "sites" in patch:
+                cur["sites"] = sitesmod.validate(patch["sites"])
+            for k, v in (patch.get("ts_site") or {}).items():   # Tailscale cihazı -> grup ("" = varsayılan)
+                k = str(k).lower()[:60]
+                if v:
+                    cur.setdefault("ts_site", {})[k] = str(v)[:24]
+                else:
+                    cur.setdefault("ts_site", {}).pop(k, None)
+            if "setup_done" in patch:
+                cur["setup_done"] = bool(patch["setup_done"])
             for k, v in (patch.get("colors") or {}).items():
                 if k not in COLOR_CATEGORIES or not (v == "" or HEX_COLOR.match(str(v))):
                     raise ValueError(f"geçersiz renk: {k}={v}")
@@ -199,8 +209,24 @@ class Store:
             util.write_json(self.p.overrides, o)
             return clean
 
+    def sites(self):
+        """Ayarlardaki gruplar + kayıtlı router ajanları (sites.resolve)."""
+        routers = [n for n, a in self.agents()["agents"].items() if a["kind"] == "router"]
+        return sitesmod.resolve(self.settings().get("sites"), routers)
+
+    def migrate_sites(self, cfg, fresh):
+        """Grup yapısı ayarlarda yoksa eski config.toml'dan bir kez oluştur."""
+        with self.lock:
+            saved = util.read_json(self.p.settings, {}) or {}
+            if "sites" in saved:
+                return False
+            saved["sites"], saved["ts_site"] = sitesmod.from_config(cfg)
+            saved.setdefault("setup_done", not fresh)   # yeni kurulumda arayüz sihirbazı açar
+            util.write_json(self.p.settings, saved)
+            return True
+
     def set_site(self, site_id, patch):
-        if site_id not in ("ev1", "ev2", "oracle", "mobile"):
+        if site_id not in {s["id"] for s in self.sites()}:
             raise ValueError("bilinmeyen grup")
         with self.lock:
             o = self.overrides()

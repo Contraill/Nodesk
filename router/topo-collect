@@ -3,16 +3,20 @@
 # /usr/sbin/nodesk-agent tarafından 5 dakikada bir çalıştırılır; çıktısı Pi'ye gönderilir.
 # Hiçbir ayarı değiştirmez; sadece okur ve yazdırır.
 #
-# İlk kurulum (bir kez) Laptop'tan; sonraki sürümleri ajan Pi'den kendisi alır:
-#   ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh
+# İlk kurulum (bir kez): haritada Ayarlar > Ajanlar > Kurulum komutu, router'da çalıştırılır.
+# Sonraki sürümleri ajan Pi'den kendisi alır.
 
-TOPO_VERSION=8
+TOPO_VERSION=9
 
 echo "#VERSION"
 echo "$TOPO_VERSION"
 
 echo "#ADDR"
 ip -4 -o addr show 2>/dev/null
+
+echo "#ROUTE"
+# varsayılan rota: modemin (WAN tarafındaki geçidin) adresi buradan bulunur
+ip -4 route show default 2>/dev/null
 
 echo "#LEASES"
 cat /tmp/dhcp.leases 2>/dev/null

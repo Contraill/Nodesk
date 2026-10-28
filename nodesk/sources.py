@@ -92,6 +92,19 @@ def self_ifaces(r):
     return res
 
 
+def default_route(r):
+    """Varsayılan rota (en düşük metrik) -> {"dev", "gateway"} ya da None."""
+    raw = r.cmd("route", "ip_route.json", ["ip", "-j", "-4", "route", "show", "default"])
+    try:
+        routes = [x for x in json.loads(raw or "[]") if x.get("dev") and x.get("gateway")]
+    except json.JSONDecodeError:
+        return None
+    if not routes:
+        return None
+    best = min(routes, key=lambda x: x.get("metric", 0))
+    return {"dev": best["dev"], "gateway": best["gateway"]}
+
+
 def arpscan(r, iface):
     """Aktif ARP taraması (sadece yerel ağ, ~256 ARP paketi)."""
     raw = r.cmd("arp", "arpscan_ev1.txt",

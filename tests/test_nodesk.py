@@ -22,9 +22,9 @@ sys.path.insert(0, ROOT)
 NOW = "2026-10-27T14:00:00+00:00"
 os.environ["NODESK_NOW"] = NOW
 os.environ["NODESK_OUI"] = os.path.join(FIX, "ieee-oui.txt")
-os.environ["NODESK_CONFIG"] = os.path.join(ROOT, "config.example.toml")
+os.environ["NODESK_CONFIG"] = os.path.join(FIX, "config.toml")   # HomeNet benzeri örnek ağ
 
-from nodesk import agents, model, passive, probe, server, sources, store, util  # noqa: E402
+from nodesk import agents, model, passive, probe, server, sites, sources, store, util  # noqa: E402
 
 
 def make_home():
@@ -414,6 +414,51 @@ class ProbeTest(unittest.TestCase):
                          "başka adrese gitmez")
 
 
+class GenericSitesTest(unittest.TestCase):
+    """config.toml'da hiçbir ağ bilgisi yokken: her şey kendiliğinden bulunur."""
+
+    def test_router_agent_becomes_site(self):
+        rd = lambda name: open(os.path.join(FIX, name), encoding="utf-8").read()
+        raw = {"ts": json.loads(rd("tailscale.json")), "hostname": "pi5",
+               "ifaces": [{"ifname": "eth0", "ip": "10.0.0.2", "prefix": 24, "mac": "88:a2:9e:35:f8:b1"}],
+               "route": {"dev": "eth0", "gateway": "10.0.0.1"},
+               "arp": [{"ip": "10.0.0.1", "mac": "6c:11:ba:f9:55:ab", "vendor": None}], "neigh": [],
+               "reports": {"evim": {"kind": "router", "received": NOW, "sections": util.parse_sections(rd("router.txt"))}}}
+        settings = json.loads(json.dumps(store.DEFAULT_SETTINGS))
+        allsites = sites.resolve(None, ["evim"])
+        data, _ = model.build(raw, {}, settings, {"devices": {}}, {}, {}, util.parse_iso(NOW), {"sites": allsites})
+        ids = {n["id"]: n for n in data["nodes"]}
+        self.assertEqual([x["id"] for x in data["sites"]][:2], ["ev1", "evim"])
+        self.assertEqual(ids["self"]["label"], "pi5", "Pi'nin adı host adından")
+        self.assertEqual(ids["mac:6c:11:ba:f9:55:ab"]["kind"], "modem", "yerel geçit varsayılan rotadan")
+        r = ids["router:evim"]
+        self.assertEqual(r["site"], "evim")
+        self.assertEqual(r["parent"], "mac:c0:49:43:1c:cc:12", "modem router'ın varsayılan rotasından")
+        self.assertEqual(ids["mac:c0:49:43:1c:cc:12"]["kind"], "modem")
+        self.assertEqual(ids["mac:1c:af:4a:55:4b:2c"]["parent"], "router:evim")
+        self.assertEqual(r["tailscale"]["name"], "home-router", "Tailscale adı raporundaki tailscale0'dan")
+        self.assertNotIn("ts:home-router", ids, "router iki kez görünmez")
+        self.assertEqual(ids["ts:cloud-arm"]["site"], "mobile", "atanmamış Tailscale cihazı varsayılan grupta")
+
+    def test_migration_and_validation(self):
+        cfg = {"ev1": {"name": "Ana ev", "gateway_ip": "192.168.44.1"}, "ev2": {"modem_ip": "192.168.1.1"},
+               "oracle": {"name": "Bulut"}, "tailscale": {"site_of": {"Cloud-Arm": "oracle"}}}
+        ss, ts_site = sites.from_config(cfg)
+        self.assertEqual([x["id"] for x in ss], ["ev1", "ev2", "oracle", "mobile"])
+        self.assertEqual(ss[1]["agent"], "router")
+        self.assertEqual(ts_site, {"cloud-arm": "oracle"})
+        self.assertEqual(len(sites.resolve(ss, ["router"])), 4, "ajanı zaten grubu olan router eklenmez")
+        with self.assertRaises(ValueError):
+            sites.validate([{"id": "a", "type": "group"}])                 # yerel ağ yok
+        with self.assertRaises(ValueError):
+            sites.validate([{"id": "ev1", "type": "local"}, {"id": "ev1", "type": "group"}])
+        with self.assertRaises(ValueError):
+            sites.validate([{"id": "ev1", "type": "local"}, {"id": "../x", "type": "group"}])
+        ok = sites.validate([{"id": "ev1", "type": "local", "name": "Ev", "evil": 1},
+                             {"id": "bulut", "type": "group", "kind": "cloud"}])
+        self.assertNotIn("evil", ok[0])
+
+
 class FileSafetyTest(unittest.TestCase):
     def test_corrupt_json_uses_backup(self):
         d = tempfile.mkdtemp()
@@ -642,7 +687,7 @@ class ApiTest(unittest.TestCase):
 
     def test_ingest_asks_old_agent_to_update(self):
         token = store.Store(store.Paths(self.home)).agents()["agents"]["router"]["token"]
-        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n8", "#VERSION\n2", 1)
+        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n9", "#VERSION\n2", 1)
         st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=old.encode(), ctype="text/plain")
         self.assertEqual((st, body.strip()), (200, "ok update"))
         cur = open(os.path.join(FIX, "router.txt")).read()
@@ -725,7 +770,7 @@ class ScriptsTest(unittest.TestCase):
             s = agents.installer(kind, "http://100.64.0.1:8088", "x", "tok")
             r = subprocess.run(["sh", "-n"], input=s, text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(agents.topo_version(), "8")
+        self.assertEqual(agents.topo_version(), "9")
 
     def test_router_installer_sandbox(self):
         """Router kurulum scriptini sahte kök dizinde BusyBox ile iki kez çalıştır."""

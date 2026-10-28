@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -37,6 +38,9 @@ class App:
         self.auth = auth.Auth(self.paths.auth)
         self.fixtures = fixtures
         self.cfg = store.load_config(self.paths)
+        # Grup yapısı (sites.py): eski config.toml'dan bir kez; yeni kurulumda sihirbaz açılır
+        if self.store.migrate_sites(self.cfg, fresh=not os.path.exists(self.paths.state)):
+            log("gruplar ayarlara taşındı (config.toml -> settings.json)")
         oui_path = os.environ.get("NODESK_OUI") or self.cfg.get("general", {}).get(
             "oui_file", "/usr/share/arp-scan/ieee-oui.txt")
         self.oui = util.load_oui(oui_path)
@@ -48,9 +52,8 @@ class App:
         self.wake = threading.Event()
         self.scan_requested = False
         self.stop = threading.Event()
-        ev1 = self.cfg.get("ev1", {})
-        self.passive = passive.Passive(self.paths.passive, ev1.get("interface", "eth0"),
-                                       ev1.get("subnet"),
+        loc = self.local_site()
+        self.passive = passive.Passive(self.paths.passive, self.local_iface(), loc.get("subnet"),
                                        self.cfg.get("general", {}).get("forget_after_days", 14))
         if fixtures and os.path.exists(os.path.join(fixtures, "passive.json")):
             self.passive.data = util.read_json(os.path.join(fixtures, "passive.json"), {})
@@ -128,16 +131,26 @@ class App:
                 ip = None
         return f"http://{ip or '100.64.0.1'}:8088"
 
+    def local_site(self):
+        return next(s for s in self.store.sites() if s["type"] == "local")
+
+    def local_iface(self, r=None):
+        """Yerel ağ arayüzü: ayarda yoksa varsayılan rotanın arayüzü (eth0, wlan0, end0...)."""
+        route = sources.default_route(r or sources.Runner(self.fixtures)) or {}
+        return self.local_site().get("interface") or route.get("dev") or "eth0"
+
     # ------------------------------------------------------------ toplama
     def gather(self, settings):
         src = settings["sources"]
         r = sources.Runner(self.fixtures)
         raw = {"time": util.iso(util.utcnow())}
-        ev1 = self.cfg.get("ev1", {})
-        iface = ev1.get("interface", "eth0")
+        loc = self.local_site()
+        raw["route"] = sources.default_route(r)
+        iface = loc.get("interface") or (raw["route"] or {}).get("dev") or "eth0"
+        raw["hostname"] = socket.gethostname()
         raw["ts"] = sources.tailscale(r) if src["tailscale"] else None
         raw["ifaces"] = sources.self_ifaces(r)
-        if not ev1.get("subnet"):
+        if not loc.get("subnet"):
             for i in raw["ifaces"]:
                 if i["ifname"] == iface:
                     self.passive.set_subnet(f"{i['ip']}/{i['prefix']}")
@@ -272,7 +285,8 @@ class App:
             now = util.utcnow()
             data, state = model.build(raw, self.cfg, settings, self.store.overrides(), state,
                                       self.oui, now, {"topo_expected": agents.topo_version(),
-                                                      "icon_files": dict(self.icon_files)})
+                                                      "icon_files": dict(self.icon_files),
+                                                      "sites": self.store.sites()})
             wanted = data.pop("icon_wanted", [])
             if wanted and (not self.fixtures or os.environ.get("NODESK_FETCH_ICONS")):
                 self.fetch_icons(wanted)
@@ -607,6 +621,11 @@ class Handler(BaseHTTPRequestHandler):
             "types": list(store.DEVICE_TYPES),
             "intervals": list(store.INTERVALS),
             "public_url": app.public_url(),
+            "sites": app.store.sites(),
+            # sihirbazda gösterilir: kendiliğinden bulunan yerel ağ
+            "local": {"iface": app.passive.iface, "subnet": str(app.passive.subnet or "") or None,
+                      "gateway": ((app.raw or {}).get("route") or {}).get("gateway"),
+                      "hostname": (app.raw or {}).get("hostname")},
         }
 
 

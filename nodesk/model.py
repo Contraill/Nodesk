@@ -9,7 +9,7 @@ import ipaddress
 import re
 import struct
 
-from . import passive, probe, sources, util
+from . import passive, probe, sites as sitesmod, sources, util
 
 ROUTER_FRESH_MIN = 15      # router ajanı 5 dakikada bir rapor verir
 AGENT_FRESH_MIN = 20
@@ -381,10 +381,18 @@ def age_min(received, now):
 
 def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
     extra = extra or {}
-    ev1, ev2 = cfg.get("ev1", {}), cfg.get("ev2", {})
+    # Gruplar (sites.py): tek yerel ağ, router ajanı başına bir grup, Tailscale grupları
+    allsites = extra.get("sites") or sitesmod.resolve(sitesmod.from_config(cfg)[0], ["router"])
+    loc = next(x for x in allsites if x["type"] == "local")
+    LID = loc["id"]
+    routers = [x for x in allsites if x["type"] == "router"]
+    groups = [x for x in allsites if x["type"] == "group"]
+    default_grp = next((x for x in groups if x.get("default")), groups[-1] if groups else loc)
     window = settings.get("online_window_min", 15)
     forget_days = cfg.get("general", {}).get("forget_after_days", 14)
-    site_of = {k.lower(): v for k, v in cfg.get("tailscale", {}).get("site_of", {}).items()}
+    site_of = {k.lower(): v for k, v in (settings["ts_site"] if "ts_site" in settings
+                                          else sitesmod.from_config(cfg)[1]).items()}
+    site_of = {k: v for k, v in site_of.items() if v in {x["id"] for x in allsites}}
     cfg_dev = {util.norm_mac(k): v for k, v in cfg.get("devices", {}).items() if util.norm_mac(k)}
     cfg_apps = cfg.get("apps", {})
     ov_dev, ov_apps = overrides.get("devices", {}), overrides.get("apps", {})
@@ -396,12 +404,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 (casaos.get(p) or {}).get("title") or p)
 
     ov_sites = overrides.get("sites", {})
-    sites = [
-        {"id": "ev1", "name": ev1.get("name", "Ev 1")},
-        {"id": "ev2", "name": ev2.get("name", "Ev 2")},
-        {"id": "oracle", "name": cfg.get("oracle", {}).get("name", "Oracle Cloud")},
-        {"id": "mobile", "name": cfg.get("mobile", {}).get("name", "Uzak / Mobil")},
-    ]
+    sites = [{"id": x["id"], "name": x["name"], "type": x["type"]} for x in allsites]
     for st_ in sites:
         st_["auto_name"] = st_["name"]
         st_["name"] = (ov_sites.get(st_["id"]) or {}).get("name") or st_["name"]
@@ -420,16 +423,17 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             if info["ip"]:
                 ts_by_ip[info["ip"]] = info["name"]
 
-    # ------------------------------------------------ Ev 1
-    iface = ev1.get("interface", "eth0")
+    # ------------------------------------------------ yerel ağ (Pi'nin kendi ağı)
+    route = raw.get("route") or {}
+    iface = loc.get("interface") or route.get("dev") or "eth0"
     ifaces = raw.get("ifaces") or []
     self_macs = {i["mac"] for i in ifaces}
-    subnet = ev1.get("subnet")
+    subnet = loc.get("subnet")
     if not subnet:
         for i in ifaces:
             if i["ifname"] == iface:
                 subnet = str(ipaddress.ip_network(f"{i['ip']}/{i['prefix']}", strict=False))
-    gw_ip = ev1.get("gateway_ip", "192.168.44.1")
+    gw_ip = loc.get("gateway_ip") or route.get("gateway")
 
     obs = {}
 
@@ -519,7 +523,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
     pseudo, retired = {}, set()
     # IP'nin son bilinen sahibi (geçmiş turlar): extender arkasına geçen cihazın kimliği kalsın
     hist = {ip: nid[4:] for nid, st in state.items() if nid.startswith("mac:") and nid[4:] not in obs
-            and (st.get("snapshot") or {}).get("site") == "ev1"
+            and (st.get("snapshot") or {}).get("site") == LID
             for ip in (st.get("snapshot") or {}).get("ips") or []}
     bridges = [m for m, o in obs.items() if len(o["ips"]) >= 2 and bridge_type(m, o) == "ap"]
     owner = {ip: m for m, o in obs.items() if m not in bridges for ip in o["ips"]}
@@ -559,7 +563,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         o["names"] = {k: v for k, v in (ipinfo.get(own) or {}).items() if k in NAME_KEYS}
     for ip, p in pseudo.items():
         seen[f"ip:{ip}"] = dict(
-            ips=[ip], site="ev1", parent_hint=f"mac:{p['bridge']}", online=p["live"],
+            ips=[ip], site=LID, parent_hint=f"mac:{p['bridge']}", online=p["live"],
             via=["extender"], names=p["names"], vendor=None,
             note="Extender (MAC-NAT) üzerinden bağlı; gerçek MAC adresi cihaz ağa yeniden "
                  "bağlandığında (DHCP) öğrenilir ve kalıcı kimliğe geçer.")
@@ -575,10 +579,10 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         ips = recent or ips[:1]
         is_gw = gw_ip in o["ips"]
         seen[f"mac:{mac}"] = dict(
-            mac=mac, vendor=vendor, ips=sorted(ips, key=util.ip_sort_key), site="ev1",
+            mac=mac, vendor=vendor, ips=sorted(ips, key=util.ip_sort_key), site=LID,
             kind="modem" if is_gw else None,
-            label=ev1.get("modem_name") if is_gw else None,
-            parent_hint=None if is_gw else (f"mac:{o['bridge']}" if o.get("bridge") else "ev1-gw"),
+            label=loc.get("modem_name") if is_gw else None,
+            parent_hint=None if is_gw else (f"mac:{o['bridge']}" if o.get("bridge") else f"{LID}-gw"),
             is_root=is_gw, online=o["online"], via=sorted(o["via"]), names=o["names"],
             aliases=o.get("aliases"),
             now=any(arp_by_ip.get(ip) in (mac, o.get("bridge")) for ip in o["live"]))
@@ -595,21 +599,14 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
     containers = raw.get("docker")
     pi_services = docker_services(containers, app_name) + system_services(raw.get("host_ports"))
     seen["self"] = dict(
-        label=ev1.get("server_name", "home-pi"), kind="server", site="ev1",
+        label=loc.get("server_name") or raw.get("hostname") or "Nodesk", kind="server", site=LID,
         ips=[i["ip"] for i in ifaces], macs=sorted(self_macs),
         ifaces=[f"{i['ifname']} {i['ip']} {i['mac']}" for i in ifaces],
-        tailscale=ts_nodes.get(ts_self), services=pi_services, parent_hint="ev1-gw",
+        tailscale=ts_nodes.get(ts_self), services=pi_services, parent_hint=f"{LID}-gw",
         online=True, via=["self"])
 
-    # ------------------------------------------------ Ev 2 (router ajanı)
+    # ------------------------------------------------ exit node bağları (Pi tarafı)
     reports = raw.get("reports") or {}
-    router_rep = reports.get("router")
-    router_age = age_min(router_rep.get("received"), now) if router_rep else None
-    router_sec = router_rep.get("sections") if router_rep else None
-    router_fresh = bool(router_sec) and router_age is not None and router_age <= ROUTER_FRESH_MIN
-    router_ts_name = ev2.get("router_ts_name", "home-router")
-    router_ts = ts_nodes.get(router_ts_name)
-    modem2_ip = ev2.get("modem_ip", "192.168.1.1")
     # Exit node kullanımı: kullanan cihazın kendi seçimi ya da exit node'un bağlantı tablosu
     overlay = []
     ex_self = ((ts or {}).get("ExitNodeStatus") or {}).get("ID")
@@ -623,79 +620,103 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 overlay.append({"from_ts": ts_by_ip[ip], "to": host})
 
     exit_clients("self", list(raw.get("exit_clients") or {}))
-    router_kw = dict(label=ev2.get("router_name", "home-router"), kind="router", site="ev2",
-                     tailscale=router_ts, parent_hint="ev2-gw", via=["tailscale"],
-                     online=bool(router_ts and router_ts["online"]) or router_fresh,
-                     agent={"name": "router", "received": router_rep and router_rep.get("received"),
-                            "fresh": router_fresh})
-    if router_sec and router_fresh and settings["sources"].get("router", True):
-        ips = []
-        for line in router_sec.get("ADDR", []):
-            m = re.search(r"\d+:\s+(\S+)\s+inet\s+(\S+)/", line)
-            if m and m.group(1) != "lo" and not m.group(1).startswith("tailscale"):
-                ips.append(m.group(2))
-        router_kw["ips"] = ips
-        router_kw["via"] = ["tailscale", "ajan"]
-        heard = raw.get("passive_ev2") or {}
 
-        def rnames(mac):
-            return {k: v for k, v in (heard.get(mac) or {}).items() if k in NAME_KEYS and v}
-        for e in sources.parse_arpscan("\n".join(router_sec.get("ARPSCAN_WAN", []))):
-            is_gw = e["ip"] == modem2_ip
-            seen[f"mac:{e['mac']}"] = dict(
-                mac=e["mac"], vendor=e["vendor"] or util.vendor_for(e["mac"], oui),
-                ips=[e["ip"]], site="ev2", kind="modem" if is_gw else None,
-                label=ev2.get("modem_name") if is_gw else None,
-                parent_hint=None if is_gw else "ev2-gw", is_root=is_gw, online=True, now=True,
-                via=["router arp"], names=rnames(e["mac"]))
-        lan = {}
-        for line in router_sec.get("LEASES", []):
-            p = line.split()
-            if len(p) >= 4 and util.norm_mac(p[1]):
-                lan[util.norm_mac(p[1])] = {"ip": p[2], "hostname": None if p[3] == "*" else p[3],
-                                            "reachable": False}
-        for line in router_sec.get("NEIGH", []):
-            m = re.match(r"(\S+) dev (\S+) lladdr (\S+) .*?(REACHABLE|STALE|DELAY|PROBE|PERMANENT)",
-                         line)
-            if not m or m.group(2) != ev2.get("lan_dev", "br-lan"):
-                continue
-            mac = util.norm_mac(m.group(3))
-            if mac:
-                d = lan.setdefault(mac, {"ip": m.group(1), "hostname": None})
-                d["reachable"] = True
-        for mac, d in lan.items():
-            names = {**rnames(mac), **({"dhcp_name": d["hostname"]} if d["hostname"] else {})}
-            seen[f"mac:{mac}"] = dict(
-                mac=mac, vendor=util.vendor_for(mac, oui), ips=[d["ip"]], site="ev2",
-                parent_hint="router", online=bool(d.get("reachable")), now=bool(d.get("reachable")),
-                names=names,
-                via=["router dhcp"] + (["router arp"] if d.get("reachable") else []),
-                note=None if d.get("reachable") else
-                "DHCP kirası var ama şu an router'ın ARP tablosunda yok")
-        if router_sec.get("LISTEN") is not None:
-            router_kw["services"] = system_services(parse_proc_listen(router_sec.get("LISTEN")))
-        ex = ((router_sec.get("EXITNODE") or [""])[0] or "").strip()
-        if ex and ex in ts_by_id:
-            overlay.append({"from": "router", "to_ts": ts_by_id[ex]})
-        exit_clients("router", router_sec.get("EXITCLIENTS"))
-    seen["router"] = router_kw
-    if settings["sources"].get("router", True):
-        if not router_rep or not router_rep.get("received"):
-            problems.append("Router ajanı henüz rapor göndermedi. Laptop'tan: "
-                            "ssh pi@100.64.0.1 sudo nodesk router-script | "
-                            "ssh root@100.64.0.2 sh")
-        elif not router_fresh:
-            problems.append(f"Router ajanının son raporu {round(router_age)} dakika önce geldi; "
-                            "Ev 2 son bilinen durumuyla gösteriliyor.")
-    router_script = {
-        "expected": extra.get("topo_expected"),
-        "installed": ((router_sec or {}).get("VERSION") or [None])[0] if router_sec else None,
-    }
-    router_script["ok"] = (None if router_script["installed"] is None
-                           else router_script["installed"] == router_script["expected"])
-    # 3 ve sonrası kendini günceller; daha eskisinin bir kez elle güncellenmesi gerekir
-    router_script["self_update"] = (router_script["installed"] or "0").isdigit() and \
-        int(router_script["installed"] or 0) >= 3
+    # ------------------------------------------------ router grupları (her OpenWrt ajanı)
+    heard = raw.get("passive_ev2") or {}
+
+    def rnames(mac):
+        return {k: v for k, v in (heard.get(mac) or {}).items() if k in NAME_KEYS and v}
+
+    router_ids, router_fresh_of, modem_ip_of, router_script = {}, {}, {}, None
+    for rs in routers:
+        agent, SID = rs["agent"], rs["id"]
+        rid = "router" if agent == "router" else f"router:{agent}"
+        rep_ = reports.get(agent)
+        age = age_min(rep_.get("received"), now) if rep_ else None
+        sec = rep_.get("sections") if rep_ else None
+        fresh = bool(sec) and age is not None and age <= ROUTER_FRESH_MIN
+        router_fresh_of[SID] = fresh
+        # router'ın Tailscale adı: ayarda yoksa raporundaki tailscale0 adresinden
+        ts_name = rs.get("router_ts_name")
+        for line in (sec or {}).get("ADDR", []):
+            m = re.search(r"\d+:\s+(tailscale\S*)\s+inet\s+(\S+)/", line)
+            if m and not ts_name:
+                ts_name = ts_by_ip.get(m.group(2))
+        router_ids[ts_name] = rid
+        # modem: ayarda yoksa router'ın varsayılan rotasındaki geçit
+        mip = rs.get("modem_ip")
+        for line in (sec or {}).get("ROUTE", []):
+            m = re.search(r"default via (\S+)", line)
+            if m and not mip:
+                mip = m.group(1)
+        modem_ip_of[SID] = mip
+        rts = ts_nodes.get(ts_name)
+        kw = dict(label=rs.get("router_name") or ts_name or agent, kind="router", site=SID,
+                  tailscale=rts, parent_hint=f"{SID}-gw", via=["tailscale"],
+                  online=bool(rts and rts["online"]) or fresh,
+                  agent={"name": agent, "received": rep_ and rep_.get("received"), "fresh": fresh})
+        if sec and fresh and settings["sources"].get("router", True):
+            ips = []
+            for line in sec.get("ADDR", []):
+                m = re.search(r"\d+:\s+(\S+)\s+inet\s+(\S+)/", line)
+                if m and m.group(1) != "lo" and not m.group(1).startswith("tailscale"):
+                    ips.append(m.group(2))
+            kw["ips"] = ips
+            kw["via"] = ["tailscale", "ajan"]
+            for e in sources.parse_arpscan("\n".join(sec.get("ARPSCAN_WAN", []))):
+                is_gw = e["ip"] == mip
+                seen[f"mac:{e['mac']}"] = dict(
+                    mac=e["mac"], vendor=e["vendor"] or util.vendor_for(e["mac"], oui),
+                    ips=[e["ip"]], site=SID, kind="modem" if is_gw else None,
+                    label=rs.get("modem_name") if is_gw else None,
+                    parent_hint=None if is_gw else f"{SID}-gw", is_root=is_gw, online=True, now=True,
+                    via=["router arp"], names=rnames(e["mac"]))
+            lan = {}
+            for line in sec.get("LEASES", []):
+                p = line.split()
+                if len(p) >= 4 and util.norm_mac(p[1]):
+                    lan[util.norm_mac(p[1])] = {"ip": p[2], "hostname": None if p[3] == "*" else p[3],
+                                                "reachable": False}
+            for line in sec.get("NEIGH", []):
+                m = re.match(r"(\S+) dev (\S+) lladdr (\S+) .*?(REACHABLE|STALE|DELAY|PROBE|PERMANENT)",
+                             line)
+                if not m or m.group(2) != rs.get("lan_dev", "br-lan"):
+                    continue
+                mac = util.norm_mac(m.group(3))
+                if mac:
+                    d = lan.setdefault(mac, {"ip": m.group(1), "hostname": None})
+                    d["reachable"] = True
+            for mac, d in lan.items():
+                names = {**rnames(mac), **({"dhcp_name": d["hostname"]} if d["hostname"] else {})}
+                seen[f"mac:{mac}"] = dict(
+                    mac=mac, vendor=util.vendor_for(mac, oui), ips=[d["ip"]], site=SID,
+                    parent_hint=rid, online=bool(d.get("reachable")), now=bool(d.get("reachable")),
+                    names=names,
+                    via=["router dhcp"] + (["router arp"] if d.get("reachable") else []),
+                    note=None if d.get("reachable") else
+                    "DHCP kirası var ama şu an router'ın ARP tablosunda yok")
+            if sec.get("LISTEN") is not None:
+                kw["services"] = system_services(parse_proc_listen(sec.get("LISTEN")))
+            ex = ((sec.get("EXITNODE") or [""])[0] or "").strip()
+            if ex and ex in ts_by_id:
+                overlay.append({"from": rid, "to_ts": ts_by_id[ex]})
+            exit_clients(rid, sec.get("EXITCLIENTS"))
+        seen[rid] = kw
+        if settings["sources"].get("router", True):
+            if not rep_ or not rep_.get("received"):
+                problems.append(f"{rs['name']}: router ajanı ({agent}) henüz rapor göndermedi. "
+                                "Kurulum komutu: Ayarlar > Ajanlar.")
+            elif not fresh:
+                problems.append(f"{rs['name']}: router ajanının son raporu {round(age)} dakika önce geldi; "
+                                "son bilinen durumuyla gösteriliyor.")
+        if router_script is None:
+            installed = ((sec or {}).get("VERSION") or [None])[0] if sec else None
+            router_script = {"expected": extra.get("topo_expected"), "installed": installed,
+                             "ok": None if installed is None else installed == extra.get("topo_expected"),
+                             # 3 ve sonrası kendini günceller; daha eskisinin bir kez elle güncellenmesi gerekir
+                             "self_update": (installed or "0").isdigit() and int(installed or 0) >= 3}
+    router_script = router_script or {"expected": extra.get("topo_expected"), "installed": None,
+                                      "ok": None, "self_update": False}
 
     # ------------------------------------------------ Tailscale düğümleri
     lan_by_ip = {}
@@ -704,13 +725,14 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             for ip in kw.get("ips") or []:
                 lan_by_ip.setdefault(ip, nid)
     for name, info in ts_nodes.items():
-        if name in (ts_self, router_ts_name):
+        if name == ts_self or name in router_ids:
             continue
-        site = site_of.get(name, "mobile")
-        kind = ("cloud-vm" if site == "oracle" else
+        site = site_of.get(name, default_grp["id"])
+        grp = next((x for x in allsites if x["id"] == site), default_grp)
+        kind = ("cloud-vm" if grp.get("kind") == "cloud" else
                 "laptop" if info.get("os") in ("linux", "windows", "macOS") else "phone")
         lan_id = next((lan_by_ip[a] for a in info.get("addrs") or [] if a in lan_by_ip), None)
-        if info["online"] and lan_id and lan_id in seen and site == "mobile":
+        if info["online"] and lan_id and lan_id in seen and site == default_grp["id"]:
             # Tailscale'in bildirdiği yerel IP şu an evlerimizden birinde canlı: cihaz evde.
             # Aynı cihaz iki kez görünmesin: yerel kaydı tailnet cihazıyla birleştir.
             lan = seen.pop(lan_id)
@@ -739,7 +761,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         host = [x.strip() for x in sec.get("HOST", []) if x.strip()]
         ts_ip = next((x for x in host if x.startswith("100.")), None)
         tsn = ts_by_ip.get(ts_ip) if ts_ip else None
-        nid = ("self" if tsn == ts_self else "router" if tsn == router_ts_name
+        nid = ("self" if tsn == ts_self else router_ids[tsn] if tsn in router_ids
                else f"ts:{tsn}" if tsn else None)
         if nid is None:
             hn = (host[0] if host else name).lower()
@@ -783,7 +805,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             del state[nid]
 
     # ------------------------------------------------ düğümler
-    sites_present = {"ev1", "ev2"} | {st["snapshot"].get("site") for st in state.values()}
+    sites_present = {LID} | {x["id"] for x in routers} | {st["snapshot"].get("site") for st in state.values()}
     roots = {}
     for nid, st in state.items():
         snap = st["snapshot"]
@@ -791,17 +813,18 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             roots[f"{snap['site']}-gw"] = nid
     nodes = {"internet": {"id": "internet", "label": "İnternet", "kind": "internet", "site": None,
                           "parent": None, "online": True, "ips": [], "services": []}}
-    placeholders = {
-        "ev1-gw": dict(label=ev1.get("modem_name", "Ev 1 modem"), kind="modem", site="ev1", ips=[gw_ip]),
-        "ev2-gw": dict(label=ev2.get("modem_name", "Ev 2 modem"), kind="modem", site="ev2",
-                       ips=[modem2_ip]),
-        "oracle-gw": dict(label=cfg.get("oracle", {}).get("name", "Oracle Cloud"), kind="cloud",
-                          site="oracle", ips=[]),
-        "mobile-gw": dict(label=cfg.get("mobile", {}).get("root_name", "Gezgin cihazlar"),
-                          kind="roam", site="mobile", ips=[]),
-    }
+    placeholders = {f"{LID}-gw": dict(label=loc.get("modem_name") or "Modem", kind="modem", site=LID,
+                                      ips=[gw_ip] if gw_ip else [])}
+    for rs in routers:
+        mip = modem_ip_of.get(rs["id"])
+        placeholders[f"{rs['id']}-gw"] = dict(label=rs.get("modem_name") or "Modem", kind="modem",
+                                              site=rs["id"], ips=[mip] if mip else [])
+    for g in groups:
+        placeholders[f"{g['id']}-gw"] = dict(
+            label=g.get("root_name") or g["name"], kind="roam" if g.get("default") else "cloud",
+            site=g["id"], ips=[])
     for gw, kw in placeholders.items():
-        if gw.split("-")[0] in sites_present and gw not in roots:
+        if gw[:-3] in sites_present and gw not in roots:
             roots[gw] = gw
             ovg = ov_dev.get(gw, {})
             nodes[gw] = {"id": gw, "parent": "internet", "online": True, "services": [],
@@ -875,8 +898,8 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             "first_seen": st.get("first_seen"), "last_seen": st.get("last_seen"),
             "random_mac": util.is_local_mac(mac) if mac else None,
             "short_vendor": util.short_vendor(snap.get("vendor")),
-            "stale": st.get("live", nid) not in seen and ((site == "ev1" and ev1_failed) or
-                                          (site == "ev2" and not router_fresh)),
+            "stale": st.get("live", nid) not in seen and ((site == LID and ev1_failed) or
+                                                          router_fresh_of.get(site) is False),
             "tags": ov.get("tags") or conf.get("tags") or [], "note": ov.get("note") or snap.get("note"),
             "hidden": bool(ov.get("hidden")), "edited": bool(ov), "override": ov or None,
             "auto_label": (conf.get("name") or snap.get("label") or best_name(names) or
@@ -931,8 +954,8 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                if a in nodes and b in nodes and a != b]
 
     for a in agents_out:
-        if a["name"] == "router":
-            a["node"] = "router"
+        if a["kind"] == "router":
+            a["node"] = "router" if a["name"] == "router" else f"router:{a['name']}"
 
     for o in overlay:   # kartlarda ve panelde gösterilsin
         nodes[o["from"]]["exit_via"] = o["to"]
