@@ -20,7 +20,7 @@ import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agents, auth, history, model, passive, probe, sources, store, util
+from . import agents, auth, history, model, passive, probe, sources, store, teardown, util
 
 API_HOST = "127.0.0.1"
 API_PORT = int(os.environ.get("NODESK_API_PORT", "8089"))
@@ -74,6 +74,9 @@ class App:
                 self.icon_files[url] = "live/icons/" + v["file"]
         self.icon_thread = None
         self.probed = {}         # IP -> son ad sorgusu (time.monotonic)
+        self.removing = False    # kaldırma sürüyor (teardown.py)
+        self.web_seen = False    # web container'ı bu çalışmada en az bir kez görüldü
+        self.web_missing_since = None
         self.ct_prev = None      # exit node: önceki örnekteki bağlantılar
         self.exit_seen = {}      # tailnet IP -> Pi üzerinden son yeni bağlantı (time.monotonic)
 
@@ -354,11 +357,96 @@ class App:
         self.wake.set()
         return True
 
+    # ------------------------------------------------------------ kaldırma (teardown.py)
+    def web_present(self):
+        """nodesk-web container'ı var mı (durmuş olsa da)? Docker'a sorulamazsa None."""
+        conts = sources.docker_containers(sources.Runner())
+        return None if conts is None else any(c["name"] == teardown.APP_ID for c in conts)
+
+    def removal_reason(self):
+        """Kaldırma başlamalı mı? -> neden ya da None. Şüphede asla başlamaz."""
+        if self.fixtures or self.removing:
+            return None
+        if os.path.exists(self.paths.teardown_req):
+            return "sudo nodesk uninstall"
+        if os.path.exists(self.paths.teardown_state):
+            return (util.read_json(self.paths.teardown_state, {}) or {}).get("reason") or "devam"
+        if self.updating or not os.path.exists(os.path.join(self.paths.data, "docker-compose.yml")):
+            return None
+        present = self.web_present()
+        if present is None or present:
+            self.web_seen = self.web_seen or bool(present)
+            self.web_missing_since = None
+            return None
+        if not self.web_seen or time.monotonic() - START < 600:   # hiç görülmedi ya da yeni açıldı
+            return None
+        self.web_missing_since = self.web_missing_since or time.monotonic()
+        return "web arayüzü silindi" if time.monotonic() - self.web_missing_since >= 600 else None
+
+    def teardown(self, reason, wait_s=900, run=None):
+        """Önce ajanlar cihazlardan kendini kaldırır, sonra Pi tarafı silinir."""
+        self.removing = True
+        log(f"Nodesk kaldırılıyor ({reason}): önce ajanlar cihazlardan kendini kaldıracak")
+        util.write_json(self.paths.teardown_state, {"reason": reason, "started": util.iso(util.utcnow())})
+        try:
+            os.remove(self.paths.teardown_req)
+        except OSError:
+            pass
+        names = list(self.store.agents()["agents"])
+        for n in names:
+            self.store.remove_agent(n)
+        own = None
+        if not self.fixtures and self.web_present() is False:   # ajanlar 8088'e rapor gönderir
+            try:
+                own = ThreadingHTTPServer(("0.0.0.0", 8088), Handler)
+                threading.Thread(target=own.serve_forever, daemon=True).start()
+                log("web arayüzü yok: 8088'de yalnızca ajan raporları dinleniyor")
+            except OSError:
+                own = None
+        end = time.monotonic() + wait_s
+        while self.store.agents()["agents"] and time.monotonic() < end and not self.stop.is_set():
+            if reason == "web arayüzü silindi" and self.web_present():   # yeniden kuruldu: vazgeç
+                log("web arayüzü geri geldi: kaldırma iptal")
+                for n in names:
+                    self.store.cancel_removal(n)
+                os.remove(self.paths.teardown_state)
+                self.removing, self.web_missing_since = False, None
+                if own:
+                    own.shutdown()
+                return False
+            self.stop.wait(5 if self.fixtures else 15)
+        left = list(self.store.agents()["agents"])
+        if left:
+            log(f"şu ajanlar yanıt vermedi, cihazlarda elle kaldırılmalı: {', '.join(left)}")
+            for n in left:
+                log(f"  {n}: {agents.manual_uninstall(self.store.agents()['agents'][n]['kind'])}")
+        if own:
+            own.shutdown()
+        script = teardown.removal_script(self.paths.home)
+        (run or self.run_removal)(script)
+        return True
+
+    def run_removal(self, script):
+        """Servisin dışında çalışır: servisi durdurup veri klasörünü silebilsin."""
+        log("Pi tarafı siliniyor")
+        subprocess.run(["systemd-run", "--unit=nodesk-remove", "--collect", "--quiet",
+                        "--description=Nodesk kaldırma", "/bin/sh", "-c", script], timeout=20)
+
     def scheduler(self):
         last_scan = None
         last_rebuild = time.monotonic()
         last_update_check = 0.0
+        last_removal_check = 0.0
         while not self.stop.is_set():
+            if time.monotonic() - last_removal_check > 60 or os.path.exists(self.paths.teardown_req):
+                last_removal_check = time.monotonic()
+                reason = self.removal_reason()
+                if reason:
+                    threading.Thread(target=self.teardown, args=(reason,), name="teardown", daemon=True).start()
+            if self.removing:
+                self.wake.wait(5)
+                self.wake.clear()
+                continue
             settings = self.store.settings()
             now = time.monotonic()
             next_due = 0.0 if last_scan is None else last_scan + settings["interval_min"] * 60
@@ -485,6 +573,8 @@ class Handler(BaseHTTPRequestHandler):
         path, q = self.route()
         app = self.app
         try:
+            if app.removing and (method, path) not in self.OPEN:
+                return self.fail("Nodesk bu Pi'den kaldırılıyor", 410)
             access = app.store.settings()["access"]
             ip, tok = self.remote(), auth.cookie_token(self.headers.get("Cookie"))
             can_edit, can_view, how = app.auth.identify(ip, tok, access)

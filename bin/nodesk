@@ -11,7 +11,7 @@
 #   sudo nodesk agent add <ad>       sunucu ajanı ekle, kurulum komutunu göster
 #   sudo nodesk agent list|remove    ajanları listele / sil
 #   sudo nodesk password             düzenleme parolasını belirle (ev ağından düzenlemek için)
-#   sudo nodesk uninstall            kaldır (veri klasörünü silmez)
+#   sudo nodesk uninstall            tamamen kaldır (ajanlar dahil, veriler silinir)
 set -euo pipefail
 
 NODESK_HOME="${NODESK_HOME:-/DATA/AppData/nodesk}"
@@ -415,21 +415,30 @@ cmd_password() { need_root password; py -m nodesk password; }
 
 cmd_uninstall() {
     need_root uninstall
-    read -r -p "Nodesk kaldırılsın mı? Veri klasörü ($NODESK_HOME) silinmez. [e/H] " a
+    echo "Nodesk TAMAMEN kaldırılacak: önce ajanlar (router, sunucular) cihazlardan kendini kaldırır,"
+    echo "sonra Pi'deki servis, web arayüzü ve bütün veriler ($NODESK_HOME) silinir."
+    read -r -p "Devam edilsin mi? [e/H] " a
     [ "$a" = "e" ] || [ "$a" = "E" ] || { echo "Vazgeçildi."; exit 0; }
-    systemctl disable --now nodesk.service nodesk.timer >/dev/null 2>&1 || true
-    rm -f "$UNIT_DIR/nodesk.service" "$UNIT_DIR/nodesk.timer"; systemctl daemon-reload
-    ok "servis kaldırıldı"
-    if [ "$(cat "$DATA/deploy_method" 2>/dev/null)" = casaos ] && command -v casaos-cli >/dev/null; then
-        casaos-cli app-management uninstall "$APP_ID" -n >/dev/null 2>&1 || true
+    if systemctl is-active --quiet nodesk.service; then
+        touch "$DATA/teardown-request"
+        ok "kaldırma başladı"
+        echo "  Ajanlar bir sonraki raporlarında (en geç 5-15 dk) kendini kaldıracak, ardından Pi'deki her şey silinecek."
+        echo "  İzlemek için: journalctl -u nodesk -f"
+        return 0
     fi
-    [ -f "$DATA/docker-compose.yml" ] && docker compose -p "$APP_ID" -f "$DATA/docker-compose.yml" down >/dev/null 2>&1 || true
-    ok "web arayüzü kaldırıldı"
-    rm -f /usr/local/bin/nodesk
-    echo "Kalanlar:"
-    echo "  Pi     : sudo rm -rf $NODESK_HOME"
-    echo "  Router : (router'da) /etc/init.d/nodesk-listen disable; /etc/init.d/nodesk-listen stop; sed -i '/nodesk-agent/d' /etc/crontabs/root; /etc/init.d/cron restart; rm -f /etc/init.d/nodesk-listen /usr/sbin/nodesk-listen /usr/sbin/nodesk-agent /usr/sbin/topo-collect /etc/nodesk-agent.conf"
-    echo "  Sunucu : systemctl disable --now nodesk-agent.timer; rm -f /etc/systemd/system/nodesk-agent.* /usr/local/sbin/nodesk-agent; rm -rf /etc/nodesk"
+    warn "servis çalışmıyor: ajanlara haber verilemez, Pi tarafı şimdi silinecek"
+    if [ -f "$DATA/agents.json" ]; then
+        echo "Cihazlarda elle çalıştırılacak kaldırma komutları:"
+        py - "$DATA/agents.json" <<'PY'
+import json, sys
+from nodesk import agents
+for name, a in sorted((json.load(open(sys.argv[1])).get("agents") or {}).items()):
+    print(f"  {name}: {agents.manual_uninstall(a['kind'])}")
+PY
+    fi
+    local script; script=$(py -m nodesk removal-script) || die "kaldırma betiği oluşturulamadı"
+    systemd-run --unit=nodesk-remove --collect --quiet /bin/sh -c "$script"
+    ok "Pi tarafı siliniyor (servis, komut, web arayüzü, $NODESK_HOME)"
 }
 
 usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; }

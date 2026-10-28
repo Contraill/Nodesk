@@ -114,7 +114,21 @@ sudo nodesk rollback    # bir önceki sürüme döner
 | `sudo nodesk password` | Düzenleme parolası |
 | `sudo nodesk agent add <ad>` / `list` / `remove <ad>` | Ajanlar |
 | `sudo nodesk install` | Kurulumu onarır |
-| `sudo nodesk uninstall` | Servisi ve web'i kaldırır; veri klasörü kalır |
+| `sudo nodesk uninstall` | Tamamen kaldırır (aşağıya bak) |
+
+## Kaldırma
+
+İz bırakmadan kaldırmanın iki yolu var:
+- Pi'de `sudo nodesk uninstall`
+- CasaOS'ta (ya da Docker'da) web arayüzünü (`nodesk-web`) silmek. Container 10 dakika boyunca hiç görülmezse kaldırma kendiliğinden başlar. Sadece durdurmak ya da güncelleme sırasındaki kısa yokluk sayılmaz.
+
+Sıra şöyle:
+1. Önce her ajan bir sonraki raporunda cihazdan kendini kaldırır: zamanlayıcı, dinleyici servisi, dosyalar.
+2. Sonra Pi'deki servis, `nodesk` komutu, web container'ı ve imajı, bütün veri klasörü silinir.
+
+Bu sürede container geri gelirse kaldırma iptal olur. Kapalı bir cihazdaki ajan yanıt vermezse, onun elle kaldırma komutu günlüğe (`journalctl -u nodesk`) yazılır.
+
+Tek bir ajanı kaldırmak için: **Ayarlar > Ajanlar > Sil**. Cihaz kendini kaldırır, sonra kayıt silinir.
 
 ## Veri klasörü
 

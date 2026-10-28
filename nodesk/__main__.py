@@ -7,6 +7,7 @@
   agent-remove <ad>      ajanı sil
   agent-list             ajanları listele
   password               düzenleme parolasını belirle / değiştir
+  removal-script         Pi tarafını tamamen kaldıran betiği yazdır
 """
 
 import os
@@ -24,6 +25,10 @@ def main(argv):
         return 0
     if cmd == "collect":
         return server.collect_once(home, fixtures)
+    if cmd == "removal-script":   # servis çalışmıyorsa sudo nodesk uninstall bunu doğrudan çalıştırır
+        from . import teardown
+        sys.stdout.write(teardown.removal_script(home))
+        return 0
     if cmd == "password":
         from . import auth
         return auth.set_password_cli(store.Paths(home).auth)

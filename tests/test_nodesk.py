@@ -25,7 +25,7 @@ os.environ["NODESK_NOW"] = NOW
 os.environ["NODESK_OUI"] = os.path.join(FIX, "ieee-oui.txt")
 os.environ["NODESK_CONFIG"] = os.path.join(FIX, "config.toml")   # HomeNet benzeri örnek ağ
 
-from nodesk import agents, history, model, passive, probe, server, sites, sources, store, util  # noqa: E402
+from nodesk import agents, history, model, passive, probe, server, sites, sources, store, teardown, util  # noqa: E402
 
 
 def make_home():
@@ -517,6 +517,90 @@ class HistoryAlertsTest(unittest.TestCase):
         for bad in ({"ntfy_url": "ftp://x"}, {"telegram_token": "kötü"}, {"telegram_chat": "x y"}):
             with self.assertRaises(ValueError):
                 st.set_settings({"alerts": bad})
+
+
+class TeardownTest(unittest.TestCase):
+    def home_with_app(self):
+        home = make_home()
+        self.addCleanup(shutil.rmtree, home, True)
+        os.makedirs(os.path.join(home, "app", "bin"))
+        open(os.path.join(home, "app", "bin", "nodesk"), "w").write("#!/bin/sh\n")
+        return home
+
+    def test_never_removes_wrong_folder(self):
+        for bad in ("/", "", "/tmp", os.path.expanduser("~")):
+            with self.assertRaises(ValueError, msg=bad):
+                teardown.removal_script(bad)
+
+    def test_removal_script_leaves_nothing(self):
+        home = self.home_with_app()
+        sbx = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, sbx, True)
+        for d in ("etc/systemd/system", "usr/local/bin", "bin"):
+            os.makedirs(os.path.join(sbx, d))
+        for f in ("etc/systemd/system/nodesk.service", "usr/local/bin/nodesk"):
+            open(os.path.join(sbx, f), "w").write("x")
+        for b in ("systemctl", "docker", "casaos-cli", "logger", "sleep"):   # sahte komutlar: çağrıları kaydeder
+            with open(os.path.join(sbx, "bin", b), "w") as f:
+                f.write(f'#!/bin/sh\necho "{b} $*" >> {sbx}/calls\n')
+            os.chmod(os.path.join(sbx, "bin", b), 0o755)
+        script = teardown.removal_script(home).replace("/etc/", f"{sbx}/etc/").replace("/usr/local/bin/", f"{sbx}/usr/local/bin/")
+        subprocess.run(["sh", "-c", script], env={"PATH": f"{sbx}/bin:/usr/bin:/bin"}, check=True)
+        self.assertFalse(os.path.exists(home), "veri klasörü silindi")
+        self.assertFalse(os.path.exists(f"{sbx}/etc/systemd/system/nodesk.service"))
+        self.assertFalse(os.path.exists(f"{sbx}/usr/local/bin/nodesk"))
+        calls = open(f"{sbx}/calls").read()
+        for want in ("systemctl disable --now nodesk.service", "docker rm -f nodesk-web",
+                     "casaos-cli app-management uninstall nodesk-web", "docker image rm"):
+            self.assertIn(want, calls)
+
+    def test_trigger_rules(self):
+        app = server.App(self.home_with_app(), FIX)
+        app.fixtures = None
+        open(os.path.join(app.paths.data, "docker-compose.yml"), "w").write("x")
+        state = {"present": False}
+        app.web_present = lambda: state["present"]
+        self.assertIsNone(app.removal_reason(), "container hiç görülmediyse (kurulum yarım) asla")
+        state["present"] = True
+        self.assertIsNone(app.removal_reason())
+        state["present"] = False
+        self.assertIsNone(app.removal_reason(), "Pi yeni açıldı: bekle")
+        orig = server.START
+        server.START = time.monotonic() - 3600
+        try:
+            self.assertIsNone(app.removal_reason(), "yokluk yeni başladı")
+            app.web_missing_since -= 601
+            self.assertEqual(app.removal_reason(), "web arayüzü silindi")
+            app.web_present = lambda: None
+            app.web_missing_since = None
+            self.assertIsNone(app.removal_reason(), "Docker'a sorulamıyor: karar verilmez")
+        finally:
+            server.START = orig
+        open(app.paths.teardown_req, "w").close()
+        self.assertEqual(app.removal_reason(), "sudo nodesk uninstall")
+
+    def test_agents_first_then_pi(self):
+        app = server.App(self.home_with_app(), FIX)
+        ran = []
+        t = threading.Thread(target=app.teardown, args=("test",), kwargs={"wait_s": 30, "run": ran.append})
+        t.start()
+        time.sleep(0.3)
+        ags = app.store.agents()["agents"]
+        self.assertTrue(all(a.get("removing") for a in ags.values()), "önce bütün ajanlara kaldır denir")
+        self.assertEqual(ran, [], "ajanlar bitmeden Pi silinmez")
+        server.Handler.app = app
+        for n in list(ags):   # ajanlar kendini kaldırıp "#UNINSTALLED" gönderdi
+            app.store.purge_agent(n)
+        t.join(15)
+        self.assertEqual(len(ran), 1)
+        self.assertIn(os.path.realpath(app.paths.home), ran[0])
+
+    def test_cancel_if_web_returns(self):
+        app = server.App(self.home_with_app(), FIX)
+        app.web_present = lambda: True
+        self.assertFalse(app.teardown("web arayüzü silindi", wait_s=30, run=lambda s: self.fail("silinmemeli")))
+        self.assertFalse(any(a.get("removing") for a in app.store.agents()["agents"].values()))
+        self.assertFalse(os.path.exists(app.paths.teardown_state))
 
 
 class FileSafetyTest(unittest.TestCase):

@@ -73,6 +73,8 @@ class Paths:
         self.data_json = os.path.join(self.www, "data.json")              # herkese açık harita
         self.data_private = os.path.join(self.data, "data.json")          # /api/data (giriş gerekirse)
         self.auth = os.path.join(self.data, "auth.json")
+        self.teardown_req = os.path.join(self.data, "teardown-request")   # sudo nodesk uninstall
+        self.teardown_state = os.path.join(self.data, "teardown.json")    # kaldırma sürüyor (yeniden başlatmada devam)
 
 
 def load_config(paths):
@@ -311,6 +313,12 @@ class Store:
             a["agents"][name]["removing"] = util.iso(util.utcnow())
             util.write_json(self.p.agents, a, mode=0o600)
             return True
+
+    def cancel_removal(self, name):
+        with self.lock:
+            a = self.agents()
+            if a["agents"].get(name, {}).pop("removing", None):
+                util.write_json(self.p.agents, a, mode=0o600)
 
     def purge_agent(self, name):
         """Kaydı ve raporlarını tamamen sil (cihaz kendini kaldırdı ya da kullanıcı zorladı)."""
