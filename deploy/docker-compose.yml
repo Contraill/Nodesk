@@ -1,23 +1,22 @@
-# nodesk web arayüzü. Kurulum ve güncellemede `nodesk` aracı bu
-# dosyadaki @NODESK_HOME@ yer tutucusunu doldurup CasaOS'a uygular.
-# Elle CasaOS'a içe aktarma GEREKMEZ.
+# Nodesk web UI. On install and update the `nodesk` tool fills in the @NODESK_HOME@
+# placeholder and applies this file to CasaOS (or docker compose). No manual import needed.
 #
-# Uygulama kimliği bilerek "nodesk-web": CasaOS'tan kaldırılırsa
-# /DATA/AppData/nodesk-web silinir, asıl veri klasörü değil.
+# The app id is "nodesk-web" on purpose: removing it in CasaOS deletes
+# /DATA/AppData/nodesk-web, not the real data folder (and starts the full uninstall).
 name: nodesk-web
 services:
   web:
     image: nginx:1.27-alpine
     container_name: nodesk-web
     restart: unless-stopped
-    # Host ağı: /api/ isteklerini Pi'deki nodesk.service'e (127.0.0.1:8089) iletebilmek için
+    # Host network: so /api/ can be proxied to nodesk.service on the Pi (127.0.0.1:8089)
     network_mode: host
     labels:
       nodesk.ports: "8088"
     volumes:
       - @NODESK_HOME@/app/web:/usr/share/nginx/html:ro
       - @NODESK_HOME@/www:/usr/share/nginx/html/live:ro
-      # Klasör olarak bağlanır: git dosyayı değiştirince container yeni hâlini görür
+      # Mounted as a folder: the container sees the new file after a git update
       - @NODESK_HOME@/app/deploy/nginx:/etc/nginx/conf.d:ro
     x-casaos:
       envs: []
@@ -39,7 +38,7 @@ x-casaos:
   tagline:
     en_us: Network topology map
   description:
-    en_us: HomeNet network topology map
+    en_us: Live network topology map for home networks
   title:
     en_us: Nodesk
   index: /

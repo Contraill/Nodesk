@@ -31,7 +31,7 @@ def safe_home(home):
 def removal_script(home):
     """Pi tarafını tamamen kaldıran kabuk betiği (servis dışından, systemd-run ile çalışır)."""
     if not safe_home(home):
-        raise ValueError(f"güvensiz veri klasörü, silinmez: {home!r}")
+        raise ValueError(f"unsafe data folder, will not delete: {home!r}")
     h = shlex.quote(os.path.realpath(home))
     casaos_dir = shlex.quote(os.path.join(os.path.dirname(os.path.realpath(home)), APP_ID))
     return f"""set +e
@@ -44,5 +44,5 @@ command -v casaos-cli >/dev/null 2>&1 && casaos-cli app-management uninstall {AP
 docker rm -f {APP_ID} >/dev/null 2>&1
 docker image rm {WEB_IMAGE} >/dev/null 2>&1   # başka bir container kullanıyorsa Docker silmez
 rm -rf {h} {casaos_dir}
-logger -t nodesk "Nodesk Pi'den tamamen kaldırıldı" 2>/dev/null
+logger -t nodesk "Nodesk fully removed from the Pi" 2>/dev/null
 """

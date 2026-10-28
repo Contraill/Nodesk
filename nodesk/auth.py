@@ -49,7 +49,7 @@ class Auth:
 
     def set_password(self, pw):
         if len(pw) < 8:
-            raise ValueError("parola en az 8 karakter olmalı")
+            raise ValueError("password must be at least 8 characters")
         with self.lock:
             d = self._load()
             d["password"] = hash_password(pw)
@@ -107,14 +107,14 @@ class Auth:
 
     # ---------------------------------------------- karar
     def identify(self, ip, token, access):
-        """-> (düzenleyebilir mi, görebilir mi, nasıl: 'parola'|'pi'|'tailnet'|<hesap>|None)"""
+        """-> (düzenleyebilir mi, görebilir mi, nasıl: 'password'|'pi'|'tailnet'|<hesap>|None)"""
         edit, how = False, None
         if self.session_ok(token):
-            edit, how = True, "parola"
+            edit, how = True, "password"
         elif ip in LOCAL:
             edit, how = True, "pi"
         elif access.get("edit") == "everyone":
-            edit, how = True, "herkes"
+            edit, how = True, "everyone"
         elif access.get("edit", "tailnet") == "tailnet" and util.in_net(ip, "100.64.0.0/10"):
             users = [u.strip().lower() for u in access.get("ts_users") or [] if u.strip()]
             if not users:
@@ -137,10 +137,10 @@ def cookie_token(header):
 def set_password_cli(path):
     """sudo nodesk password: parolayı terminalden (görünmeden) iki kez sorar."""
     import getpass
-    a = getpass.getpass("Yeni Nodesk parolası: ")
+    a = getpass.getpass("New Nodesk password: ")
     b = getpass.getpass("Tekrar: ")
     if a != b:
-        print("Parolalar aynı değil, değiştirilmedi.")
+        print("Passwords do not match; nothing changed.")
         return 1
     try:
         Auth(path).set_password(a)
@@ -148,5 +148,5 @@ def set_password_cli(path):
         print(e)
         return 1
     os.chmod(path, 0o600)
-    print("Parola kaydedildi; açık oturumlar kapatıldı.")
+    print("Password saved; open sessions were logged out.")
     return 0

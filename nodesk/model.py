@@ -51,7 +51,7 @@ def os_guess(names):
     if v.startswith("dhcpcd") and "linux" in v:
         return "Linux"
     if v.startswith("udhcp"):
-        return "Gömülü Linux"
+        return "Embedded Linux"
     if model.startswith(("iphone", "ipad", "ipod")):
         return "iOS"
     if model.startswith(("macbook", "imac", "macmini", "macpro", "mac1")):
@@ -181,15 +181,15 @@ def ts_info(node, is_self=False):
     # Relay alanı bağlantının değil, cihazın "ev" DERP bölgesidir: her eşte doludur. Aktarıcı
     # yalnızca trafik varken (Active) doğrudan adres (CurAddr) yoksa; trafik yoksa "boşta".
     if is_self:
-        path = "bu cihaz"
+        path = "this device"
     elif not node.get("Online"):
-        path = "bağlantı yok"
+        path = "offline"
     elif node.get("CurAddr"):
-        path = "doğrudan"
+        path = "direct"
     elif node.get("Active"):
-        path = f"aktarıcı ({node.get('Relay') or 'DERP'})"
+        path = f"relay ({node.get('Relay') or 'DERP'})"
     else:
-        path = "boşta"
+        path = "idle"
     addrs = []
     for a in (node.get("Addrs") or []) + [node.get("CurAddr") or ""]:
         host = a.rpartition(":")[0].strip("[]")
@@ -292,9 +292,9 @@ def service_nodes(nodes, ov_dev, ov_apps, casaos, health, icon_files):
                 wanted.add(icon_url)
             hidden = bool(ov.get("hidden") or (app and ov_apps.get(app, {}).get("hidden")) or
                           any(c.get("hidden") for c in items))
-            source = {"docker": "Docker" + (" (compose/CasaOS uygulaması)" if app else ""),
-                      "system": "Pi'de sistem servisi" if host["id"] == "self" else "Sistem servisi",
-                      "manual": "Elle eklendi"}[first["source"]]
+            source = {"docker": "Docker" + (" (compose/CasaOS app)" if app else ""),
+                      "system": "System service on the Pi" if host["id"] == "self" else "System service",
+                      "manual": "Added by hand"}[first["source"]]
             out[key] = {
                 "id": key, "kind": "service", "label": ov.get("name") or auto, "auto_label": auto,
                 "parent": host["id"], "site": host.get("site"), "host": host["id"],
@@ -569,8 +569,8 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         seen[f"ip:{ip}"] = dict(
             ips=[ip], site=LID, parent_hint=f"mac:{p['bridge']}", online=p["live"],
             via=["extender"], names=p["names"], vendor=None,
-            note="Extender (MAC-NAT) üzerinden bağlı; gerçek MAC adresi cihaz ağa yeniden "
-                 "bağlandığında (DHCP) öğrenilir ve kalıcı kimliğe geçer.")
+            note="Connected through an extender (MAC-NAT); the real MAC is learned when the device "
+                 "reconnects (DHCP) and then becomes its permanent identity.")
 
     # Aynı MAC'in en güncel IP'leri önce
     arp_by_ip = {e["ip"]: e["mac"] for e in raw.get("arp") or []}
@@ -597,7 +597,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
 
     ev1_failed = raw.get("arp") is None and raw.get("passive") is None
     if raw.get("arp") is None and settings["sources"].get("arp"):
-        problems.append("Ev 1 ARP taraması yapılamadı.")
+        problems.append("Local ARP scan failed.")
 
     # ------------------------------------------------ Pi (bu cihaz)
     containers = raw.get("docker")
@@ -698,7 +698,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                     names=names,
                     via=["router dhcp"] + (["router arp"] if d.get("reachable") else []),
                     note=None if d.get("reachable") else
-                    "DHCP kirası var ama şu an router'ın ARP tablosunda yok")
+                    "Has a DHCP lease but is not in the router's ARP table right now")
             if sec.get("LISTEN") is not None:
                 kw["services"] = system_services(parse_proc_listen(sec.get("LISTEN")))
             ex = ((sec.get("EXITNODE") or [""])[0] or "").strip()
@@ -708,11 +708,11 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         seen[rid] = kw
         if settings["sources"].get("router", True):
             if not rep_ or not rep_.get("received"):
-                problems.append(f"{rs['name']}: router ajanı ({agent}) henüz rapor göndermedi. "
-                                "Kurulum komutu: Ayarlar > Ajanlar.")
+                problems.append(f"{rs['name']}: router agent ({agent}) has not reported yet. "
+                                "Install command: Settings > Agents.")
             elif not fresh:
-                problems.append(f"{rs['name']}: router ajanının son raporu {round(age)} dakika önce geldi; "
-                                "son bilinen durumuyla gösteriliyor.")
+                problems.append(f"{rs['name']}: router agent last reported {round(age)} minutes ago; "
+                                "showing the last known state.")
         if router_script is None:
             installed = ((sec or {}).get("VERSION") or [None])[0] if sec else None
             router_script = {"expected": extra.get("topo_expected"), "installed": installed,
@@ -788,7 +788,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                 overlay.append({"from": nid, "to_ts": ts_by_id[ex]})
             exit_clients(nid, sec.get("EXITCLIENTS"))
         if not fresh:
-            problems.append(f"{name} ajanının son raporu {round(a)} dakika önce geldi.")
+            problems.append(f"Agent {name} last reported {round(a)} minutes ago.")
 
     # ------------------------------------------------ geçmiş (son görülme)
     now_s = util.iso(now)
@@ -822,7 +822,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         snap = st["snapshot"]
         if snap.get("is_root"):
             roots[f"{snap['site']}-gw"] = nid
-    nodes = {"internet": {"id": "internet", "label": "İnternet", "kind": "internet", "site": None,
+    nodes = {"internet": {"id": "internet", "label": "Internet", "kind": "internet", "site": None,
                           "parent": None, "online": True, "ips": [], "services": []}}
     placeholders = {f"{LID}-gw": dict(label=loc.get("modem_name") or "Modem", kind="modem", site=LID,
                                       ips=[gw_ip] if gw_ip else [])}
@@ -895,7 +895,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             services.append({"id": f"manual:{i}", "name": s["name"],
                              "ports": [int(s["port"])] if s.get("port") else [],
                              "url": s.get("url"), "source": "manual", "app": "_manual",
-                             "app_name": "Elle eklenen", "state": "running"})
+                             "app_name": "Added by hand", "state": "running"})
         for s in services:
             if s.get("app") and ov_apps.get(s["app"], {}).get("hidden"):
                 s["hidden"] = True

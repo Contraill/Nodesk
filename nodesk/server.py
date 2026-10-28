@@ -43,7 +43,7 @@ class App:
         self.cfg = store.load_config(self.paths)
         # Grup yapısı (sites.py): eski config.toml'dan bir kez; yeni kurulumda sihirbaz açılır
         if self.store.migrate_sites(self.cfg, fresh=not os.path.exists(self.paths.state)):
-            log("gruplar ayarlara taşındı (config.toml -> settings.json)")
+            log("groups moved to settings (config.toml -> settings.json)")
         oui_path = os.environ.get("NODESK_OUI") or self.cfg.get("general", {}).get(
             "oui_file", "/usr/share/arp-scan/ieee-oui.txt")
         self.oui = util.load_oui(oui_path)
@@ -102,7 +102,7 @@ class App:
         branch = self.cfg.get("general", {}).get("branch", "main")
         info = {"checked": util.iso(util.utcnow())}
         if self.git("fetch", "--quiet", "origin", branch) is None:
-            info["error"] = "depoya ulaşılamadı"
+            info["error"] = "repository unreachable"
         else:
             info["behind"] = int(self.git("rev-list", "--count", f"HEAD..origin/{branch}") or 0)
             info["latest"] = self.git("show", f"origin/{branch}:VERSION") or "?"
@@ -264,7 +264,7 @@ class App:
                     body = r.read(300 * 1024 + 1)
                 ext = self.ICON_TYPES.get(ctype)
                 if not ext or len(body) > 300 * 1024 or not body:
-                    raise ValueError(f"uygun değil ({ctype}, {len(body)} bayt)")
+                    raise ValueError(f"not usable ({ctype}, {len(body)} bytes)")
                 name = hashlib.sha1(url.encode()).hexdigest()[:16] + ext
                 tmp = os.path.join(self.paths.www, "icons", "." + name)
                 with open(tmp, "wb") as f:
@@ -308,7 +308,7 @@ class App:
             for n in data["nodes"]:
                 if not n.get("placeholder") and n["kind"] != "internet":
                     n["history"] = self.history.summary(n["id"], now)
-            self.notifier.check(data, settings["alerts"])
+            self.notifier.check(data, settings["alerts"], settings.get("lang"))
             data["app"] = self.app_info()
             data["apps"] = {k: v for k, v in self.store.overrides().get("apps", {}).items()}
             util.write_json(self.paths.state, state)
@@ -329,7 +329,7 @@ class App:
             try:
                 self.cfg = store.load_config(self.paths)   # config.toml değişikliklerini al
             except (OSError, ValueError) as e:
-                log(f"config.toml okunamadı, önceki ayarlar kullanılıyor: {e}")
+                log(f"could not read config.toml, keeping previous settings: {e}")
             settings = self.store.settings()
             self.raw = self.gather(settings)
             self.status["sources"] = self.raw.get("status", {})
@@ -337,14 +337,14 @@ class App:
             self.status.update(last_ok=True, last_error=None)
             n = [x for x in data["nodes"] if not x.get("placeholder") and x["kind"] not in ("internet", "service")]
             sv = [x for x in data["nodes"] if x["kind"] == "service"]
-            log(f"{len(n)} cihaz ({sum(1 for x in n if x['online'])} çevrimiçi), {len(sv)} servis "
-                f"({sum(1 for x in sv if x['online'])} çalışıyor), {len(data['errors'])} uyarı")
+            log(f"{len(n)} devices ({sum(1 for x in n if x['online'])} online), {len(sv)} services "
+                f"({sum(1 for x in sv if x['online'])} running), {len(data['errors'])} warnings")
             for e in data["errors"]:
                 log(f"  ! {e}")
             return True
         except Exception as e:  # tarama hiçbir durumda sunucuyu düşürmesin
             self.status.update(last_ok=False, last_error=str(e))
-            log("toplama hatası: " + "".join(traceback.format_exception(e))[-800:])
+            log("collect error: " + "".join(traceback.format_exception(e))[-800:])
             return False
         finally:
             self.status.update(running=False, last_end=util.iso(util.utcnow()))
@@ -381,12 +381,12 @@ class App:
         if not self.web_seen or time.monotonic() - START < 600:   # hiç görülmedi ya da yeni açıldı
             return None
         self.web_missing_since = self.web_missing_since or time.monotonic()
-        return "web arayüzü silindi" if time.monotonic() - self.web_missing_since >= 600 else None
+        return "web UI removed" if time.monotonic() - self.web_missing_since >= 600 else None
 
     def teardown(self, reason, wait_s=900, run=None):
         """Önce ajanlar cihazlardan kendini kaldırır, sonra Pi tarafı silinir."""
         self.removing = True
-        log(f"Nodesk kaldırılıyor ({reason}): önce ajanlar cihazlardan kendini kaldıracak")
+        log(f"removing Nodesk ({reason}): agents remove themselves first")
         util.write_json(self.paths.teardown_state, {"reason": reason, "started": util.iso(util.utcnow())})
         try:
             os.remove(self.paths.teardown_req)
@@ -400,13 +400,13 @@ class App:
             try:
                 own = ThreadingHTTPServer(("0.0.0.0", 8088), Handler)
                 threading.Thread(target=own.serve_forever, daemon=True).start()
-                log("web arayüzü yok: 8088'de yalnızca ajan raporları dinleniyor")
+                log("web UI gone: listening on 8088 for agent reports only")
             except OSError:
                 own = None
         end = time.monotonic() + wait_s
         while self.store.agents()["agents"] and time.monotonic() < end and not self.stop.is_set():
-            if reason == "web arayüzü silindi" and self.web_present():   # yeniden kuruldu: vazgeç
-                log("web arayüzü geri geldi: kaldırma iptal")
+            if reason == "web UI removed" and self.web_present():   # yeniden kuruldu: vazgeç
+                log("web UI is back: removal cancelled")
                 for n in names:
                     self.store.cancel_removal(n)
                 os.remove(self.paths.teardown_state)
@@ -417,7 +417,7 @@ class App:
             self.stop.wait(5 if self.fixtures else 15)
         left = list(self.store.agents()["agents"])
         if left:
-            log(f"şu ajanlar yanıt vermedi, cihazlarda elle kaldırılmalı: {', '.join(left)}")
+            log(f"these agents did not answer, remove them by hand: {', '.join(left)}")
             for n in left:
                 log(f"  {n}: {agents.manual_uninstall(self.store.agents()['agents'][n]['kind'])}")
         if own:
@@ -428,9 +428,9 @@ class App:
 
     def run_removal(self, script):
         """Servisin dışında çalışır: servisi durdurup veri klasörünü silebilsin."""
-        log("Pi tarafı siliniyor")
+        log("removing the Pi side")
         subprocess.run(["systemd-run", "--unit=nodesk-remove", "--collect", "--quiet",
-                        "--description=Nodesk kaldırma", "/bin/sh", "-c", script], timeout=20)
+                        "--description=Nodesk removal", "/bin/sh", "-c", script], timeout=20)
 
     def scheduler(self):
         last_scan = None
@@ -461,7 +461,7 @@ class App:
                 try:
                     self.rebuild()
                 except Exception as e:
-                    log(f"yeniden hesaplama hatası: {e}")
+                    log(f"rebuild error: {e}")
                 last_rebuild = time.monotonic()
             if now - last_update_check > 1800:
                 threading.Thread(target=self.check_update, daemon=True).start()
@@ -474,17 +474,17 @@ class App:
     # ------------------------------------------------------------ güncelleme
     def start_update(self):
         if self.fixtures:
-            return False, "test modunda güncelleme yok"
+            return False, "no updates in test mode"
         if self.updating:
-            return False, "güncelleme zaten sürüyor"
+            return False, "update already running"
         cli = shutil.which("nodesk") or os.path.join(store.APP_DIR, "bin", "nodesk")
         unit = f"nodesk-update-{int(time.time())}"
         try:
             subprocess.run(["systemd-run", f"--unit={unit}", "--collect", "--quiet",
-                            "--description=Nodesk güncellemesi", cli, "update"],
+                            "--description=Nodesk update", cli, "update"],
                            check=True, capture_output=True, timeout=20)
         except (OSError, subprocess.SubprocessError) as e:
-            return False, f"güncelleme başlatılamadı: {e}"
+            return False, f"could not start the update: {e}"
         self.updating = True
         return True, unit
 
@@ -523,13 +523,13 @@ class Handler(BaseHTTPRequestHandler):
     def body(self, limit):
         n = int(self.headers.get("Content-Length") or 0)
         if n > limit:
-            raise ValueError("istek çok büyük")
+            raise ValueError("request too large")
         return self.rfile.read(n) if n else b""
 
     def json_body(self):
         # Sadece application/json: başka sitelerin form ile istek atmasını (CSRF) engeller
         if "application/json" not in (self.headers.get("Content-Type") or ""):
-            raise PermissionError("Content-Type application/json olmalı")
+            raise PermissionError("Content-Type must be application/json")
         raw = self.body(64 * 1024)
         return json.loads(raw or b"{}")
 
@@ -574,15 +574,15 @@ class Handler(BaseHTTPRequestHandler):
         app = self.app
         try:
             if app.removing and (method, path) not in self.OPEN:
-                return self.fail("Nodesk bu Pi'den kaldırılıyor", 410)
+                return self.fail("Nodesk is being removed from this Pi", 410)
             access = app.store.settings()["access"]
             ip, tok = self.remote(), auth.cookie_token(self.headers.get("Cookie"))
             can_edit, can_view, how = app.auth.identify(ip, tok, access)
             if (method, path) not in self.OPEN:
                 if (method, path) in self.VIEW and not can_view:
-                    return self.fail("haritayı görmek için giriş gerekli", 401)
+                    return self.fail("login required to view the map", 401)
                 if (method, path) not in self.VIEW and not can_edit:
-                    return self.fail("düzenlemek için giriş gerekli", 401)
+                    return self.fail("login required to edit", 401)
             if method == "GET" and path == "/api/auth":
                 return self.send_json({"edit": can_edit, "view": can_view, "how": how,
                                        "password": app.auth.has_password(),
@@ -590,11 +590,11 @@ class Handler(BaseHTTPRequestHandler):
             if method == "POST" and path == "/api/login":
                 n, last = self.FAILS.get(ip, (0, 0))
                 if n >= 5 and time.time() - last < 60:
-                    return self.fail("çok fazla hatalı deneme; bir dakika bekle", 429)
+                    return self.fail("too many failed attempts; wait a minute", 429)
                 if not app.auth.check_password(str(self.json_body().get("password") or "")):
                     self.FAILS[ip] = (n + 1, time.time())
                     time.sleep(1)
-                    return self.fail("parola yanlış", 403)
+                    return self.fail("wrong password", 403)
                 self.FAILS.pop(ip, None)
                 t = app.auth.new_session()
                 return self.send_cookie({"ok": True}, f"{auth.COOKIE}={t}; HttpOnly; SameSite=Strict; Path=/; "
@@ -607,7 +607,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True})
             if method == "GET" and path == "/api/data":
                 data = util.read_json(app.paths.data_private)
-                return self.send_json(data) if data else self.fail("harita henüz hazır değil", 503)
+                return self.send_json(data) if data else self.fail("map not ready yet", 503)
             if method == "GET" and path == "/api/state":
                 st = self.state()
                 if not can_edit:
@@ -617,10 +617,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_body()
                 cfg = app.store.settings()["alerts"]
                 if not (cfg["ntfy_url"] or (cfg["telegram_token"] and cfg["telegram_chat"])):
-                    return self.fail("önce ntfy adresi ya da Telegram bilgilerini kaydet")
-                app.notifier._send(cfg, "Nodesk deneme", "Bildirimler çalışıyor.")
+                    return self.fail("save an ntfy URL or Telegram details first")
+                app.notifier._send(cfg, *history.text(app.store.settings().get("lang"), "test"))
                 if app.notifier.last_error:
-                    return self.fail("gönderilemedi: " + app.notifier.last_error, 502)
+                    return self.fail("could not send: " + app.notifier.last_error, 502)
                 return self.send_json({"ok": True})
             if method == "POST" and path == "/api/scan":
                 self.json_body()
@@ -638,7 +638,7 @@ class Handler(BaseHTTPRequestHandler):
             if method == "PUT" and path == "/api/device":
                 nid = q.get("id") or ""
                 if not nid or len(nid) > 80:
-                    return self.fail("id gerekli")
+                    return self.fail("id required")
                 res = app.store.set_device(nid, self.json_body())
                 app.rebuild()
                 return self.send_json({"id": nid, "override": res})
@@ -649,7 +649,7 @@ class Handler(BaseHTTPRequestHandler):
             if method == "PUT" and path == "/api/app":
                 aid = q.get("id") or ""
                 if not aid or len(aid) > 80:
-                    return self.fail("id gerekli")
+                    return self.fail("id required")
                 res = app.store.set_app(aid, self.json_body())
                 app.rebuild()
                 return self.send_json({"id": aid, "override": res})
@@ -671,21 +671,21 @@ class Handler(BaseHTTPRequestHandler):
             if method == "GET" and path == "/api/agent/install":
                 name, token = q.get("name", ""), q.get("token", "")
                 if not app.store.check_token(name, token):
-                    return self.send_text("echo 'Nodesk: geçersiz ajan anahtarı'; exit 1\n", 403)
+                    return self.send_text("echo 'Nodesk: invalid agent key'; exit 1\n", 403)
                 kind = app.store.agents()["agents"][name]["kind"]
                 return self.send_text(agents.installer(kind, app.public_url(), name, token),
                                       ctype="text/x-shellscript; charset=utf-8")
             if method == "POST" and path == "/api/ingest":
                 name, token = q.get("agent", ""), q.get("token", "")
                 if not app.store.check_token(name, token):
-                    return self.fail("geçersiz ajan anahtarı", 403)
+                    return self.fail("invalid agent key", 403)
                 text = self.body(1024 * 1024).decode("utf-8", "replace")
                 if "#END" not in text:
-                    return self.fail("rapor eksik (#END yok)")
+                    return self.fail("incomplete report (no #END)")
                 ag = app.store.agents()["agents"][name]
                 if ag.get("removing") and text.startswith("#UNINSTALLED"):
                     app.store.purge_agent(name)
-                    log(f"ajan {name}: cihazdan kaldırıldı, kayıt silindi")
+                    log(f"ajan {name}: removed from the device, record deleted")
                     threading.Thread(target=app.rebuild, daemon=True).start()
                     return self.send_text("ok bye\n")
                 app.store.save_report(name, text, self.remote())
@@ -697,12 +697,12 @@ class Handler(BaseHTTPRequestHandler):
                 have = agents.reported_version(kind, util.parse_sections(text))
                 if ag.get("removing"):
                     if agents.can_uninstall(kind, have):
-                        log(f"ajan {name}: silindi, cihazdan kendini kaldıracak")
+                        log(f"ajan {name}: deleted, will remove itself from the device")
                         return self.send_text("ok uninstall\n")
                     # eski sürüm kaldırmayı bilmez: önce güncellensin, sonraki raporda kaldırılır
                     return self.send_text("ok update\n" if have != want else "ok\n")
                 if app.store.settings().get("agent_auto_update", True) and have != want:
-                    log(f"ajan {name}: sürüm {have} -> {want}, kendini güncelleyecek")
+                    log(f"ajan {name}: sürüm {have} -> {want}, will update itself")
                     return self.send_text("ok update\n")
                 return self.send_text("ok\n")
             if method == "POST" and path == "/api/update/check":
@@ -714,14 +714,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_body()
                 ok, msg = app.start_update()
                 return self.send_json({"started": ok, "message": msg}, 200 if ok else 409)
-            return self.fail("bulunamadı", 404)
+            return self.fail("not found", 404)
         except PermissionError as e:
             return self.fail(str(e), 415)
         except (ValueError, json.JSONDecodeError) as e:
             return self.fail(str(e), 400)
         except Exception as e:
-            log("API hatası: " + "".join(traceback.format_exception(e))[-800:])
-            return self.fail("sunucu hatası", 500)
+            log("API error: " + "".join(traceback.format_exception(e))[-800:])
+            return self.fail("server error", 500)
 
     def agent_list(self):
         app = self.app
@@ -769,7 +769,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(home, fixtures=None):
     app = App(home, fixtures)
-    log(f"Nodesk {app.version()} başlıyor ({home})")
+    log(f"Nodesk {app.version()} starting ({home})")
     settings = app.store.settings()
     if settings["sources"]["passive"] and not fixtures:
         app.passive.start()

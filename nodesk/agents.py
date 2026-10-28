@@ -9,18 +9,17 @@ import os
 from . import store
 
 ROUTER_INSTALLER = r"""#!/bin/sh
-# Nodesk router ajanı kurulumu (otomatik üretildi). Tekrar çalıştırmak güvenli.
-# Yaptıkları: topo-collect ve nodesk-agent'ı kurar, cron'a 5 dakikalık satır ekler,
-# eski (SSH) yöntemin anahtar satırını kaldırır. ucode-mod-socket kuruluysa salt dinleyen
-# nodesk-listen servisini de kurar. Mevcut ayarlarına dokunmaz.
+# Nodesk router agent installer (generated). Safe to re-run.
+# Installs topo-collect and nodesk-agent and adds a 5-minute cron line. If ucode-mod-socket
+# is installed it also sets up the listen-only nodesk-listen service. Existing settings are untouched.
 set -e
 
 if command -v curl >/dev/null 2>&1; then
-    echo "gönderim aracı: curl"
+    echo "upload tool: curl"
 elif uclient-fetch --help 2>&1 | grep -q -- '--post-file'; then
-    echo "gönderim aracı: uclient-fetch"
+    echo "upload tool: uclient-fetch"
 else
-    echo "HATA: curl yok ve uclient-fetch --post-file desteklemiyor. Hiçbir şey değiştirilmedi."
+    echo "ERROR: no curl and uclient-fetch lacks --post-file. Nothing was changed."
     exit 1
 fi
 
@@ -61,16 +60,16 @@ if [ -z "$NODESK_UPDATING" ] && [ -n "$NODESK_INSTALL_URL" ] && grep -q '^ok upd
         uclient-fetch -q --timeout=30 -O "$NEW" "$NODESK_INSTALL_URL"
     fi
     if head -n 1 "$NEW" 2>/dev/null | grep -q '^#!/bin/sh' && grep -q 'NODESK_EOF' "$NEW"; then
-        logger -t nodesk-agent "Pi'den yeni sürüm alındı, kuruluyor"
+        logger -t nodesk-agent "new version received from the Pi, installing"
         NODESK_UPDATING=1 sh "$NEW" > /tmp/nodesk-install.log 2>&1 \
-            && logger -t nodesk-agent "güncellendi" || logger -t nodesk-agent "güncelleme başarısız (/tmp/nodesk-install.log)"
+            && logger -t nodesk-agent "updated" || logger -t nodesk-agent "update failed (/tmp/nodesk-install.log)"
     fi
     rm -f "$NEW"
 fi
 if grep -q '^ok uninstall' "$RESP" 2>/dev/null; then
     # Ajan arayüzden silindi: router'dan iz bırakmadan kaldır, sonra Pi'ye son haberi ver.
     # (Pi'nin kurduğu paketlere dokunmaz: arp-scan, ucode-mod-socket kullanıcınındır.)
-    logger -t nodesk-agent "Pi ajanı sildi; router'dan kaldırılıyor"
+    logger -t nodesk-agent "agent deleted on the Pi; removing from the router"
     /etc/init.d/nodesk-listen stop >/dev/null 2>&1
     /etc/init.d/nodesk-listen disable >/dev/null 2>&1
     sed -i '/nodesk-agent/d' /etc/crontabs/root 2>/dev/null
@@ -85,7 +84,7 @@ if grep -q '^ok uninstall' "$RESP" 2>/dev/null; then
     rm -f /tmp/nodesk-agent.txt /tmp/nodesk-agent.resp /tmp/nodesk-heard.txt /tmp/nodesk-heard.txt.sending \
         /tmp/nodesk-probed.txt /tmp/nodesk-exit.prev /tmp/nodesk-exit.next /tmp/nodesk-names.uc \
         /tmp/nodesk-install.sh /tmp/nodesk-install.log /tmp/authorized_keys.yedek
-    logger -t nodesk-agent "kaldırıldı"
+    logger -t nodesk-agent "removed"
     rm -f /usr/sbin/nodesk-agent
     exit 0
 fi
@@ -102,7 +101,7 @@ NODESK_EOF
     mv /usr/sbin/nodesk-listen.new /usr/sbin/nodesk-listen
     cat > /etc/init.d/nodesk-listen <<'NODESK_EOF'
 #!/bin/sh /etc/rc.common
-# Nodesk: router'ın duyduğu DHCP/mDNS yayınlarını kaydeder (salt dinler, paket göndermez)
+# Nodesk: records DHCP/mDNS broadcasts the router hears (listen only, sends nothing)
 START=99
 USE_PROCD=1
 start_service() {
@@ -114,52 +113,42 @@ start_service() {
 NODESK_EOF
     chmod 755 /etc/init.d/nodesk-listen
     /etc/init.d/nodesk-listen enable || true
-    if /etc/init.d/nodesk-listen restart; then echo "dinleyici (nodesk-listen): çalışıyor"
-    else echo "UYARI: dinleyici başlatılamadı (ajan yine de çalışır)"; fi
+    if /etc/init.d/nodesk-listen restart; then echo "listener (nodesk-listen): running"
+    else echo "WARNING: listener did not start (the agent still works)"; fi
 else
-    echo "dinleyici atlandı: ucode-mod-socket yok (apk add ucode-mod-socket)"
+    echo "listener skipped: ucode-mod-socket missing (apk add ucode-mod-socket)"
 fi
 
 CRON=/etc/crontabs/root
 touch "$CRON"
 if grep -q '/usr/sbin/nodesk-agent' "$CRON"; then
-    echo "cron satırı zaten var"
+    echo "cron line already present"
 else
     if [ -s "$CRON" ] && [ -n "$(tail -c1 "$CRON")" ]; then echo >> "$CRON"; fi
     echo '*/5 * * * * /usr/sbin/nodesk-agent' >> "$CRON"
     /etc/init.d/cron restart >/dev/null 2>&1 || true
-    echo "cron satırı eklendi"
-fi
-
-AK=/etc/dropbear/authorized_keys
-if [ -f "$AK" ] && grep -qF 'topo@home-pi' "$AK"; then
-    cp "$AK" /tmp/authorized_keys.yedek
-    grep -vF 'topo@home-pi' "$AK" > "$AK.new" || true
-    chmod 600 "$AK.new"
-    mv "$AK.new" "$AK"
-    echo "eski SSH yönteminin anahtar satırı kaldırıldı (yedek: /tmp/authorized_keys.yedek)"
+    echo "cron line added"
 fi
 
 if NODESK_UPDATING=1 /usr/sbin/nodesk-agent; then
-    echo "ilk rapor Pi'ye gönderildi"
+    echo "first report sent to the Pi"
 else
-    echo "UYARI: Pi'ye ulaşılamadı; cron 5 dakikada bir tekrar deneyecek"
+    echo "WARNING: could not reach the Pi; cron retries every 5 minutes"
 fi
-echo "otomatik güncelleme: açık (Pi yeni sürüm olduğunu söyleyince ajan kendini günceller)"
-echo "topo-collect sürümü: $(sed -n 's/^TOPO_VERSION=//p' /usr/sbin/topo-collect)"
-echo "cron: $(grep -c '' "$CRON") satır"
-[ -f "$AK" ] && echo "authorized_keys: $(grep -c '' "$AK") satır"
-echo "Kaldırmak için: /etc/init.d/nodesk-listen disable; /etc/init.d/nodesk-listen stop; rm -f /etc/init.d/nodesk-listen /usr/sbin/nodesk-listen /usr/sbin/nodesk-agent /usr/sbin/topo-collect /etc/nodesk-agent.conf; sed -i '/nodesk-agent/d' /etc/crontabs/root"
+echo "auto update: on (the agent updates itself when the Pi has a new version)"
+echo "topo-collect version: $(sed -n 's/^TOPO_VERSION=//p' /usr/sbin/topo-collect)"
+echo "cron: $(grep -c '' "$CRON") lines"
+echo "To remove: /etc/init.d/nodesk-listen disable; /etc/init.d/nodesk-listen stop; rm -f /etc/init.d/nodesk-listen /usr/sbin/nodesk-listen /usr/sbin/nodesk-agent /usr/sbin/topo-collect /etc/nodesk-agent.conf; sed -i '/nodesk-agent/d' /etc/crontabs/root"
 exit 0
 """
 
 LINUX_INSTALLER = r"""#!/bin/sh
-# Nodesk sunucu ajanı kurulumu (otomatik üretildi). Tekrar çalıştırmak güvenli.
-# Bu sunucunun Docker container'larını ve dinleyen portlarını 5 dakikada bir Pi'ye bildirir.
-# Port taraması yapmaz, gelen bağlantı açmaz.
+# Nodesk server agent installer (generated). Safe to re-run.
+# Reports this server's Docker containers and listening ports to the Pi every 5 minutes.
+# No port scanning, no inbound connections.
 set -e
-[ "$(id -u)" -eq 0 ] || { echo "root olarak çalıştır: ... | sudo sh"; exit 1; }
-command -v curl >/dev/null 2>&1 || { echo "HATA: curl gerekli (apt install curl)"; exit 1; }
+[ "$(id -u)" -eq 0 ] || { echo "run as root: ... | sudo sh"; exit 1; }
+command -v curl >/dev/null 2>&1 || { echo "ERROR: curl is required (apt install curl)"; exit 1; }
 
 mkdir -p /etc/nodesk
 umask 077
@@ -208,7 +197,7 @@ curl -fsS -m 25 -H 'Content-Type: text/plain' --data-binary "@$OUT" -o "$RESP" "
 rc=$?
 if [ $rc -eq 0 ] && grep -q '^ok uninstall' "$RESP"; then
     # Ajan arayüzden silindi: sunucudan iz bırakmadan kaldır, Pi'ye son haberi ver.
-    logger -t nodesk-agent "Pi ajanı sildi; kaldırılıyor" 2>/dev/null
+    logger -t nodesk-agent "agent deleted on the Pi; removing" 2>/dev/null
     printf '#UNINSTALLED\n#END\n' > "$OUT"
     curl -fsS -m 25 -H 'Content-Type: text/plain' --data-binary "@$OUT" -o /dev/null "$NODESK_URL"
     rm -f "$OUT" "$RESP" /etc/cron.d/nodesk-agent /usr/local/sbin/nodesk-agent /var/log/nodesk-agent-install.log \
@@ -225,7 +214,7 @@ if [ $rc -eq 0 ] && [ -z "$NODESK_UPDATING" ] && [ -n "$NODESK_INSTALL_URL" ] &&
     NEW=$(mktemp)
     if curl -fsS -m 30 -o "$NEW" "$NODESK_INSTALL_URL" && head -n 1 "$NEW" | grep -q '^#!/bin/sh' \
             && grep -q 'NODESK_EOF' "$NEW"; then
-        logger -t nodesk-agent "Pi'den yeni sürüm alındı, kuruluyor" 2>/dev/null
+        logger -t nodesk-agent "new version received from the Pi, installing" 2>/dev/null
         NODESK_UPDATING=1 sh "$NEW" >/var/log/nodesk-agent-install.log 2>&1
     fi
     rm -f "$NEW"
@@ -238,7 +227,7 @@ chmod 755 /usr/local/sbin/nodesk-agent
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     cat > /etc/systemd/system/nodesk-agent.service <<'NODESK_EOF'
 [Unit]
-Description=Nodesk ajanı: Pi'ye rapor gönder
+Description=Nodesk agent: report to the Pi
 After=network-online.target tailscaled.service
 
 [Service]
@@ -247,7 +236,7 @@ ExecStart=/usr/local/sbin/nodesk-agent
 NODESK_EOF
     cat > /etc/systemd/system/nodesk-agent.timer <<'NODESK_EOF'
 [Unit]
-Description=Nodesk ajanı: 5 dakikada bir
+Description=Nodesk agent: every 5 minutes
 
 [Timer]
 OnBootSec=1min
@@ -258,18 +247,18 @@ WantedBy=timers.target
 NODESK_EOF
     systemctl daemon-reload
     systemctl enable --now nodesk-agent.timer >/dev/null 2>&1
-    echo "zamanlayıcı: systemd (nodesk-agent.timer)"
+    echo "scheduler: systemd (nodesk-agent.timer)"
 else
     echo '*/5 * * * * root /usr/local/sbin/nodesk-agent' > /etc/cron.d/nodesk-agent
-    echo "zamanlayıcı: cron (/etc/cron.d/nodesk-agent)"
+    echo "scheduler: cron (/etc/cron.d/nodesk-agent)"
 fi
 
 if NODESK_UPDATING=1 /usr/local/sbin/nodesk-agent; then
-    echo "ilk rapor Pi'ye gönderildi"
+    echo "first report sent to the Pi"
 else
-    echo "UYARI: Pi'ye ulaşılamadı; 5 dakikada bir tekrar denenecek"
+    echo "WARNING: could not reach the Pi; retrying every 5 minutes"
 fi
-echo "Kaldırmak için: systemctl disable --now nodesk-agent.timer; rm -f /etc/systemd/system/nodesk-agent.* /etc/cron.d/nodesk-agent /usr/local/sbin/nodesk-agent; rm -rf /etc/nodesk"
+echo "To remove: systemctl disable --now nodesk-agent.timer; rm -f /etc/systemd/system/nodesk-agent.* /etc/cron.d/nodesk-agent /usr/local/sbin/nodesk-agent; rm -rf /etc/nodesk"
 exit 0
 """
 
@@ -291,7 +280,7 @@ def topo_version():
     return None
 
 
-LINUX_AGENT_VERSION = "5"   # LINUX_INSTALLER değişince artır
+LINUX_AGENT_VERSION = "6"   # LINUX_INSTALLER değişince artır
 
 
 # Bu sürümden itibaren ajan "ok uninstall" yanıtıyla kendini kaldırabilir

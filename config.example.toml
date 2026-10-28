@@ -1,34 +1,34 @@
-# Nodesk ileri ayarları
+# Nodesk advanced settings
 #
-# Kurulumda bu dosya <NODESK_HOME>/config.toml olarak kopyalanır. Güncellemeler o kopyaya
-# DOKUNMAZ. Çoğu şey artık haritadan ayarlanır; bu dosyaya genelde gerek yoktur:
-#   * gruplar (evler, bulut, gezgin cihazlar) ve Tailscale cihazlarının grupları: Ayarlar > Gruplar
-#   * cihaz adı, türü, üst cihazı, "aynı cihaz" eşleşmesi: karta tıkla > Düzenle
-#   * renkler, erişim, kaynaklar: Ayarlar
-# Haritadaki düzenlemeler bu dosyadakileri ezer.
+# On install this file is copied to <NODESK_HOME>/config.toml. Updates never touch that copy.
+# Most things are set from the map now, so you rarely need this file:
+#   * groups (homes, cloud, roaming devices) and the group of each Tailscale device: Settings > Groups
+#   * device name, type, parent, "same device" pairing: click a card > Edit
+#   * colors, access, sources, language: Settings
+# Edits made on the map override this file.
 
 [general]
 oui_file = "/usr/share/arp-scan/ieee-oui.txt"
-# Depoda yeni sürüm var mı diye kaç saatte bir bakılsın (0 = hiç bakma)
+# How often (hours) to check the repository for a new version (0 = never)
 update_check_hours = 6
-# Bu kadar gün görülmeyen cihaz haritadan silinir (uyuyan cihazlar bu sürede gri görünür)
+# Devices not seen for this many days are dropped from the map (sleeping devices show grey until then)
 forget_after_days = 14
-# Ajanların Pi'ye ulaşacağı adres (boşsa Pi'nin Tailscale IP'si kullanılır)
+# Address the agents use to reach the Pi (empty = the Pi's Tailscale IP)
 # public_url = "http://100.x.y.z:8088"
 
-# Docker Compose / CasaOS uygulamalarının haritadaki adı (proje adı = ad).
-# Yazılmayanlar CasaOS'taki başlıkla, o da yoksa proje adıyla görünür.
+# Names of Docker Compose / CasaOS apps on the map (project name = name).
+# Apps not listed use their CasaOS title, or else the project name.
 [apps]
-# "media-app" = "Medya"
+# "media-app" = "Media"
 
 # ---------------------------------------------------------------------------
-# Cihazlar: MAC adresine göre (IP değişse de kalır). Haritadan da düzenlenebilir.
-#   name   = haritada görünen ad
+# Devices, keyed by MAC address (kept when the IP changes). Also editable on the map.
+#   name   = name shown on the map
 #   type   = modem, router, ap, server, laptop, pc, phone, tablet, tv, iot, lamp,
 #            vacuum, camera, printer, console, speaker, nas, device
-#   parent = bu cihazı başka bir cihazın altına çiz (o cihazın MAC'i)
-# Telefonlar her Wi-Fi ağında ayrı rastgele MAC kullanır: aynı telefonun MAC'lerini aynı adla
-# yazarsan tek cihaz olarak görünür.
+#   parent = draw this device under another device (that device's MAC)
+# Phones use a different random MAC on every Wi-Fi network: give the MACs of the same phone
+# the same name and they show up as one device.
 # ---------------------------------------------------------------------------
 [devices]
-# "aa:bb:cc:dd:ee:ff" = { name = "Salon TV", type = "tv" }
+# "aa:bb:cc:dd:ee:ff" = { name = "Living room TV", type = "tv" }

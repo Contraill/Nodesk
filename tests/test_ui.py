@@ -48,18 +48,19 @@ class UiSelfTest(unittest.TestCase):
         cls.proc.terminate()
         cls.proc.wait(10)
 
-    def run_selftest(self, size):
+    def run_selftest(self, size, lang="en"):
         out = subprocess.run([BROWSER, "--headless", "--disable-gpu", f"--window-size={size}",
                               "--virtual-time-budget=9000", "--dump-dom",
-                              f"http://127.0.0.1:{self.port}/#selftest"],
+                              f"http://127.0.0.1:{self.port}/?lang={lang}#selftest"],
                              capture_output=True, text=True, timeout=90).stdout
         m = out.split('data-selftest="', 1)
         self.assertEqual(len(m), 2, f"öz-test sonucu yok ({size})")
+        self.assertIn(f'<html lang="{lang}"', out)
         return json.loads(html.unescape(m[1].split('"', 1)[0]))
 
     def test_layout_and_lines(self):
-        for size in ("1920,1080", "1366,768", "1100,1300", "520,900"):
-            r = self.run_selftest(size)
+        for size, lang in (("1920,1080", "en"), ("1366,768", "en"), ("1100,1300", "en"), ("520,900", "en"), ("1366,768", "tr")):
+            r = self.run_selftest(size, lang)
             self.assertTrue(r["ok"], f"{size}: {r['problems']} {r['errors']}")
             self.assertGreater(r["cards"], 20, size)
             self.assertGreaterEqual(r["lines"], 3, f"{size}: örnek verideki exit çizgileri çizilmeli")

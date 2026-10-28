@@ -26,18 +26,18 @@ def from_config(cfg):
     """Eski config.toml ([ev1], [ev2], [oracle], [mobile], [tailscale.site_of]) -> yeni yapı."""
     sites = []
     ev1 = cfg.get("ev1") or {}
-    sites.append({"id": "ev1", "type": "local", "name": ev1.get("name", "Ev"),
+    sites.append({"id": "ev1", "type": "local", "name": ev1.get("name", "Home"),
                   **{k: ev1[k] for k in KEYS["local"] if ev1.get(k)}})
     if cfg.get("ev2"):
         ev2 = cfg["ev2"]
-        sites.append({"id": "ev2", "type": "router", "agent": "router", "name": ev2.get("name", "Ev 2"),
+        sites.append({"id": "ev2", "type": "router", "agent": "router", "name": ev2.get("name", "Home 2"),
                       **{k: ev2[k] for k in KEYS["router"] if ev2.get(k)}})
     if cfg.get("oracle"):
         sites.append({"id": "oracle", "type": "group", "kind": "cloud",
-                      "name": cfg["oracle"].get("name", "Bulut")})
+                      "name": cfg["oracle"].get("name", "Cloud")})
     mob = cfg.get("mobile") or {}
     sites.append({"id": "mobile", "type": "group", "kind": "roam", "default": True,
-                  "name": mob.get("name", "Uzak / Mobil"), "root_name": mob.get("root_name", "Gezgin cihazlar")})
+                  "name": mob.get("name", "Remote / Mobile"), "root_name": mob.get("root_name", "Roaming devices")})
     ts_site = {k.lower(): v for k, v in ((cfg.get("tailscale") or {}).get("site_of") or {}).items()}
     return sites, ts_site
 
@@ -48,7 +48,7 @@ def resolve(sites, router_agents):
     # ajanı silinmiş router grubu haritadan kalkar (ayarda kalır: aynı adla yeniden eklenirse döner)
     out = [dict(s) for s in sites or [] if s.get("type") != "router" or s.get("agent") in router_agents]
     if not any(s["type"] == "local" for s in out):
-        out.insert(0, {"id": "ev1", "type": "local", "name": "Ev"})
+        out.insert(0, {"id": "ev1", "type": "local", "name": "Home"})
     have = {s.get("agent") for s in out if s["type"] == "router"}
     for name in sorted(router_agents):
         if name not in have:   # ajanı kurulmuş ama grubu yok: kendiliğinden ekle
@@ -56,21 +56,21 @@ def resolve(sites, router_agents):
             out.append({"id": sid, "type": "router", "agent": name, "name": name})
     if not any(s["type"] == "group" and s.get("default") for s in out):
         out.append({"id": "mobile", "type": "group", "kind": "roam", "default": True,
-                    "name": "Uzak / Mobil", "root_name": "Gezgin cihazlar"})
+                    "name": "Remote / Mobile", "root_name": "Roaming devices"})
     return out
 
 
 def validate(sites):
     """Arayüzden gelen grup listesini denetler -> temiz liste (hata varsa ValueError)."""
     if not isinstance(sites, list) or not 1 <= len(sites) <= 20:
-        raise ValueError("grup listesi 1-20 grup olmalı")
+        raise ValueError("the group list must have 1-20 groups")
     out, ids = [], set()
     for s in sites:
         sid, typ = str(s.get("id") or ""), s.get("type")
         if not ID_RE.match(sid) or sid in ids:
-            raise ValueError(f"geçersiz ya da tekrar eden grup kimliği: {sid!r}")
+            raise ValueError(f"invalid or duplicate group id: {sid!r}")
         if typ not in TYPES:
-            raise ValueError(f"geçersiz grup türü: {typ!r}")
+            raise ValueError(f"invalid group type: {typ!r}")
         ids.add(sid)
         clean = {"id": sid, "type": typ, "name": str(s.get("name") or sid).strip()[:40]}
         for k in KEYS[typ]:
@@ -81,13 +81,13 @@ def validate(sites):
                 clean[k] = bool(v)
             elif k == "kind":
                 if v not in ("cloud", "roam", "site"):
-                    raise ValueError("grup kind: cloud | roam | site")
+                    raise ValueError("group kind: cloud | roam | site")
                 clean[k] = v
             else:
                 clean[k] = str(v).strip()[:60]
         out.append(clean)
     if sum(s["type"] == "local" for s in out) != 1:
-        raise ValueError("tam olarak bir yerel ağ grubu olmalı")
+        raise ValueError("there must be exactly one local network group")
     if sum(bool(s.get("default")) for s in out) > 1:
-        raise ValueError("en fazla bir varsayılan grup olabilir")
+        raise ValueError("at most one default group is allowed")
     return out

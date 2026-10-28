@@ -174,10 +174,10 @@ class CollectTest(unittest.TestCase):
 
     def test_tailscale_path(self):
         ts = {n["tailscale"]["name"]: n["tailscale"]["path"] for n in self.data["nodes"] if n.get("tailscale")}
-        self.assertEqual(ts["cloud-arm"], "doğrudan")
-        self.assertEqual(ts["cloud-amd-1"], "aktarıcı (fra)", "trafik var, doğrudan adres yok")
-        self.assertEqual(ts["cloud-amd-2"], "boşta", "Relay alanı dolu ama trafik yok: aktarıcı sayılmaz")
-        self.assertEqual(ts["laptop-old"], "bağlantı yok")
+        self.assertEqual(ts["cloud-arm"], "direct")
+        self.assertEqual(ts["cloud-amd-1"], "relay (fra)", "trafik var, doğrudan adres yok")
+        self.assertEqual(ts["cloud-amd-2"], "idle", "Relay alanı dolu ama trafik yok: aktarıcı sayılmaz")
+        self.assertEqual(ts["laptop-old"], "offline")
 
     def test_exit_tuples_filter(self):
         e = [("100.64.0.3", "142.250.1.1", 6, 50000, 443),   # tailnet -> internet
@@ -498,7 +498,7 @@ class HistoryAlertsTest(unittest.TestCase):
         nxt = {"nodes": [dev("mac:a"), dev("mac:yeni"), dev("ip:10.0.0.7"), svc("svc:self:gitea", False)],
                "agents": [{"name": "router", "fresh": False}], "overlay": [{"from": "mac:a", "to": "self"}]}
         titles = sorted(t for t, _, _ in n.check(nxt, {}))
-        self.assertEqual(titles, ["Ajan sustu", "Exit node değişti", "Servis kapandı", "Yeni cihaz"],
+        self.assertEqual(titles, ["Agent silent", "Exit node changed", "New device", "Service down"],
                          "geçici ip: kimliği yeni cihaz sayılmaz")
         self.assertEqual(n.check(nxt, {}), [], "değişmeyen durum tekrar bildirilmez")
 
@@ -570,7 +570,7 @@ class TeardownTest(unittest.TestCase):
         try:
             self.assertIsNone(app.removal_reason(), "yokluk yeni başladı")
             app.web_missing_since -= 601
-            self.assertEqual(app.removal_reason(), "web arayüzü silindi")
+            self.assertEqual(app.removal_reason(), "web UI removed")
             app.web_present = lambda: None
             app.web_missing_since = None
             self.assertIsNone(app.removal_reason(), "Docker'a sorulamıyor: karar verilmez")
@@ -598,7 +598,7 @@ class TeardownTest(unittest.TestCase):
     def test_cancel_if_web_returns(self):
         app = server.App(self.home_with_app(), FIX)
         app.web_present = lambda: True
-        self.assertFalse(app.teardown("web arayüzü silindi", wait_s=30, run=lambda s: self.fail("silinmemeli")))
+        self.assertFalse(app.teardown("web UI removed", wait_s=30, run=lambda s: self.fail("silinmemeli")))
         self.assertFalse(any(a.get("removing") for a in app.store.agents()["agents"].values()))
         self.assertFalse(os.path.exists(app.paths.teardown_state))
 
@@ -613,7 +613,7 @@ class FileSafetyTest(unittest.TestCase):
         with open(p, "w") as f:
             f.write('{"devices": {"a": 3')                   # yarım yazılmış dosya
         self.assertEqual(util.read_json(p, {}), {"devices": {"a": 1}}, "son sağlam yedek")
-        self.assertTrue(any(x.startswith("overrides.json.bozuk-") for x in os.listdir(d)), "bozuk dosya kenarda")
+        self.assertTrue(any(x.startswith("overrides.json.corrupt-") for x in os.listdir(d)), "bozuk dosya kenarda")
         self.assertEqual(util.read_json(p, {}), {"devices": {"a": 1}}, "geri yüklendi")
 
 
@@ -831,7 +831,7 @@ class ApiTest(unittest.TestCase):
 
     def test_ingest_asks_old_agent_to_update(self):
         token = store.Store(store.Paths(self.home)).agents()["agents"]["router"]["token"]
-        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n11", "#VERSION\n2", 1)
+        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n12", "#VERSION\n2", 1)
         st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=old.encode(), ctype="text/plain")
         self.assertEqual((st, body.strip()), (200, "ok update"))
         cur = open(os.path.join(FIX, "router.txt")).read()
@@ -916,7 +916,7 @@ class ApiTest(unittest.TestCase):
         a = next(x for x in json.loads(self.call("GET", "/api/agents")[1]) if x["name"] == "ev3")
         self.assertTrue(a["removing"])
         self.assertIn("nodesk-listen disable", a["manual_uninstall"])
-        self.assertEqual(ing(cur.replace("#VERSION\n11", "#VERSION\n9", 1))[1].strip(), "ok update",
+        self.assertEqual(ing(cur.replace("#VERSION\n12", "#VERSION\n9", 1))[1].strip(), "ok update",
                          "eski sürüm kaldırmayı bilmez: önce güncellenir")
         self.assertEqual(ing(cur)[1].strip(), "ok uninstall")
         self.assertEqual(ing("#UNINSTALLED\n#END\n")[1].strip(), "ok bye")
@@ -938,7 +938,7 @@ class ScriptsTest(unittest.TestCase):
             s = agents.installer(kind, "http://100.64.0.1:8088", "x", "tok")
             r = subprocess.run(["sh", "-n"], input=s, text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(agents.topo_version(), "11")
+        self.assertEqual(agents.topo_version(), "12")
 
     def test_router_installer_sandbox(self):
         """Router kurulum scriptini sahte kök dizinde BusyBox ile iki kez çalıştır."""
@@ -952,8 +952,7 @@ class ScriptsTest(unittest.TestCase):
         with open(os.path.join(root, "etc/crontabs/root"), "w") as f:
             f.write("* * * * * /usr/sbin/ts-exit-watchdog\n17 4 * * 1 /usr/sbin/update-tailscale-safe")
         with open(os.path.join(root, "etc/dropbear/authorized_keys"), "w") as f:
-            f.write("ssh-ed25519 AAAAexisting pi@laptop\n"
-                    'command="/usr/sbin/topo-collect",no-pty ssh-ed25519 AAAAold topo@home-pi\n')
+            f.write("ssh-ed25519 AAAAexisting pi@laptop\n")
         # sahte curl: raporu dosyaya yazar
         with open(os.path.join(root, "bin/curl"), "w") as f:
             f.write(f"#!/bin/sh\necho called >> {root}/curl.log\nexit 0\n")

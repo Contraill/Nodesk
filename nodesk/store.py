@@ -23,6 +23,7 @@ DEFAULT_SETTINGS = {
     "interval_min": 5,        # tarama sıklığı (dakika)
     "online_window_min": 15,  # pasif dinlemede bu kadar dakikadır ses veren cihaz çevrimiçi sayılır
     "agent_auto_update": True,  # ajanlar (router dahil) yeni sürümü Pi'den kendileri alsın
+    "lang": "en",             # bildirimlerin ve yeni ziyaretçilerin dili: en | tr
     "sources": {
         "tailscale": True,    # tailscale status
         "arp": True,          # Ev 1 aktif ARP taraması (arp-scan)
@@ -41,6 +42,7 @@ COLOR_CATEGORIES = ("net", "srv", "pc", "mobile", "media", "home", "other", "app
 DEFAULT_SETTINGS["colors"] = {"net": "#3b82d6", "srv": "#c2508a", "pc": "#8e66d0", "mobile": "#e07b53",
                               "media": "#d6a03a", "home": "#4f9d69", "other": "", "app": "#1e9ab0",
                               "sys": "#8c9440"}
+LANGS = ("en", "tr")
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 # Kim düzenler / kim görür (auth.py). edit: tailnet | password | everyone; view: everyone | login
 DEFAULT_SETTINGS["access"] = {"edit": "tailnet", "view": "everyone", "ts_users": []}
@@ -117,7 +119,7 @@ class Store:
             if "interval_min" in patch:
                 v = int(patch["interval_min"])
                 if v not in INTERVALS:
-                    raise ValueError(f"sıklık şunlardan biri olmalı: {INTERVALS}")
+                    raise ValueError(f"interval must be one of: {INTERVALS}")
                 cur["interval_min"] = v
             if "online_window_min" in patch:
                 cur["online_window_min"] = max(2, min(240, int(patch["online_window_min"])))
@@ -148,26 +150,30 @@ class Store:
             if "ntfy_url" in al:
                 v = str(al["ntfy_url"]).strip()[:300]
                 if v and not re.match(r"^https?://[^\s]+$", v):
-                    raise ValueError("ntfy adresi http(s):// ile başlamalı (örn. https://ntfy.sh/konu)")
+                    raise ValueError("ntfy URL must start with http(s):// (e.g. https://ntfy.sh/topic)")
                 cur["alerts"]["ntfy_url"] = v
             if "telegram_token" in al:
                 v = str(al["telegram_token"]).strip()
                 if v and not re.match(r"^[0-9]{5,}:[A-Za-z0-9_-]{20,}$", v):
-                    raise ValueError("Telegram bot anahtarı 123456:ABC... biçiminde olmalı")
+                    raise ValueError("Telegram bot token must look like 123456:ABC...")
                 cur["alerts"]["telegram_token"] = v
             if "telegram_chat" in al:
                 v = str(al["telegram_chat"]).strip()[:40]
                 if v and not re.match(r"^(-?[0-9]+|@[A-Za-z0-9_]{4,})$", v):
-                    raise ValueError("Telegram sohbet kimliği sayı ya da @kanal olmalı")
+                    raise ValueError("Telegram chat id must be a number or @channel")
                 cur["alerts"]["telegram_chat"] = v
             for k, v in (al.get("events") or {}).items():
                 if k in DEFAULT_SETTINGS["alerts"]["events"]:
                     cur["alerts"]["events"][k] = bool(v)
+            if "lang" in patch:
+                if patch["lang"] not in LANGS:
+                    raise ValueError("lang: " + " | ".join(LANGS))
+                cur["lang"] = patch["lang"]
             if "setup_done" in patch:
                 cur["setup_done"] = bool(patch["setup_done"])
             for k, v in (patch.get("colors") or {}).items():
                 if k not in COLOR_CATEGORIES or not (v == "" or HEX_COLOR.match(str(v))):
-                    raise ValueError(f"geçersiz renk: {k}={v}")
+                    raise ValueError(f"invalid color: {k}={v}")
                 cur["colors"][k] = str(v).lower()
             util.write_json(self.p.settings, cur)
             return cur
@@ -187,7 +193,7 @@ class Store:
             clean["name"] = str(patch["name"]).strip()[:60]
         if patch.get("type"):
             if patch["type"] not in DEVICE_TYPES:
-                raise ValueError("bilinmeyen tür")
+                raise ValueError("unknown type")
             clean["type"] = patch["type"]
         if patch.get("parent"):
             clean["parent"] = str(patch["parent"])[:80]
@@ -202,14 +208,14 @@ class Store:
         if patch.get("icon"):
             icon = str(patch["icon"]).strip()[:300]
             if not icon.startswith("https://"):
-                raise ValueError("ikon adresi https:// ile başlamalı")
+                raise ValueError("icon URL must start with https://")
             clean["icon"] = icon
         if patch.get("hidden"):
             clean["hidden"] = True
         for k in ("same_as", "not_same"):   # aynı cihazın başka MAC'i / öneriyi reddet
             v = str(patch.get(k) or "")
             if v and (not v.startswith("mac:") or len(v) > 30 or v == node_id):
-                raise ValueError(f"geçersiz {k}")
+                raise ValueError(f"invalid {k}")
             if v:
                 clean[k] = v
         services = []
@@ -220,9 +226,9 @@ class Store:
             if not name:
                 continue
             if port and not (port.isdigit() and 0 < int(port) < 65536):
-                raise ValueError(f"geçersiz port: {port}")
+                raise ValueError(f"invalid port: {port}")
             if url and not re.match(r"^https?://", url):
-                raise ValueError("bağlantı http:// ya da https:// ile başlamalı")
+                raise ValueError("link must start with http:// or https://")
             services.append({k: v for k, v in (("name", name), ("port", port), ("url", url)) if v})
         if services:
             clean["services"] = services[:20]
@@ -253,7 +259,7 @@ class Store:
 
     def set_site(self, site_id, patch):
         if site_id not in {s["id"] for s in self.sites()}:
-            raise ValueError("bilinmeyen grup")
+            raise ValueError("unknown group")
         with self.lock:
             o = self.overrides()
             name = str(patch.get("name") or "").strip()[:40]
@@ -289,9 +295,9 @@ class Store:
     def add_agent(self, name, kind):
         name = (name or "").strip().lower()
         if not AGENT_NAME_RE.match(name):
-            raise ValueError("ad küçük harf, rakam ve tire içermeli (en fazla 32 karakter)")
+            raise ValueError("name may contain lowercase letters, digits and dashes (max 32)")
         if kind not in ("router", "linux"):
-            raise ValueError("tür router ya da linux olmalı")
+            raise ValueError("kind must be router or linux")
         with self.lock:
             a = self.agents()
             cur = a["agents"].get(name)

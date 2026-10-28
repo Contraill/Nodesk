@@ -1,5 +1,5 @@
 [Unit]
-Description=Nodesk: ag topolojisi haritasi (toplayici + API)
+Description=Nodesk network map (collector + API)
 After=network-online.target tailscaled.service docker.service
 Wants=network-online.target
 
@@ -14,7 +14,7 @@ Restart=always
 RestartSec=15
 Nice=10
 IOSchedulingClass=idle
-# Root gerekir: ARP taraması ve pasif dinleme (ham soket), Docker soketi, tailscale.
+# Runs as root: ARP scan and passive listening (raw sockets), Docker socket, tailscale.
 MemoryMax=150M
 
 [Install]

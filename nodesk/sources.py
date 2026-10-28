@@ -37,20 +37,20 @@ class Runner:
         if self.fixtures:
             out = self.fixture(key)
             if out is None:
-                self.mark(source, False, error="örnek veri yok")
+                self.mark(source, False, error="no fixture data")
             return out
         try:
             p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
         except FileNotFoundError:
-            self.mark(source, False, error=f"{argv[0]} bulunamadı")
+            self.mark(source, False, error=f"{argv[0]} not found")
             return None
         except subprocess.TimeoutExpired:
-            self.mark(source, False, error=f"{argv[0]} {timeout} sn içinde bitmedi")
+            self.mark(source, False, error=f"{argv[0]} did not finish in {timeout} s")
             return None
         if p.returncode != 0:
             err = "; ".join(line for line in p.stderr.strip().splitlines()
                             if not line.startswith("Warning: Permanently added"))[:200]
-            self.mark(source, False, error=f"{argv[0]} çıkış kodu {p.returncode}: {err}")
+            self.mark(source, False, error=f"{argv[0]} exit code {p.returncode}: {err}")
             return None
         return p.stdout
 
@@ -64,7 +64,7 @@ def tailscale(r):
     try:
         d = json.loads(raw)
     except json.JSONDecodeError as e:
-        r.mark("tailscale", False, error=f"JSON okunamadı: {e}")
+        r.mark("tailscale", False, error=f"unreadable JSON: {e}")
         return None
     r.mark("tailscale", True, count=len(d.get("Peer") or {}) + 1)
     return d
@@ -143,7 +143,7 @@ def neigh(r):
     try:
         data = json.loads(raw or "[]")
     except json.JSONDecodeError:
-        r.mark("neigh", False, error="JSON okunamadı")
+        r.mark("neigh", False, error="unreadable JSON")
         return None
     res = []
     for e in data:
@@ -186,7 +186,7 @@ def conntrack_v4():
                 if typ == 3 or ln < 16:              # NLMSG_DONE
                     return out
                 if typ == 2:                         # NLMSG_ERROR
-                    raise OSError("conntrack okunamadı")
+                    raise OSError("conntrack unreadable")
                 a = _nla(data, off + 20, off + ln)
                 tup = _nla(a.get(1, b""), 0, len(a.get(1, b"")))           # CTA_TUPLE_ORIG
                 ip = _nla(tup.get(1, b""), 0, len(tup.get(1, b"")))        # CTA_TUPLE_IP
@@ -252,7 +252,7 @@ def docker_containers(r, sock="/var/run/docker.sock"):
     if r.fixtures:
         raw = r.fixture("docker_containers.json")
         if raw is None:
-            r.mark("docker", False, error="örnek veri yok")
+            r.mark("docker", False, error="no fixture data")
             return None
         items = json.loads(raw)
     else:
@@ -431,7 +431,7 @@ def check_ports(r, ports, hosts=("127.0.0.1",)):
 PROC_NAMES = {
     "casaos-gateway": "CasaOS", "casaos": "CasaOS", "smbd": "Samba", "sshd": "SSH",
     "sshd-session": "SSH", "dropbear": "SSH", "wayvnc": "VNC", "x11vnc": "VNC",
-    "vncserver-x11-core": "VNC", "vncserver-x11": "VNC", "cupsd": "Yazıcı (CUPS)",
+    "vncserver-x11-core": "VNC", "vncserver-x11": "VNC", "cupsd": "Printer (CUPS)",
     "apache2": "Apache", "httpd": "Apache", "lighttpd": "lighttpd", "pihole-FTL": "Pi-hole",
     "mysqld": "MariaDB", "mariadbd": "MariaDB", "postgres": "PostgreSQL",
     "redis-server": "Redis", "uhttpd": "LuCI", "rpcbind": None, "systemd-resolve": None,

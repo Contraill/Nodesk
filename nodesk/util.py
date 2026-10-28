@@ -112,24 +112,24 @@ _write_lock = threading.Lock()
 
 def read_json(path, default=None):
     """Bozuk dosya sessizce boş sayılmaz (bir sonraki kayıt verileri ezerdi): kenara alınır
-    (<ad>.bozuk-<zaman>) ve son sağlam yedek (<ad>.bak) kullanılır."""
+    (<ad>.corrupt-<zaman>) ve son sağlam yedek (<ad>.bak) kullanılır."""
     try:
         with open(path, encoding="utf-8") as f:
             return json.load(f)
     except OSError:
         return default
     except (json.JSONDecodeError, UnicodeDecodeError):
-        bad = f"{path}.bozuk-{int(time.time())}"
+        bad = f"{path}.corrupt-{int(time.time())}"
         try:
             os.replace(path, bad)
         except OSError:
             pass
-        print(f"[nodesk] bozuk dosya kenara alındı: {bad}", flush=True)
+        print(f"[nodesk] corrupt file moved aside: {bad}", flush=True)
         try:
             with open(path + ".bak", encoding="utf-8") as f:
                 data = json.load(f)
             write_json(path, data)
-            print(f"[nodesk] yedekten geri yüklendi: {path}.bak", flush=True)
+            print(f"[nodesk] restored from backup: {path}.bak", flush=True)
             return data
         except (OSError, json.JSONDecodeError, UnicodeDecodeError):
             return default

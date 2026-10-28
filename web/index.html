@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -264,46 +264,47 @@ button, input, select, textarea { font: inherit; color: inherit; }
 </style>
 </head>
 <body>
-<svg id="map" role="img" aria-label="Ağ topolojisi haritası"><g id="world"></g></svg>
+<svg id="map" role="img" aria-label="Network topology map"><g id="world"></g></svg>
 
 <div class="bar">
-  <div class="brand surface"><h1>HomeNet</h1><span class="meta" id="meta">yükleniyor…</span></div>
+  <div class="brand surface"><h1>Nodesk</h1><span class="meta" id="meta" data-t>loading…</span></div>
   <div class="tools surface">
-    <input type="search" id="q" placeholder="Cihaz, IP, MAC ya da servis" aria-label="Ara">
+    <input type="search" id="q" placeholder="Device, IP, MAC or service" aria-label="Search">
     <span class="sep"></span>
-    <button class="btn" id="bFilter" title="Filtrele"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12l-4.5 5.5V13l-3-1.5v-3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="lbl">Filtre</span><span class="badge" id="fCount" hidden></span></button>
-    <button class="btn" id="tTail" aria-pressed="false" title="Evler ve bulut arası Tailscale bağlantılarını göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="2" fill="currentColor"/><circle cx="13" cy="3.5" r="2" fill="currentColor"/><circle cx="13" cy="12.5" r="2" fill="currentColor"/><path d="M5 7l6-3M5 9l6 3" stroke="currentColor" stroke-dasharray="2 2" fill="none"/></svg><span class="lbl">Tailnet</span></button>
-    <button class="btn" id="tExit" aria-pressed="true" title="Exit node kullanımını göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13L13 3M7 3h6v6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">Exit</span></button>
-    <button class="btn" id="tSvc" aria-pressed="true" title="Servisleri göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span class="lbl">Servisler</span></button>
-    <button class="btn" id="tOff" aria-pressed="true" title="Şu an görünmeyen cihazları göster"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="currentColor" stroke-dasharray="2.5 2"/></svg><span class="lbl">Çevrimdışı</span></button>
+    <button class="btn" id="bFilter" title="Filter"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12l-4.5 5.5V13l-3-1.5v-3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="lbl" data-t>Filter</span><span class="badge" id="fCount" hidden></span></button>
+    <button class="btn" id="tTail" aria-pressed="false" title="Show Tailscale links between sites"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="2" fill="currentColor"/><circle cx="13" cy="3.5" r="2" fill="currentColor"/><circle cx="13" cy="12.5" r="2" fill="currentColor"/><path d="M5 7l6-3M5 9l6 3" stroke="currentColor" stroke-dasharray="2 2" fill="none"/></svg><span class="lbl">Tailnet</span></button>
+    <button class="btn" id="tExit" aria-pressed="true" title="Show exit node usage"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13L13 3M7 3h6v6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">Exit</span></button>
+    <button class="btn" id="tSvc" aria-pressed="true" title="Show services"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span class="lbl" data-t>Services</span></button>
+    <button class="btn" id="tOff" aria-pressed="true" title="Show devices that are not visible right now"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="currentColor" stroke-dasharray="2.5 2"/></svg><span class="lbl" data-t>Offline</span></button>
     <span class="sep"></span>
-    <button class="btn" id="bScan" title="Şimdi tara" data-api><svg id="scanIcon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl">Tara</span></button>
-    <button class="btn" id="bSettings" title="Ayarlar ve ajanlar" data-api><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="lbl">Ayarlar</span><span class="badge" id="updBadge" hidden>1</span></button>
-    <button class="btn" id="bLogin" title="Düzenlemek için giriş yap" hidden><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span class="lbl">Giriş</span></button>
-    <button class="btn" id="bLogout" title="Çıkış" hidden><span class="lbl">Çıkış</span></button>
-    <button class="btn" id="theme" title="Açık / koyu tema"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg></button>
+    <button class="btn" id="bScan" title="Scan now" data-api><svg id="scanIcon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-t>Scan</span></button>
+    <button class="btn" id="bSettings" title="Settings and agents" data-api><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="lbl" data-t>Settings</span><span class="badge" id="updBadge" hidden>1</span></button>
+    <button class="btn" id="bLogin" title="Log in to edit" hidden><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span class="lbl" data-t>Log in</span></button>
+    <button class="btn" id="bLogout" title="Log out" hidden><span class="lbl" data-t>Log out</span></button>
+    <button class="btn" id="bLang" title="Language" style="font-weight:600">EN</button>
+    <button class="btn" id="theme" title="Light / dark theme"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg></button>
   </div>
 </div>
 <div class="alerts" id="alerts"></div>
 
-<div class="legend" aria-label="Lejant">
+<div class="legend" aria-label="Legend">
   <span id="lgCats" style="display:contents"></span>
-  <span><i style="border-color:var(--cable)"></i>Yerel ağ</span>
-  <span><i style="border-color:var(--svcline)"></i>Servis bağı</span>
-  <span><i style="border-color:var(--tail);border-top-width:3px"></i>Tailnet doğrudan</span>
-  <span><i style="border-color:var(--relay);border-top-width:3px;border-top-style:dashed"></i>Tailnet aktarıcı</span>
-  <span><i style="border-color:var(--exit);border-top-width:3px"></i>Exit node trafiği</span>
+  <span data-t><i style="border-color:var(--cable)"></i>Local network</span>
+  <span data-t><i style="border-color:var(--svcline)"></i>Service link</span>
+  <span data-t><i style="border-color:var(--tail);border-top-width:3px"></i>Tailnet direct</span>
+  <span data-t><i style="border-color:var(--relay);border-top-width:3px;border-top-style:dashed"></i>Tailnet relay</span>
+  <span data-t><i style="border-color:var(--exit);border-top-width:3px"></i>Exit node traffic</span>
 </div>
 <div class="zoom surface">
-  <button class="btn" id="zIn" title="Yakınlaştır" aria-label="Yakınlaştır">+</button>
-  <button class="btn" id="zOut" title="Uzaklaştır" aria-label="Uzaklaştır">−</button>
-  <button class="btn" id="zFit" title="Ekrana sığdır" aria-label="Ekrana sığdır"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></button>
+  <button class="btn" id="zIn" title="Zoom in" aria-label="Zoom in">+</button>
+  <button class="btn" id="zOut" title="Zoom out" aria-label="Zoom out">−</button>
+  <button class="btn" id="zFit" title="Fit to screen" aria-label="Fit to screen"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></button>
 </div>
 
 <div class="scrim" id="scrim"></div>
-<aside class="drawer right" id="panel" aria-label="Cihaz ayrıntıları"><button class="btn close" data-close aria-label="Kapat">×</button><div id="pbody"></div></aside>
-<aside class="drawer right" id="settings" aria-label="Ayarlar"><button class="btn close" data-close aria-label="Kapat">×</button><div id="sbody"></div></aside>
-<aside class="drawer left" id="filters" aria-label="Filtreler"><button class="btn close" data-close aria-label="Kapat">×</button><div id="fbody"></div></aside>
+<aside class="drawer right" id="panel" aria-label="Device details"><button class="btn close" data-close aria-label="Close">×</button><div id="pbody"></div></aside>
+<aside class="drawer right" id="settings" aria-label="Settings"><button class="btn close" data-close aria-label="Close">×</button><div id="sbody"></div></aside>
+<aside class="drawer left" id="filters" aria-label="Filters"><button class="btn close" data-close aria-label="Close">×</button><div id="fbody"></div></aside>
 
 <script>
 "use strict";
@@ -311,6 +312,231 @@ const NS = "http://www.w3.org/2000/svg";
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const svg = $("#map"), world = $("#world");
+
+/* ---------------- dil: İngilizce varsayılan, Türkçe seçilebilir ----------------
+   Kaynak metinler İngilizce; _() Türkçe karşılığını TR'den alır, {ad} yer tutucularını doldurur.
+   _x(): sunucudan gelen metinler (hata, not, yol) için; tam eşleşme ya da TR_RX kalıpları. */
+let LANG = "en", LANG_CHOSEN = false;
+try { const l = new URLSearchParams(location.search).get("lang") || localStorage.getItem("nodesk-lang"); if (l === "en" || l === "tr") { LANG = l; LANG_CHOSEN = true; } } catch (e) {}
+const LOCALE = () => (LANG === "tr" ? "tr-TR" : "en-GB");
+const TR = {
+  // üst çubuk, lejant, yan paneller
+  "Network topology map": "Ağ topolojisi haritası", "loading…": "yükleniyor…", "Device, IP, MAC or service": "Cihaz, IP, MAC ya da servis",
+  "Search": "Ara", "Filter": "Filtre", "Show Tailscale links between sites": "Gruplar arası Tailscale bağlantılarını göster",
+  "Show exit node usage": "Exit node kullanımını göster", "Show services": "Servisleri göster", "Services": "Servisler",
+  "Show devices that are not visible right now": "Şu an görünmeyen cihazları göster", "Offline": "Çevrimdışı", "Scan now": "Şimdi tara",
+  "Scan": "Tara", "Settings and agents": "Ayarlar ve ajanlar", "Settings": "Ayarlar", "Log in to edit": "Düzenlemek için giriş yap",
+  "Log in": "Giriş", "Log out": "Çıkış", "Language": "Dil", "Light / dark theme": "Açık / koyu tema", "Legend": "Lejant",
+  "Local network": "Yerel ağ", "Service link": "Servis bağı", "Tailnet direct": "Tailnet doğrudan", "Tailnet relay": "Tailnet aktarıcı",
+  "Exit node traffic": "Exit node trafiği", "Zoom in": "Yakınlaştır", "Zoom out": "Uzaklaştır", "Fit to screen": "Ekrana sığdır",
+  "Device details": "Cihaz ayrıntıları", "Close": "Kapat", "Filters": "Filtreler",
+  // türler ve roller
+  "Access point / extender": "Erişim noktası / extender", "Server": "Sunucu", "Cloud server": "Bulut sunucu",
+  "Desktop computer": "Masaüstü bilgisayar", "Laptop": "Dizüstü bilgisayar", "Phone": "Telefon", "Television": "Televizyon",
+  "Game console": "Oyun konsolu", "Smart device": "Akıllı cihaz", "Smart lamp": "Akıllı lamba", "Robot vacuum": "Robot süpürge",
+  "Camera": "Kamera", "Printer": "Yazıcı", "Speaker": "Hoparlör", "NAS / storage": "NAS / depolama", "Cloud": "Bulut",
+  "Roaming devices": "Gezgin cihazlar", "Internet": "İnternet", "Unidentified device": "Tanımlanmamış cihaz", "Service": "Servis",
+  "Network device": "Ağ cihazı", "Computer": "Bilgisayar", "Phone / tablet": "Telefon / tablet", "TV / media": "TV / medya",
+  "Smart home": "Akıllı ev", "Other device": "Diğer cihaz", "App": "Uygulama", "System service": "Sistem servisi",
+  "Apps": "Uygulamalar", "System": "Sistem", "Ocean": "Okyanus", "Sunset": "Gün batımı", "Forest": "Orman", "Plain": "Sade",
+  // kaynaklar
+  "tailnet devices and connection paths": "tailnet cihazları ve bağlantı yolları", "Local ARP scan": "Yerel ARP taraması",
+  "~256 ARP packets from the Pi to its own network": "Pi'den kendi ağına ~256 ARP paketi", "Passive listening": "Pasif dinleme",
+  "listens to ARP/DHCP/mDNS/SSDP without sending anything; learns device names": "ağa paket göndermeden ARP/DHCP/mDNS/SSDP dinler; cihaz adlarını bulur",
+  "Pi neighbour table": "Pi'nin komşu tablosu", "devices the Pi talked to recently": "Pi'nin yakın zamanda konuştuğu cihazlar",
+  "containers and CasaOS apps on the Pi": "Pi'deki container'lar ve CasaOS uygulamaları", "Non-Docker services": "Docker dışı servisler",
+  "Pi services such as CasaOS, Samba, SSH": "CasaOS, Samba, SSH gibi Pi servisleri", "Router agents": "Router ajanları",
+  "DHCP, ARP and modem network behind each router (reported every 5 min)": "her router'ın DHCP, ARP ve modem ağı (5 dk'da bir gönderilir)",
+  "Server agents": "Sunucu ajanları", "services on servers with a Linux agent": "Linux ajanı kurulu sunuculardaki servisler",
+  "Service health check": "Servis sağlık kontrolü", "do the Pi's service ports answer (checked on the Pi only)": "Pi'deki servislerin portları yanıt veriyor mu (sadece Pi'nin kendisinde)",
+  "Local name query": "Yerel ad sorgusu", "one NetBIOS/mDNS name query per device per day and a single SSDP search; never via a router": "her cihaza günde bir kez NetBIOS/mDNS ad sorusu ve tek SSDP araması; router'a uğramaz",
+  "behind an extender (MAC-NAT)": "extender (MAC-NAT) arkasında", "ARP scan": "ARP taraması", "neighbour table": "komşu tablosu",
+  "passive listening": "pasif dinleme", "this device": "bu cihaz", "agent": "ajan",
+  "the Pi's network": "Pi'nin ağı", "router agent": "router ajanı", "Tailscale group": "Tailscale grubu",
+  "logged in with the password": "parolayla giriş yapmış olarak", "on the Pi itself": "Pi'nin kendisinden", "over Tailscale": "Tailscale üzerinden",
+  "with open editing": "herkese açık düzenlemeyle", "as {u}": "{u} hesabıyla",
+  "A new device joined": "Yeni cihaz ağa katıldı", "A service went down / recovered": "Servis kapandı / düzeldi",
+  "An agent stopped / resumed reporting": "Ajan rapor göndermez oldu / döndü", "Exit node changed": "Exit node değişti",
+  // zaman
+  "just now": "az önce", "{n} min ago": "{n} dk önce", "{n} h ago": "{n} sa önce", "{n} days ago": "{n} gün önce",
+  "{d} days {h} h": "{d} gün {h} saat", "{h} h {m} min": "{h} saat {m} dk", "{m} min": "{m} dk",
+  "Online history of the last 7 days: {pct}%": "Son 7 günün çevrimiçi geçmişi: yüzde {pct}", "Last 7 days": "Son 7 gün",
+  "{pct}% online (UTC days, 10-minute slots)": "%{pct} çevrimiçi (UTC günleri, 10 dakikalık dilimler)",
+  // harita
+  "Copied": "Kopyalandı", "Select and copy": "Seçip kopyala", "Copy": "Kopyala", "Rename group": "Grubu adlandır",
+  "{a} reaches the internet through {b} (exit node)": "{a} interneti {b} üzerinden çıkıyor (exit node)",
+  "vantage point": "görüş noktası", "offline": "bağlantı yok", "{n}/{m} relayed": "{n}/{m} aktarıcı", "{n} direct": "{n} doğrudan",
+  "{n} idle": "{n} boşta", "{n} down": "{n} kapalı", "{n}/{m} online": "{n}/{m} çevrimiçi",
+  "Connection states are as seen from the Pi in this group.": "Bağlantı durumları bu gruptaki Pi'den görüldüğü gibidir.",
+  "{n} services": "{n} servis", "collapsed": "kapalı", "expanded": "açık", "Expand": "Aç", "Collapse": "Kapat",
+  "online": "çevrimiçi", "random MAC": "rastgele MAC", "Reaches the internet through {b} (exit node)": "İnterneti {b} üzerinden çıkıyor (exit node)",
+  "Used as exit node by: ": "Exit node olarak kullananlar: ", "Stopped": "Durdu", "Unreachable": "Ulaşılamıyor",
+  "Not responding": "Yanıt vermiyor", "Partly responding": "Kısmen yanıt veriyor", "Running": "Çalışıyor",
+  // paneller
+  "Status": "Durum", "Runs on": "Çalıştığı yer", "Source": "Kaynak", "Ports": "Portlar", "Image": "İmaj", "Health": "Sağlık",
+  "port(s) refuse connections from the Pi itself": "port(lar) Pi'nin kendisinden bağlantı kabul etmiyor", "edited": "düzenlendi",
+  "Open": "Aç", "Containers": "Container'lar", "stopped": "durdu", "Edit": "Düzenle",
+  "Editing service · empty fields stay automatic": "Servis düzenleniyor · boş bırakılan alanlar otomatik kalır", "Name": "Ad",
+  "Icon URL": "İkon adresi", "automatic": "otomatik",
+  "The Pi downloads the icon once; devices viewing the map need no internet access. Ready-made icons:": "İkonu Pi bir kez indirir; haritayı açan cihazın internete çıkması gerekmez. Hazır ikonlar:",
+  "Tags": "Etiketler", "comma separated": "virgülle ayır", "Note": "Not", "Hide on the map": "Haritada gizle", "Save": "Kaydet",
+  "Cancel": "Vazgeç", "Clear edits": "Düzenlemeleri sil", "Could not save: ": "Kaydedilemedi: ",
+  "Group · {n} devices, {on} online": "Grup · {n} cihaz, {on} çevrimiçi", "Group name": "Grubun adı", "Name of the top card": "Üstteki kartın adı",
+  "Leave empty to go back to the default name. The name only shows on the map; network settings are untouched.": "Boş bırakırsan varsayılan ada döner. Ad sadece haritada görünür; ağ ayarlarına dokunmaz.",
+  "Cannot reach the Nodesk service to rename.": "Adlandırmak için Nodesk servisine ulaşılamıyor.",
+  "Online": "Çevrimiçi", "No data": "Veri alınamadı", "Not visible": "Görünmüyor", "Local IP": "Yerel IP",
+  "random (privacy) MAC": "rastgele (gizlilik) MAC", "Vendor": "Üretici", "hidden (random MAC)": "gizli (rastgele MAC)", "unknown": "bilinmiyor",
+  "OS": "İşletim sist.", "Internet exit": "İnternet çıkışı", "through {b}": "{b} üzerinden", "used by: ": "kullananlar: ",
+  "Own name": "Kendi adı", "Announces": "Yayınladığı", "Interfaces": "Arayüzler", "Found by": "Nasıl bulundu", "First seen": "İlk görülme",
+  "Last seen": "Son görülme", "not seen online yet": "henüz çevrimiçi görülmedi",
+  "This device's name is unknown; the name shown is a guess from vendor, OS or IP. Name it once under Edit and it sticks.": "Bu cihazın adı bilinmiyor; gösterilen ad üretici, işletim sistemi ya da IP'den tahmin. Düzenle'den bir kez adlandırırsan kalıcı olur.",
+  "This may be the same phone as <b>{b}</b>, which just disappeared: phones use a different (random) MAC on every Wi-Fi network.": "Bu cihaz, az önce kaybolan <b>{b}</b> ile aynı telefon olabilir: telefonlar her Wi-Fi ağında farklı (rastgele) MAC kullanır.",
+  "Same device": "Aynı cihaz", "Different device": "Farklı cihaz",
+  "No data from this site in the last scan; showing the last successful scan.": "Bu bölgeden son taramada veri alınamadı; gösterilen bilgiler son başarılı taramadan.",
+  "This Tailscale device is on the <b>{a}</b> network right now. It moves back to {b} when it leaves.": "Tailscale cihazı şu an <b>{a}</b> ağında. Oradan ayrılınca {b} grubuna döner.",
+  "Remote / Mobile": "Uzak / Mobil", "Agent <b>{a}</b>: last report {b}": "Ajan <b>{a}</b>: son rapor {b}", "(stale)": "(eski)",
+  "Connection": "Bağlantı", "Routes": "Yönlendirilen", "offered": "sunuyor", "Last connected": "Son bağlantı",
+  "Cannot reach the Nodesk service to edit.": "Düzenleme için Nodesk servisine ulaşılamıyor.",
+  "<a href=\"#\" data-login>Log in</a> to edit.": "Düzenlemek için <a href=\"#\" data-login>giriş yap</a>.",
+  "Editing · empty fields stay automatic": "Düzenleniyor · boş bırakılan alanlar otomatik kalır", "Type": "Tür",
+  "Automatic ({k})": "Otomatik ({k})", "Connected to": "Bağlı olduğu cihaz", "Automatic (where it was found)": "Otomatik (bulunduğu yer)",
+  "the phone's MAC on another Wi-Fi network": "telefonun başka Wi-Fi ağındaki MAC'i", "e.g. living room, IoT": "örn. salon, IoT",
+  "Services added by hand": "Elle eklenen servisler", "+ Add service": "+ Servis ekle",
+  "visible with \"show hidden\" in the filter": "filtreden \"gizlileri göster\" ile görünür",
+  "Edits are stored against the MAC address ({mac}), so they survive IP changes.": "Değişiklikler MAC adresine ({mac}) bağlı saklanır; IP değişse de korunur.",
+  "Service name": "Servis adı", "Link (optional)": "Bağlantı (isteğe bağlı)", "Link": "Bağlantı", "Remove": "Kaldır",
+  // filtre
+  "Devices that do not match are dimmed.": "Eşleşmeyen cihazlar soluklaşır.", "Group": "Grup", "Tag": "Etiket",
+  "No tags yet. Edit a device to add some.": "Henüz etiket yok. Bir cihazı düzenleyip etiket ekleyebilirsin.",
+  "Only unnamed devices": "Sadece adı bilinmeyenler", "waiting for a name": "adlandırılmayı bekleyenler",
+  "Show hidden devices": "Gizlenmiş cihazları göster", "Clear filter": "Filtreyi temizle",
+  // ayarlar
+  "Loading…": "Yükleniyor…",
+  "Could not reach the Nodesk service ({e}). Check with <span class=\"mono\">sudo nodesk status</span> on the Pi.": "Nodesk servisine ulaşılamadı ({e}). Pi'de <span class=\"mono\">sudo nodesk status</span> ile kontrol et.",
+  "You are editing {how}. Agent reports are not affected by these settings (they use their own key).": "Şu an {how} düzenliyorsun. Ajanların raporları bu ayarlardan etkilenmez (onlar kendi anahtarıyla gelir).",
+  "Who can edit": "Kim düzenleyebilir", "Anyone connecting over Tailscale (recommended)": "Tailscale üzerinden bağlananlar (önerilen)",
+  "Only after logging in with the password": "Yalnızca parolayla giriş yapanlar",
+  "Everyone (including guests on the LAN, not recommended)": "Herkes (ev ağındaki misafirler dahil, önerilmez)",
+  "Allowed Tailscale accounts": "İzinli Tailscale hesapları", "comma separated; empty = everyone on the tailnet": "virgülle; boşsa tailnet'teki herkes",
+  "Who can see the map": "Haritayı kim görebilir", "Everyone on the network": "Ağdaki herkes", "Only those who can edit": "Yalnızca düzenleyebilenler",
+  "new password": "yeni parola", "set a password (8+ characters)": "parola belirle (en az 8 karakter)", "Password": "Parola",
+  "Change password": "Parolayı değiştir", "Set password": "Parola belirle", "Could not save the password: ": "Parola kaydedilemedi: ",
+  "Every frame on the map is a group. The Pi's network and each router agent become groups automatically; put Tailscale devices into any group below. Rename a group by clicking its title on the map.": "Haritadaki her çerçeve bir grup. Pi'nin ağı ve her router ajanı kendiliğinden grup olur; Tailscale cihazlarını aşağıdan istediğin gruba koyabilirsin. Grubun adını haritada başlığına tıklayarak değiştirebilirsin.",
+  "unassigned devices go here": "atanmamış cihazlar burada", "Delete": "Sil", "new group (e.g. Cloud)": "yeni grup (örn. Bulut)",
+  "Name of the new group": "Yeni grubun adı", "Group type": "Grubun türü", "Cloud / servers": "Bulut / sunucular", "Another place": "Başka bir yer",
+  "Add": "Ekle", "Which group each Tailscale device shows in:": "Tailscale cihazları hangi grupta görünsün:", "{n} group": "{n} grubu",
+  "Delete the group? Its Tailscale devices move to the default group.": "Grup silinsin mi? İçindeki Tailscale cihazları varsayılan gruba geçer.",
+  "Unnamed devices": "Adsız cihazlar",
+  "{a}/{b} devices are identified ({p}%). Name the devices that do not announce a name once; the name sticks to the MAC address. If a phone's MAC on another Wi-Fi network shows up separately, merge it with \"Same device\" in its Edit screen.": "{a}/{b} cihaz tanınıyor (%{p}). Kendi adını söylemeyen cihazları burada bir kez adlandırman yeter: ad MAC adresine bağlı kalır. Telefonun başka Wi-Fi ağındaki MAC'i ayrı görünüyorsa cihazın \"Düzenle\" ekranındaki \"Aynı cihaz\" ile birleştir.",
+  "name (e.g. Mum's phone)": "ad (örn. Annemin telefonu)", "No unnamed devices left.": "Adsız cihaz kalmadı.", "not visible": "görünmüyor",
+  "Welcome to Nodesk": "Nodesk'e hoş geldin",
+  "Let's set up your map in a few steps. Everything can be changed later in Settings.": "Birkaç adımda haritanı hazırlayalım. Hepsi sonradan Ayarlar'dan değiştirilebilir.",
+  "This network": "Bu ağ", "The Pi's network was detected automatically:": "Pi'nin bağlı olduğu ağ kendiliğinden bulundu:", "gateway": "geçit",
+  "Name of this network (home)": "Bu ağın (evin) adı", "e.g. Home": "örn. Ev", "Other networks and servers (optional)": "Başka ağlar ve sunucular (isteğe bağlı)",
+  "To add another home with an OpenWrt router, add a router agent under Settings &gt; Agents; that home becomes its own group. Add a server agent to see a server's services. The Pi never connects to any device; agents send their own reports.": "OpenWrt router'ı olan başka bir evi eklemek için Ayarlar &gt; Ajanlar'dan router ajanı ekle; o ev kendi grubu olur. Sunucuların servislerini görmek için sunucu ajanı ekle. Pi hiçbir cihaza bağlanmaz; ajanlar kendileri rapor gönderir.",
+  "Groups and Tailscale devices": "Gruplar ve Tailscale cihazları", "Access": "Erişim", "Finish setup": "Kurulumu bitir",
+  "off": "kapalı", "error": "hata", "not installed": "kurulmadı", "no agents": "ajan yok", "no report": "rapor yok", "{n} devices": "{n} cihaz",
+  "Scanning": "Tarama", "Automatic scan": "Otomatik tarama", "Interval": "Sıklık", "every {n} minutes": "{n} dakikada bir",
+  "Passive listening: count as online": "Pasif dinlemede çevrimiçi sayılma süresi", "if heard in the last {n} minutes": "son {n} dakikada ses verdiyse",
+  "Scanning…": "Taranıyor…", "Last:": "Son:", "next:": "sıradaki:", "Sources": "Kaynaklar", "None of them scans ports.": "Hiçbiri port taraması yapmaz.",
+  "Groups": "Gruplar", "Notifications": "Bildirimler",
+  "Alerts on your phone: <b>ntfy</b> (free app; pick a topic name, e.g. https://ntfy.sh/my-net-x7q) or a <b>Telegram</b> bot. Leave empty to turn off.": "Telefonuna haber: <b>ntfy</b> (ücretsiz uygulama; bir konu adı seç, örn. https://ntfy.sh/benim-agim-x7q) ya da <b>Telegram</b> botu. Boş bırakılırsa kapalı.",
+  "ntfy URL": "ntfy adresi", "Telegram bot token": "Telegram bot anahtarı", "Telegram chat id": "Telegram sohbet kimliği",
+  "Send a test": "Deneme gönder", "Colors": "Renkler",
+  "Role colors of the cards. Pick a theme or change them one by one; \"no color\" makes a role neutral. Same on every device.": "Kartların rol renkleri. Hazır bir tema seç ya da tek tek değiştir; \"renksiz\" rol nötr görünür. Tüm cihazlarda aynı görünür.",
+  "{n} color": "{n} rengi", "no color": "renksiz", "Agents": "Ajanlar",
+  "Agents send their own data to the Pi every 5 minutes; the Pi never connects to any device.": "Ajanlar 5 dakikada bir kendi verilerini Pi'ye gönderir; Pi hiçbir cihaza bağlanmaz.",
+  "Agents fetch new versions from the Pi themselves": "Ajanlar yeni sürümü Pi'den kendileri alsın", "no SSH needed": "SSH gerekmez",
+  "No agents yet.": "Henüz ajan yok.", "name (e.g. cloud-arm)": "ad (örn. cloud-arm)", "Agent name": "Ajan adı", "Agent type": "Ajan türü",
+  "Version": "Sürüm", "Using {mb} MB of memory on the Pi (limit 150 MB) · running for {up}.": "Pi'de {mb} MB bellek kullanıyor (sınır 150 MB) · {up} süredir çalışıyor.",
+  "New version:": "Yeni sürüm:", "Updating…": "Güncelleniyor…", "Update": "Güncelle", "Up to date. Last check: {a}.": "Güncel. Son denetim: {a}.",
+  "Check for updates": "Güncellemeleri denetle", "sending…": "gönderiliyor…", "sent, check your phone": "gönderildi, telefonuna bak",
+  "Checking…": "Denetleniyor…", "Check failed: ": "Denetlenemedi: ",
+  "Delete agent \"{a}\"?\n\nOn its next report (5 minutes at most) the device removes itself completely: scheduler, listener service and files; then the record is deleted too.": "\"{a}\" ajanı silinsin mi?\n\nCihaz bir sonraki raporunda (en geç 5 dakika) kendini tamamen kaldırır: zamanlayıcıyı, dinleyici servisini ve dosyalarını siler, sonra kayıt da silinir.",
+  "Delete the \"{a}\" record now? The agent on the device cannot remove itself then; run the command above on the device by hand.": "\"{a}\" kaydı şimdi silinsin mi? Cihazdaki ajan kendini kaldıramaz; yukarıdaki komutu cihazda elle çalıştırman gerekir.",
+  "server": "sunucu", "last report": "son rapor", "no report yet": "henüz rapor yok",
+  "Memory of the Nodesk listener on the router / free memory on the router": "Router'da Nodesk dinleyicisinin belleği / router'ın boş belleği",
+  "free": "boş", "Delete anyway": "Yine de sil",
+  "Removing: on its next report (5 minutes at most) the device deletes itself completely: scheduler, listener service, files. If the device is off or unreachable, \"Delete anyway\" removes the record; then run this on the device:": "Kaldırılıyor: cihaz bir sonraki raporunda (en geç 5 dakika) kendini tamamen silecek: zamanlayıcı, dinleyici servisi, dosyalar. Cihaz kapalıysa ya da ulaşılamıyorsa \"Yine de sil\" ile kaydı silebilirsin; o zaman cihazda şunu çalıştır:",
+  "Hide": "Gizle", "Install": "Kurulum", "On the router (OpenWrt):": "Router'da (OpenWrt):", "On that server:": "O sunucuda:",
+  "Or from a computer that can SSH into the router (replace ROUTER_IP with the router's address):": "Ya da router'a SSH ile girebildiğin bir bilgisayardan (ROUTER_IP yerine router'ın adresi):",
+  "Safe to run again; the same command also updates.": "Tekrar çalıştırmak güvenli; güncelleme için de aynı komut kullanılır.",
+  "Could not start the scan: ": "Tarama başlatılamadı: ",
+  "Update Nodesk? The service restarts; the map may be stale for a few seconds.": "Nodesk güncellensin mi? Servis yeniden başlar; harita birkaç saniye eski kalabilir.",
+  "The update did not finish in 5 minutes. On the Pi: journalctl -u 'nodesk-update-*' -n 50": "Güncelleme 5 dakikada bitmedi. Pi'de: journalctl -u 'nodesk-update-*' -n 50",
+  // uyarılar ve üst satır
+  "The map has not been updated for {n} minutes. Check with <span class=\"mono\">sudo nodesk status</span> on the Pi.": "Harita {n} dakikadır güncellenmedi. Pi'de <span class=\"mono\">sudo nodesk status</span> ile kontrol et.",
+  "This router agent version ({v}) cannot update itself. Run its install command (Settings &gt; Agents) on the router <b>one last time</b>; later versions update themselves.": "Router ajanının bu sürümü ({v}) kendini güncelleyemiyor. Kurulum komutunu (Ayarlar &gt; Ajanlar) router'da <b>son kez</b> çalıştır; sonraki sürümleri kendisi alacak.",
+  "Attention": "Dikkat", "New version available: <b>{a}</b> (now {b}). Settings → Update.": "Yeni sürüm var: <b>{a}</b> (şu an {b}). Ayarlar → Güncelle.",
+  "Cannot reach the Nodesk service: the map is read-only. On the Pi: <span class=\"mono\">sudo nodesk status</span>.": "Nodesk servisine ulaşılamıyor: harita salt okunur. Pi'de <span class=\"mono\">sudo nodesk status</span>.",
+  "{n} not responding": "{n} yanıt vermiyor", "Show devices with unknown names": "Adı bilinmeyen cihazları göster", "{n} unnamed": "{n} adsız",
+  "scanned {a}": "{a} tarandı", "Last scan:": "Son tarama:", "Log in for settings.": "Ayarlar için giriş yap.", "login required": "giriş gerekli",
+  "map is private": "harita gizli", "could not read data": "veri okunamadı",
+  "<b>Could not read the map data</b> ({e}). The service may have just started; reload in a few seconds. If it persists: <span class=\"mono\">sudo nodesk status</span> on the Pi.": "<b>Harita verisi okunamadı</b> ({e}). Servis yeni başlamış olabilir; birkaç saniye sonra yenile. Sorun sürerse Pi'de <span class=\"mono\">sudo nodesk status</span>.",
+  "This map is private; log in to see it.": "Bu harita gizli; görmek için giriş yap.",
+  "Log in to edit. Usually not needed when you connect over Tailscale.": "Düzenlemek için giriş yap. Tailscale üzerinden bağlanıyorsan genelde gerekmez.",
+  "No password set yet. Set one on the Pi with <span class=\"mono\">sudo nodesk password</span>.": "Henüz parola belirlenmemiş. Pi'de <span class=\"mono\">sudo nodesk password</span> ile belirleyebilirsin.",
+  // sunucudan gelen metinler (_x)
+  "direct": "doğrudan", "idle": "boşta", "Embedded Linux": "Gömülü Linux", "Docker (compose/CasaOS app)": "Docker (compose/CasaOS uygulaması)",
+  "System service on the Pi": "Pi'de sistem servisi", "Added by hand": "Elle eklendi", "Home": "Ev", "Home 2": "Ev 2",
+  "Connected through an extender (MAC-NAT); the real MAC is learned when the device reconnects (DHCP) and then becomes its permanent identity.": "Extender (MAC-NAT) üzerinden bağlı; gerçek MAC adresi cihaz ağa yeniden bağlandığında (DHCP) öğrenilir ve kalıcı kimliğe geçer.",
+  "Has a DHCP lease but is not in the router's ARP table right now": "DHCP kirası var ama şu an router'ın ARP tablosunda yok",
+  "Local ARP scan failed.": "Yerel ARP taraması yapılamadı.", "no fixture data": "örnek veri yok", "unreadable JSON": "JSON okunamadı",
+  "conntrack unreadable": "conntrack okunamadı", "request too large": "istek çok büyük", "Content-Type must be application/json": "Content-Type application/json olmalı",
+  "Nodesk is being removed from this Pi": "Nodesk bu Pi'den kaldırılıyor", "login required to view the map": "haritayı görmek için giriş gerekli",
+  "login required to edit": "düzenlemek için giriş gerekli", "too many failed attempts; wait a minute": "çok fazla hatalı deneme; bir dakika bekle",
+  "wrong password": "parola yanlış", "map not ready yet": "harita henüz hazır değil",
+  "save an ntfy URL or Telegram details first": "önce ntfy adresi ya da Telegram bilgilerini kaydet", "id required": "id gerekli",
+  "not found": "bulunamadı", "server error": "sunucu hatası", "no updates in test mode": "test modunda güncelleme yok",
+  "update already running": "güncelleme zaten sürüyor", "password must be at least 8 characters": "parola en az 8 karakter olmalı",
+  "ntfy URL must start with http(s):// (e.g. https://ntfy.sh/topic)": "ntfy adresi http(s):// ile başlamalı (örn. https://ntfy.sh/konu)",
+  "Telegram bot token must look like 123456:ABC...": "Telegram bot anahtarı 123456:ABC... biçiminde olmalı",
+  "Telegram chat id must be a number or @channel": "Telegram sohbet kimliği sayı ya da @kanal olmalı", "unknown type": "bilinmeyen tür",
+  "icon URL must start with https://": "ikon adresi https:// ile başlamalı", "link must start with http:// or https://": "bağlantı http:// ya da https:// ile başlamalı",
+  "unknown group": "bilinmeyen grup", "name may contain lowercase letters, digits and dashes (max 32)": "ad küçük harf, rakam ve tire içermeli (en fazla 32 karakter)",
+  "kind must be router or linux": "tür router ya da linux olmalı", "the group list must have 1-20 groups": "grup listesi 1-20 grup olmalı",
+  "there must be exactly one local network group": "tam olarak bir yerel ağ grubu olmalı", "at most one default group is allowed": "en fazla bir varsayılan grup olabilir",
+};
+const TR_RX = [
+  [/^relay \((.+)\)$/, "aktarıcı ($1)"],
+  [/^(.+): router agent \((.+)\) has not reported yet\. Install command: Settings > Agents\.$/, "$1: router ajanı ($2) henüz rapor göndermedi. Kurulum komutu: Ayarlar > Ajanlar."],
+  [/^(.+): router agent last reported (\d+) minutes ago; showing the last known state\.$/, "$1: router ajanının son raporu $2 dakika önce geldi; son bilinen durumuyla gösteriliyor."],
+  [/^Agent (.+) last reported (\d+) minutes ago\.$/, "$1 ajanının son raporu $2 dakika önce geldi."],
+  [/^(\S+) not found$/, "$1 bulunamadı"], [/^(\S+) did not finish in (\d+) s$/, "$1 $2 sn içinde bitmedi"],
+  [/^(\S+) exit code (-?\d+): /, "$1 çıkış kodu $2: "], [/^unreadable JSON: /, "JSON okunamadı: "],
+  [/^could not send: /, "gönderilemedi: "], [/^could not start the update: /, "güncelleme başlatılamadı: "],
+  [/^interval must be one of: /, "sıklık şunlardan biri olmalı: "], [/^invalid color: /, "geçersiz renk: "], [/^invalid port: /, "geçersiz port: "],
+  [/^invalid or duplicate group id: /, "geçersiz ya da tekrar eden grup kimliği: "], [/^invalid group type: /, "geçersiz grup türü: "],
+];
+function _(s, v) {
+  let r = LANG === "tr" ? TR[s] ?? s : s;
+  if (v) r = r.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
+  return r;
+}
+function _x(s) {
+  if (LANG !== "tr" || !s) return s;
+  if (TR[s] !== undefined) return TR[s];
+  for (const [rx, rep] of TR_RX) if (rx.test(s)) return s.replace(rx, rep);
+  return s;
+}
+/* Sabit HTML: title / aria-label / placeholder ve data-t içindeki metinler (asıllar saklanır) */
+function translateStatic() {
+  document.documentElement.lang = LANG;
+  for (const e of $$("body > :not(script) [title], body > :not(script) [aria-label], body > :not(script) [placeholder], #map")) {
+    e._i18n = e._i18n || {};
+    for (const a of ["title", "aria-label", "placeholder"]) {
+      if (!e.hasAttribute(a)) continue;
+      if (!(a in e._i18n)) e._i18n[a] = e.getAttribute(a);
+      e.setAttribute(a, _(e._i18n[a]));
+    }
+  }
+  for (const e of $$("[data-t]")) for (const n of e.childNodes) {
+    if (n.nodeType !== 3 || !n.textContent.trim()) continue;
+    if (n._t === undefined) n._t = n.textContent.trim();
+    n.textContent = _(n._t);
+  }
+  $("#bLang").textContent = LANG.toUpperCase();
+}
 
 /* ---------------- simgeler (24x24 çizgi) ---------------- */
 const ICONS = {
@@ -337,13 +563,14 @@ const ICONS = {
   internet: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9M12 3c-2.5 2.6-3.8 5.6-3.8 9s1.3 6.4 3.8 9",
   device: "M5 4h14v16H5zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6M12 16.5h.01",
 };
-const KIND_TR = {
-  modem: "Modem", router: "Router", ap: "Erişim noktası / extender", server: "Sunucu", "cloud-vm": "Bulut sunucu",
-  pc: "Masaüstü bilgisayar", laptop: "Dizüstü bilgisayar", phone: "Telefon", tablet: "Tablet", tv: "Televizyon",
-  console: "Oyun konsolu", iot: "Akıllı cihaz", lamp: "Akıllı lamba", vacuum: "Robot süpürge", camera: "Kamera",
-  printer: "Yazıcı", speaker: "Hoparlör", nas: "NAS / depolama", cloud: "Bulut", roam: "Gezgin cihazlar",
-  internet: "İnternet", device: "Tanımlanmamış cihaz", service: "Servis", container: "Container",
+const KIND_LABEL = {
+  modem: "Modem", router: "Router", ap: "Access point / extender", server: "Server", "cloud-vm": "Cloud server",
+  pc: "Desktop computer", laptop: "Laptop", phone: "Phone", tablet: "Tablet", tv: "Television",
+  console: "Game console", iot: "Smart device", lamp: "Smart lamp", vacuum: "Robot vacuum", camera: "Camera",
+  printer: "Printer", speaker: "Speaker", nas: "NAS / storage", cloud: "Cloud", roam: "Roaming devices",
+  internet: "Internet", device: "Unidentified device", service: "Service", container: "Container",
 };
+const kindName = (k) => _(KIND_LABEL[k] || k || "?");
 const GLYPHS = {   // servis simgeleri (ikon bulunamazsa ya da internet yoksa)
   terminal: "M3 4h18v16H3zM7 9l3 3-3 3M12.5 15h4",
   folder: "M3 6h6l2 2h10v11H3zM3 10h18",
@@ -357,45 +584,45 @@ const GLYPHS = {   // servis simgeleri (ikon bulunamazsa ya da internet yoksa)
 };
 const SVC_KINDS = new Set(["service", "container"]);
 const NO_LINK_PORTS = [22, 139, 445, 2222, 5900];
-const SOURCE_TR = {
-  tailscale: ["Tailscale", "tailnet cihazları ve bağlantı yolları"],
-  arp: ["Ev 1 ARP taraması", "Pi'den yerel ağa ~256 ARP paketi"],
-  passive: ["Pasif dinleme", "ağa paket göndermeden ARP/DHCP/mDNS/SSDP dinler; cihaz adlarını bulur"],
-  neigh: ["Pi'nin komşu tablosu", "Pi'nin yakın zamanda konuştuğu cihazlar"],
-  docker: ["Docker", "Pi'deki container'lar ve CasaOS uygulamaları"],
-  host_ports: ["Docker dışı servisler", "CasaOS, Samba, SSH gibi Pi servisleri"],
-  router: ["Router ajanı", "Ev 2: DHCP, ARP ve H3600P ağı (router 5 dk'da bir gönderir)"],
-  agents: ["Sunucu ajanları", "Oracle sunucularındaki servisler"],
-  health: ["Servis sağlık kontrolü", "Pi'deki servislerin portları yanıt veriyor mu (sadece Pi'nin kendisinde)"],
-  probe: ["Ev 1 ad sorgusu", "her cihaza günde bir kez NetBIOS/mDNS ad sorusu ve tek SSDP araması; router'a uğramaz"],
+const SOURCES = {
+  tailscale: ["Tailscale", "tailnet devices and connection paths"],
+  arp: ["Local ARP scan", "~256 ARP packets from the Pi to its own network"],
+  passive: ["Passive listening", "listens to ARP/DHCP/mDNS/SSDP without sending anything; learns device names"],
+  neigh: ["Pi neighbour table", "devices the Pi talked to recently"],
+  docker: ["Docker", "containers and CasaOS apps on the Pi"],
+  host_ports: ["Non-Docker services", "Pi services such as CasaOS, Samba, SSH"],
+  router: ["Router agents", "DHCP, ARP and modem network behind each router (reported every 5 min)"],
+  agents: ["Server agents", "services on servers with a Linux agent"],
+  health: ["Service health check", "do the Pi's service ports answer (checked on the Pi only)"],
+  probe: ["Local name query", "one NetBIOS/mDNS name query per device per day and a single SSDP search; never via a router"],
 };
-const VIA_TR = { extender: "extender (MAC-NAT) arkasında", arp: "ARP taraması", neigh: "komşu tablosu", passive: "pasif dinleme", self: "bu cihaz",
-  tailscale: "Tailscale", ajan: "ajan", "router arp": "router ARP", "router dhcp": "router DHCP" };
+const VIA = { extender: "behind an extender (MAC-NAT)", arp: "ARP scan", neigh: "neighbour table", passive: "passive listening", self: "this device",
+  tailscale: "Tailscale", ajan: "agent", "router arp": "router ARP", "router dhcp": "router DHCP" };
 const ORDER = ["router", "ap", "server", "nas", "cloud-vm", "pc", "laptop", "tv", "console", "speaker", "tablet",
   "phone", "camera", "printer", "iot", "lamp", "vacuum", "device"];
 const MAJOR = new Set(["router", "ap", "server", "nas"]);
 const CAT = { modem: "net", router: "net", ap: "net", server: "srv", nas: "srv", "cloud-vm": "srv", pc: "pc", laptop: "pc",
   phone: "mobile", tablet: "mobile", tv: "media", console: "media", speaker: "media", iot: "home", lamp: "home",
   vacuum: "home", camera: "home", printer: "home", device: "other" };
-const CAT_TR = { net: "Ağ cihazı", srv: "Sunucu", pc: "Bilgisayar", mobile: "Telefon / tablet", media: "TV / medya",
-  home: "Akıllı ev", other: "Diğer cihaz", app: "Uygulama", sys: "Sistem servisi" };
+const CAT_LABEL = { net: "Network device", srv: "Server", pc: "Computer", mobile: "Phone / tablet", media: "TV / media",
+  home: "Smart home", other: "Other device", app: "App", sys: "System service" };
 // Hazır temalar (Ayarlar > Renkler). "" = renksiz. Durum renkleri (yeşil, sarı, kırmızı) ve
 // Tailscale moru temalarda kullanılmaz: kart rengi hiçbir zaman bir durumla karışmasın.
 const PALETTES = {
   "Nodesk": { net: "#3b82d6", srv: "#c2508a", pc: "#8e66d0", mobile: "#e07b53", media: "#d6a03a", home: "#4f9d69", other: "", app: "#1e9ab0", sys: "#8c9440" },
-  "Okyanus": { net: "#1d6fb8", srv: "#0f8f8a", pc: "#4b6cc1", mobile: "#2aa6c9", media: "#5a8fa8", home: "#3f9e86", other: "", app: "#0aa1b5", sys: "#6b8aa3" },
-  "Gün batımı": { net: "#d1495b", srv: "#a23b72", pc: "#8f5ba6", mobile: "#ed8146", media: "#e0a53d", home: "#c97b63", other: "", app: "#e86a5f", sys: "#a8806b" },
-  "Orman": { net: "#3d7d5a", srv: "#7a5c3a", pc: "#5f7f3f", mobile: "#b07a3c", media: "#9a8a2e", home: "#4c9a6a", other: "", app: "#2f8f7a", sys: "#7d8a52" },
-  "Sade": { net: "#4a6fa5", srv: "#7a5c99", pc: "", mobile: "", media: "", home: "", other: "", app: "#5b8e8e", sys: "#8a8a6a" },
+  "Ocean": { net: "#1d6fb8", srv: "#0f8f8a", pc: "#4b6cc1", mobile: "#2aa6c9", media: "#5a8fa8", home: "#3f9e86", other: "", app: "#0aa1b5", sys: "#6b8aa3" },
+  "Sunset": { net: "#d1495b", srv: "#a23b72", pc: "#8f5ba6", mobile: "#ed8146", media: "#e0a53d", home: "#c97b63", other: "", app: "#e86a5f", sys: "#a8806b" },
+  "Forest": { net: "#3d7d5a", srv: "#7a5c3a", pc: "#5f7f3f", mobile: "#b07a3c", media: "#9a8a2e", home: "#4c9a6a", other: "", app: "#2f8f7a", sys: "#7d8a52" },
+  "Plain": { net: "#4a6fa5", srv: "#7a5c99", pc: "", mobile: "", media: "", home: "", other: "", app: "#5b8e8e", sys: "#8a8a6a" },
 };
 let COLORS = { ...PALETTES.Nodesk };
 function catOf(n) { if (n.placeholder) return null; if (isSvc(n)) return n.source === "system" ? "sys" : "app"; return CAT[n.kind] || null; }
 function applyColors() {
   COLORS = { ...PALETTES.Nodesk, ...((DATA && DATA.settings && DATA.settings.colors) || {}) };
-  for (const k of Object.keys(CAT_TR)) document.documentElement.style.setProperty("--c-" + k, COLORS[k] || "transparent");
+  for (const k of Object.keys(CAT_LABEL)) document.documentElement.style.setProperty("--c-" + k, COLORS[k] || "transparent");
   const present = new Set(ALL.filter((n) => n.x !== undefined).map(catOf));
-  $("#lgCats").innerHTML = Object.keys(CAT_TR).filter((k) => COLORS[k] && present.has(k))
-    .map((k) => `<span><b style="--c:var(--c-${k})"></b>${esc(CAT_TR[k])}</span>`).join("");
+  $("#lgCats").innerHTML = Object.keys(CAT_LABEL).filter((k) => COLORS[k] && present.has(k))
+    .map((k) => `<span><b style="--c:var(--c-${k})"></b>${esc(_(CAT_LABEL[k]))}</span>`).join("");
 }
 
 /* ---------------- ölçüler ---------------- */
@@ -424,19 +651,19 @@ function clip(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 
 function ago(iso) {
   if (!iso) return "—";
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 90) return "az önce";
-  if (s < 3600) return Math.round(s / 60) + " dk önce";
-  if (s < 86400 * 2) return Math.round(s / 3600) + " sa önce";
-  return Math.round(s / 86400) + " gün önce";
+  if (s < 90) return _("just now");
+  if (s < 3600) return _("{n} min ago", { n: Math.round(s / 60) });
+  if (s < 86400 * 2) return _("{n} h ago", { n: Math.round(s / 3600) });
+  return _("{n} days ago", { n: Math.round(s / 86400) });
 }
 /* Son 7 günün çevrimiçi şeridi: gün başına 144 dilim (10 dk), UTC günleri */
 function historyHtml(h) {
   if (!h) return "";
   const days = Object.keys(h.days).sort().slice(-7), W = 288, rh = 9, gap = 4, lw = 46;
-  let svgs = `<svg width="${lw + W}" height="${days.length * (rh + gap)}" role="img" aria-label="Son 7 günün çevrimiçi geçmişi: yüzde ${h.pct}" style="display:block;max-width:100%">`;
+  let svgs = `<svg width="${lw + W}" height="${days.length * (rh + gap)}" role="img" aria-label="${esc(_("Online history of the last 7 days: {pct}%", { pct: h.pct }))}" style="display:block;max-width:100%">`;
   days.forEach((d, r) => {
     const y = r * (rh + gap), bits = BigInt("0x" + h.days[d]);
-    svgs += `<text x="0" y="${y + 8}" style="font:500 10.5px var(--sans);fill:var(--muted)">${esc(new Date(d + "T12:00:00Z").toLocaleDateString("tr-TR", { day: "numeric", month: "short" }))}</text>`;
+    svgs += `<text x="0" y="${y + 8}" style="font:500 10.5px var(--sans);fill:var(--muted)">${esc(new Date(d + "T12:00:00Z").toLocaleDateString(LOCALE(), { day: "numeric", month: "short" }))}</text>`;
     svgs += `<rect x="${lw}" y="${y}" width="${W}" height="${rh}" rx="2" fill="color-mix(in srgb, var(--text) 8%, transparent)"/>`;
     let run = -1;
     for (let i = 0; i <= 144; i++) {
@@ -445,17 +672,17 @@ function historyHtml(h) {
       if (!on && run >= 0) { svgs += `<rect x="${lw + run * W / 144}" y="${y}" width="${(i - run) * W / 144}" height="${rh}" rx="1.5" fill="var(--on)"/>`; run = -1; }
     }
   });
-  return `<h3>Son 7 gün</h3><p class="hint" style="margin:0 0 6px">%${h.pct} çevrimiçi (UTC günleri, 10 dakikalık dilimler)</p>` + svgs + "</svg>";
+  return `<h3>${_("Last 7 days")}</h3><p class="hint" style="margin:0 0 6px">${_("{pct}% online (UTC days, 10-minute slots)", { pct: h.pct })}</p>` + svgs + "</svg>";
 }
 function dur(sec) {
   const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
-  return d ? `${d} gün ${h} saat` : h ? `${h} saat ${m} dk` : `${m} dk`;
+  return d ? _("{d} days {h} h", { d, h }) : h ? _("{h} h {m} min", { h, m }) : _("{m} min", { m });
 }
-function fmtTime(iso) { if (!iso) return "—"; try { return new Date(iso).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" }); } catch (e) { return iso; } }
+function fmtTime(iso) { if (!iso) return "—"; try { return new Date(iso).toLocaleString(LOCALE(), { dateStyle: "medium", timeStyle: "short" }); } catch (e) { return iso; } }
 function tsPath(n) {
   const t = n.tailscale; if (!t) return null; if (!t.online) return "down";
-  if ((t.path || "").startsWith("aktarıcı")) return "relay";
-  return t.path === "boşta" ? "idle" : "direct";   // boşta: şu an trafik yok, gerekince doğrudan bağlanır
+  if ((t.path || "").startsWith("relay")) return "relay";
+  return t.path === "idle" ? "idle" : "direct";   // idle: şu an trafik yok, gerekince doğrudan bağlanır
 }
 function ipNum(ip) { if (!ip) return 1e12; return ip.split(".").reduce((a, b) => a * 256 + (+b || 0), 0); }
 function hostFor(n) {
@@ -471,10 +698,10 @@ async function api(method, path, body) {
   if (!r.ok) throw new Error((j && j.error) || ("HTTP " + r.status));
   return j;
 }
-async function copyText(t, btn) {
-  try { await navigator.clipboard.writeText(t); btn.textContent = "Kopyalandı"; }
-  catch (e) { btn.textContent = "Seçip kopyala"; }
-  setTimeout(() => { btn.textContent = "Kopyala"; }, 1800);
+async function copyText(txt, btn) {
+  try { await navigator.clipboard.writeText(txt); btn.textContent = _("Copied"); }
+  catch (e) { btn.textContent = _("Select and copy"); }
+  setTimeout(() => { btn.textContent = _("Copy"); }, 1800);
 }
 
 /* ---------------- servis grupları ---------------- */
@@ -502,7 +729,7 @@ function kidSort(a, b) {
   // Sıra çevrimiçi durumuna bağlı değil: cihaz uyuyunca kartlar yer değiştirmesin
   if (sa) {
     if ((a.source === "system") !== (b.source === "system")) return a.source === "system" ? 1 : -1;   // uygulamalar önce
-    return a.label.localeCompare(b.label, "tr") || a.id.localeCompare(b.id);
+    return a.label.localeCompare(b.label, LANG) || a.id.localeCompare(b.id);
   }
   const oa = ORDER.indexOf(a.kind), ob = ORDER.indexOf(b.kind);
   if (oa !== ob) return (oa < 0 ? 99 : oa) - (ob < 0 ? 99 : ob);
@@ -534,7 +761,7 @@ function measure(n) {
 }
 function svcBlock(host, cat, group) {
   const head = { id: `${host.id}#${cat}`, kind: "svchead", cat, site: host.site, kids: [], cw: HW, ch: HH,
-    label: cat === "sys" ? "Sistem" : "Uygulamalar", count: group.length, online: group.some((k) => k.online),
+    label: cat === "sys" ? _("System") : _("Apps"), count: group.length, online: group.some((k) => k.online),
     warn: group.some((k) => k.health === "fail" || k.health === "partial" || (k.state && k.state !== "running")) };
   head.collapsed = !!prefs.collapsed[head.id];
   const cols = [];
@@ -622,7 +849,7 @@ function build(data) {
   for (const n of ALL) { const p = byId.get(n.parent); if (p && p !== n) p.kids.push(n); }
 }
 function layout() {
-  const sites = DATA.sites.map((s) => ({ ...s, roots: DATA.nodes.filter((n) => n.site === s.id && n.parent === "internet") }))
+  const sites = DATA.sites.map((s) => ({ ...s, name: _x(s.name), roots: DATA.nodes.filter((n) => n.site === s.id && n.parent === "internet") }))
     .filter((s) => s.roots.length);
   for (const s of sites) {
     let w = 0, h = 0;
@@ -672,7 +899,7 @@ function passesFilter(n) {
   return true;
 }
 function matches(n, q) {
-  const hay = [n.label, n.mac, n.vendor, n.hostname, n.kind, KIND_TR[n.kind], ...(n.ips || []), n.tailscale && n.tailscale.ip,
+  const hay = [n.label, n.mac, n.vendor, n.hostname, n.kind, kindName(n.kind), ...(n.ips || []), n.tailscale && n.tailscale.ip,
     ...(n.ports || []), ...(n.containers || []).map((c) => c.name), n.image,
     ...(n.tags || []), ...Object.values(n.names || {}).flat(), ...(n.services || []).flatMap((s) => [s.name, s.app_name, ...(s.ports || [])])]
     .join(" ").toLowerCase();
@@ -694,7 +921,7 @@ function render() {
     const g = el("g", { class: "frame" }, gFrames);
     el("rect", { class: "body", x: s.x, y: s.y, width: s.w, height: s.h, rx: 16 }, g);
     const ft = text(g, s.x + 22, s.y + 38, s.name, "title frame-title", { "data-site": s.id });
-    const tt = el("title", {}, ft); tt.textContent = "Grubu adlandır";
+    const tt = el("title", {}, ft); tt.textContent = _("Rename group");
     const sub = subnetOf(s);
     if (sub) text(g, s.x + s.w - 20, s.y + 34, sub, "sub", { "text-anchor": "end" });
   }
@@ -702,7 +929,7 @@ function render() {
   const ig = el("g", { class: "inet" }, gCards);
   el("rect", { x: inet.x, y: inet.y, width: inet.w, height: inet.h, rx: 22 }, ig);
   el("path", { class: "icon", d: ICONS.internet, transform: `translate(${inet.x + 18},${inet.y + 10})` }, ig);
-  text(ig, inet.x + 50, inet.y + 28, "İnternet", "");
+  text(ig, inet.x + 50, inet.y + 28, _("Internet"), "");
   for (const s of frames.filter((f) => f.y === frames[0].y)) for (const r of s.roots) {
     const cx = r.x + r.cw / 2, sx = inet.x + inet.w / 2, sy = inet.y + inet.h;
     el("path", { class: "cable uplink", d: `M${sx},${sy}C${sx},${sy + 60} ${cx},${r.y - 70} ${cx},${r.y}` }, gUp);
@@ -841,8 +1068,8 @@ function drawExits(g, R) {
   nudge(raw, raw.length).forEach((pts, i) => {
     const { a, b } = links[i], d = roundPath(pts);
     DRAWN.push({ kind: "exit", pts, ends: [a.id, b.id] });
-    const t = el("title", {}, el("path", { class: "exit", d }, g));
-    t.textContent = `${a.label} interneti ${b.label} üzerinden çıkıyor (exit node)`;
+    const tt = el("title", {}, el("path", { class: "exit", d }, g));
+    tt.textContent = _("{a} reaches the internet through {b} (exit node)", { a: a.label, b: b.label });
     el("path", { class: "exit-flow", d }, g);   // akış yönü: kullanan cihazdan exit node'a
     for (const p of pts) bounds.h = Math.max(bounds.h, p[1] + 24);
   });
@@ -910,17 +1137,17 @@ function tailnetPorts(frames) {
     const st = hub ? "direct" : nDown === ms.length ? "down" : nRel ? "relay" : "direct";
     // kısa özet (çerçeveye sığsın); ayrıntı üzerine gelince
     let sum;
-    if (hub) sum = "görüş noktası";
-    else if (ms.length === 1) sum = ms[0].tailscale.path;
-    else if (nDown === ms.length) sum = "bağlantı yok";
-    else if (nRel) sum = `${nRel}/${ms.length} aktarıcı`;
-    else sum = [nDir ? `${nDir} doğrudan` : "", nIdle ? `${nIdle} boşta` : "", nDown ? `${nDown} kapalı` : ""].filter(Boolean).join(" · ");
-    if (`Tailnet · ${sum}`.length * 6.5 + 46 > f.w) sum = `${ms.length - nDown}/${ms.length} çevrimiçi`;   // çerçeveye sığsın
+    if (hub) sum = _("vantage point");
+    else if (ms.length === 1) sum = _x(ms[0].tailscale.path);
+    else if (nDown === ms.length) sum = _("offline");
+    else if (nRel) sum = _("{n}/{m} relayed", { n: nRel, m: ms.length });
+    else sum = [nDir ? _("{n} direct", { n: nDir }) : "", nIdle ? _("{n} idle", { n: nIdle }) : "", nDown ? _("{n} down", { n: nDown }) : ""].filter(Boolean).join(" · ");
+    if (`Tailnet · ${sum}`.length * 6.5 + 46 > f.w) sum = _("{n}/{m} online", { n: ms.length - nDown, m: ms.length });   // çerçeveye sığsın
     const label = `Tailnet · ${sum}`, w = label.length * 6.5 + 22;
     const cx = Math.max(f.x + w / 2 + 12, Math.min(f.x + f.w - w / 2 - 12, f.x + f.w / 2 + 130));
     return { site: f.id, f, st, hub, label, x: cx - w / 2, y: f.y - 10, w, h: 20, cx,
-      tip: (hub ? "Bağlantı durumları bu gruptaki Pi'den görüldüğü gibidir.\n" : "") +
-        ms.map((m) => `${m.label}: ${m.tailscale.path}`).join("\n") };
+      tip: (hub ? _("Connection states are as seen from the Pi in this group.") + "\n" : "") +
+        ms.map((m) => `${m.label}: ${_x(m.tailscale.path)}`).join("\n") };
   });
 }
 function drawTailnet(g, ports, R, inet, exitRoutes) {
@@ -940,13 +1167,13 @@ function drawTailnet(g, ports, R, inet, exitRoutes) {
   ports.forEach((p, i) => {
     DRAWN.push({ kind: "tailnet", pts: drops[i], ends: [] });
     const path = el("path", { class: `ts-link ${p.st}`, d: roundPath(drops[i]) }, g);
-    const t = el("title", {}, path); t.textContent = p.tip;
+    el("title", {}, path).textContent = p.tip;
   });
   for (const p of ports) {
     const pg = el("g", { class: `ts-port ts-label ${p.st}` }, g);
     el("rect", { x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }, pg);
     text(pg, p.cx, p.y + 14, p.label, "", { "text-anchor": "middle" });
-    const t = el("title", {}, pg); t.textContent = p.tip;
+    el("title", {}, pg).textContent = p.tip;
   }
 }
 function roundPath(pts, r = 9) {
@@ -962,20 +1189,20 @@ function roundPath(pts, r = 9) {
 }
 function drawHead(parent, h) {
   const g = el("g", { class: "svc-head" + (COLORS[h.cat] ? ` cat-${h.cat}` : "") + (prefs.tail ? " ts-dim" : ""), transform: `translate(${h.x},${h.y})`, tabindex: 0, role: "button",
-    "aria-expanded": String(!h.collapsed), "aria-label": `${h.label}, ${h.count} servis, ${h.collapsed ? "kapalı" : "açık"}` }, parent);
+    "aria-expanded": String(!h.collapsed), "aria-label": `${h.label}, ${_("{n} services", { n: h.count })}, ${h.collapsed ? _("collapsed") : _("expanded")}` }, parent);
   g.dataset.head = h.id;
   el("rect", { class: "pill", width: h.cw, height: h.ch, rx: h.ch / 2 }, g);
   el("circle", { class: "led", cx: 15, cy: h.ch / 2, r: 4.5, fill: !h.online ? "var(--off)" : h.warn ? "var(--relay)" : "var(--on)" }, g);
   text(g, 27, h.ch / 2 + 5, h.label, "");
   text(g, h.cw - 32, h.ch / 2 + 4.5, String(h.count), "cnt", { "text-anchor": "end" });
   el("path", { d: h.collapsed ? `M${h.cw - 22} ${h.ch / 2 - 4}l4 4-4 4` : `M${h.cw - 24} ${h.ch / 2 - 2}l4 4 4-4` }, g);
-  const t = el("title", {}, g); t.textContent = h.collapsed ? "Aç" : "Kapat";
+  el("title", {}, g).textContent = h.collapsed ? _("Expand") : _("Collapse");
 }
 function exitChip(g, x, y, label, title, right) {
   const w = label.length * 6.1 + 14, cg = el("g", { class: "exit-chip" }, g);
   el("rect", { x: right ? x - w : x, y: y - 8, width: w, height: 16, rx: 8 }, cg);
   text(cg, (right ? x - w : x) + w / 2, y + 4, label, "", { "text-anchor": "middle" });
-  const t = el("title", {}, cg); t.textContent = title;
+  el("title", {}, cg).textContent = title;
 }
 function subnetOf(s) {
   const r = s.roots[0];
@@ -992,14 +1219,14 @@ function drawCard(parent, n, q, fa) {
   if (q) cls.push(matches(n, q) ? "match" : "dim");
   else if (fa && !passesFilter(n)) cls.push("dim");
   const g = el("g", { class: cls.join(" "), transform: `translate(${n.x},${n.y})`, tabindex: 0, role: "button",
-    "aria-label": `${n.label}, ${KIND_TR[n.kind] || n.kind}, ${n.online ? "çevrimiçi" : "çevrimdışı"}` }, parent);
+    "aria-label": `${n.label}, ${kindName(n.kind)}, ${n.online ? _("online") : _("offline")}` }, parent);
   g.dataset.id = n.id;
   el("rect", { class: "box", width: n.cw, height: n.ch, rx: n.kind === "modem" || n.kind === "router" ? 6 : 10 }, g);
   el("path", { class: "icon", d: ICONS[n.kind] || ICONS.device, transform: "translate(12,14)" }, g);
   el("circle", { class: "led", cx: 33, cy: 15, r: 5, fill: n.online ? "var(--on)" : n.stale ? "var(--relay)" : "var(--off)" }, g);
-  text(g, 46, 23, clip(n.label, n.cw > CW ? 24 : 21), "name");
+  text(g, 46, 23, clip(n.placeholder ? _x(n.label) : n.label, n.cw > CW ? 24 : 21), "name");
   const lan = (n.ips || []).filter((i) => !i.startsWith("100."));
-  const line = lan.length ? lan[0] + (lan.length > 1 ? `  +${lan.length - 1}` : "") : (n.tailscale ? n.tailscale.ip : (n.random_mac ? "rastgele MAC" : n.mac || ""));
+  const line = lan.length ? lan[0] + (lan.length > 1 ? `  +${lan.length - 1}` : "") : (n.tailscale ? n.tailscale.ip : (n.random_mac ? _("random MAC") : n.mac || ""));
   text(g, 46, 41, clip(line, 26), "ip");
   if ((n.tags || []).length) text(g, n.cw - 10, 41, "#" + clip(n.tags[0], 10), "tagdot", { "text-anchor": "end" });
   if (n.tailscale) {
@@ -1008,24 +1235,24 @@ function drawCard(parent, n, q, fa) {
     text(g, n.cw - 19, 4, "ts", "ts-badge", { "text-anchor": "middle", fill: col });
   }
   const ns = (n.service_ids || []).length;
-  if (ns && !prefs.svc) text(g, n.cw - 10, n.tailscale ? 41 : 23, `${ns} servis`, "svc-badge", { "text-anchor": "end" });
+  if (ns && !prefs.svc) text(g, n.cw - 10, n.tailscale ? 41 : 23, _("{n} services", { n: ns }), "svc-badge", { "text-anchor": "end" });
   if (prefs.exit && n.exit_via && byId.get(n.exit_via)) {
     const v = byId.get(n.exit_via).label;
-    exitChip(g, 10, n.ch, "↗ " + clip(v, 18), `İnterneti ${v} üzerinden çıkıyor (exit node)`);
+    exitChip(g, 10, n.ch, "↗ " + clip(v, 18), _("Reaches the internet through {b} (exit node)", { b: v }));
   }
   if (prefs.exit && (n.exit_users || []).length) {
     const users = n.exit_users.map((id) => (byId.get(id) || {}).label || id);
-    exitChip(g, n.cw - 10, n.ch, `exit node · ${users.length}`, "Exit node olarak kullananlar: " + users.join(", "), true);
+    exitChip(g, n.cw - 10, n.ch, `exit node · ${users.length}`, _("Used as exit node by: ") + users.join(", "), true);
   }
-  const t = el("title", {}, g); t.textContent = n.label;
+  el("title", {}, g).textContent = n.label;
 }
 
 function svcStatus(n) {
-  if (n.state && n.state !== "running") return ["", n.state === "exited" ? "Durdu" : n.state];
-  if (!n.online) return ["", "Ulaşılamıyor"];
-  if (n.health === "fail") return ["bad", "Yanıt vermiyor"];
-  if (n.health === "partial") return ["warn", "Kısmen yanıt veriyor"];
-  return ["on", "Çalışıyor"];
+  if (n.state && n.state !== "running") return ["", n.state === "exited" ? _("Stopped") : n.state];
+  if (!n.online) return ["", _("Unreachable")];
+  if (n.health === "fail") return ["bad", _("Not responding")];
+  if (n.health === "partial") return ["warn", _("Partly responding")];
+  return ["on", _("Running")];
 }
 function drawIcon(g, n, x, y, size) {
   const gl = el("path", { class: "icon", d: GLYPHS[n.glyph] || GLYPHS.app, transform: `translate(${x},${y}) scale(${size / 24})` }, g);
@@ -1046,7 +1273,7 @@ function drawSvcCard(parent, n, q, fa) {
   else if (fa && !passesFilter(n)) cls.push("dim");
   const [stc, stt] = svcStatus(n);
   const g = el("g", { class: cls.join(" "), transform: `translate(${n.x},${n.y})`, tabindex: 0, role: "button",
-    "aria-label": `${n.label}, ${KIND_TR[n.kind]}, ${stt}` }, parent);
+    "aria-label": `${n.label}, ${kindName(n.kind)}, ${stt}` }, parent);
   g.dataset.id = n.id;
   el("rect", { class: "box", width: n.cw, height: n.ch, rx: n.kind === "container" ? 9 : 12 }, g);
   const small = n.kind === "container", ix = small ? 9 : 9, isz = small ? 18 : 24, tile = small ? 0 : 32;
@@ -1064,9 +1291,9 @@ function drawSvcCard(parent, n, q, fa) {
     el("rect", { width: 32, height: 24, rx: 7 }, tg);
     text(tg, 9, 16, String(cnt), "", { "text-anchor": "middle" });
     el("path", { d: col ? "M19 9l4 3-4 3" : "M18 10l3.5 3.5L25 10" }, tg);
-    const tt = el("title", {}, tg); tt.textContent = col ? "Aç" : "Kapat";
+    el("title", {}, tg).textContent = col ? _("Expand") : _("Collapse");
   }
-  const t = el("title", {}, g); t.textContent = `${n.label} — ${stt}`;
+  el("title", {}, g).textContent = `${n.label} — ${stt}`;
 }
 
 /* ---------------- ayrıntı paneli ---------------- */
@@ -1079,7 +1306,7 @@ function closeDrawers() {
   $$(".drawer").forEach((d) => d.classList.remove("open")); $("#scrim").classList.remove("show");
   selected = null; editing = false; $$(".card.selected").forEach((c) => c.classList.remove("selected"));
 }
-function siteName(id) { const s = (DATA.sites || []).find((x) => x.id === id); return s ? s.name : ""; }
+function siteName(id) { const s = (DATA.sites || []).find((x) => x.id === id); return s ? _x(s.name) : ""; }
 
 function openPanel(id) {
   const n = byId.get(id); if (!n) return;
@@ -1100,47 +1327,47 @@ function renderServicePanel(n) {
   const [stc, stt] = svcStatus(n);
   const rows = [];
   const add = (k, v, mono) => { if (v !== undefined && v !== null && v !== "") rows.push(`<dt>${k}</dt><dd${mono ? ' class="mono"' : ""}>${v}</dd>`); };
-  add("Durum", `<span class="status ${stc}">${esc(stt)}</span>`);
-  if (host) add("Çalıştığı yer", `<a href="#" data-open="${esc(host.id)}">${esc(host.label)}</a>`);
-  if (n.kind === "container") { const app = byId.get(n.parent); if (app) add("Uygulama", `<a href="#" data-open="${esc(app.id)}">${esc(app.label)}</a>`); }
-  add("Kaynak", esc(n.source_label || ""));
-  add("Portlar", (n.ports || []).map((p) => ":" + p).join(" "), true);
-  if (n.kind === "container") { add("İmaj", esc(n.image), true); add("Docker", esc(n.status)); }
-  if ((n.containers || []).length === 1) { add("Container", esc(n.containers[0].name), true); add("İmaj", esc(n.containers[0].image), true); add("Docker", esc(n.containers[0].status)); }
-  if (n.health === "fail") add("Sağlık", "port(lar) Pi'nin kendisinden bağlantı kabul etmiyor");
+  add(_("Status"), `<span class="status ${stc}">${esc(stt)}</span>`);
+  if (host) add(_("Runs on"), `<a href="#" data-open="${esc(host.id)}">${esc(host.label)}</a>`);
+  if (n.kind === "container") { const app = byId.get(n.parent); if (app) add(_("App"), `<a href="#" data-open="${esc(app.id)}">${esc(app.label)}</a>`); }
+  add(_("Source"), esc(_x(n.source_label || "")));
+  add(_("Ports"), (n.ports || []).map((p) => ":" + p).join(" "), true);
+  if (n.kind === "container") { add(_("Image"), esc(n.image), true); add("Docker", esc(n.status)); }
+  if ((n.containers || []).length === 1) { add("Container", esc(n.containers[0].name), true); add(_("Image"), esc(n.containers[0].image), true); add("Docker", esc(n.containers[0].status)); }
+  if (n.health === "fail") add(_("Health"), _("port(s) refuse connections from the Pi itself"));
   let html = `<h2 style="display:flex;align-items:center;gap:10px">${n.icon ? `<img class="svc-icon-sm" src="${esc(n.icon)}" alt="" onerror="this.remove()">` : ""}${esc(n.label)}</h2>
-    <div class="kind">${esc(KIND_TR[n.kind])}${host ? " · " + esc(host.label) : ""}${n.edited ? " · düzenlendi" : ""}</div>`;
+    <div class="kind">${esc(kindName(n.kind))}${host ? " · " + esc(host.label) : ""}${n.edited ? " · " + _("edited") : ""}</div>`;
   if ((n.tags || []).length) html += `<div class="chips" style="margin-bottom:12px">${n.tags.map((t) => `<span class="chip static">#${esc(t)}</span>`).join("")}</div>`;
   html += `<dl>${rows.join("")}</dl>`;
   if (n.note) html += `<p class="note">${esc(n.note)}</p>`;
   const links = svcLinks(n);
-  if (links.length) html += `<h3>Aç</h3><ul class="svc-list">${links.map(([u, l]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener"><span>${esc(n.label)}</span><small>${esc(l)}</small></a></li>`).join("")}</ul>`;
+  if (links.length) html += `<h3>${_("Open")}</h3><ul class="svc-list">${links.map(([u, l]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener"><span>${esc(n.label)}</span><small>${esc(l)}</small></a></li>`).join("")}</ul>`;
   html += historyHtml(n.history);
   if ((n.containers || []).length > 1) {
-    html += `<h3>Container'lar</h3><ul class="svc-list">` + n.containers.map((c) => `<li><a href="#" data-open="${esc(n.id + "#" + c.name)}"><span>${esc(c.name)}</span><small>${c.state === "running" ? (c.ports || []).map((p) => ":" + p).join(" ") : "durdu"}</small></a></li>`).join("") + `</ul>`;
+    html += `<h3>${_("Containers")}</h3><ul class="svc-list">` + n.containers.map((c) => `<li><a href="#" data-open="${esc(n.id + "#" + c.name)}"><span>${esc(c.name)}</span><small>${c.state === "running" ? (c.ports || []).map((p) => ":" + p).join(" ") : _("stopped")}</small></a></li>`).join("") + `</ul>`;
   }
-  if (CAN_EDIT && !n.virtual) html += `<div class="actions"><button class="btn line" id="bEdit">Düzenle</button></div>`;
+  if (CAN_EDIT && !n.virtual) html += `<div class="actions"><button class="btn line" id="bEdit">${_("Edit")}</button></div>`;
   $("#pbody").innerHTML = html;
   const be = $("#bEdit"); if (be) be.onclick = () => { editing = true; renderPanel(n); };
   $$("[data-open]", $("#pbody")).forEach((a) => a.onclick = (e) => { e.preventDefault(); openPanel(a.dataset.open); });
 }
 function renderServiceEditor(n) {
   const ov = n.override || {};
-  $("#pbody").innerHTML = `<h2>${esc(n.label)}</h2><div class="kind">Servis düzenleniyor · boş bırakılan alanlar otomatik kalır</div>
+  $("#pbody").innerHTML = `<h2>${esc(n.label)}</h2><div class="kind">${_("Editing service · empty fields stay automatic")}</div>
   <form id="edit">
-    <div class="field"><label for="eName">Ad</label><input id="eName" maxlength="60" value="${esc(ov.name || "")}" placeholder="${esc(n.auto_label || n.label)}"></div>
-    <div class="field"><label for="eIcon">İkon adresi <small>(https://…png ya da svg)</small></label><input id="eIcon" maxlength="300" value="${esc(ov.icon || "")}" placeholder="${esc(n.icon_url || "otomatik")}"></div>
-    <p class="hint" style="margin-top:-4px">İkonu Pi bir kez indirir; haritayı açan cihazın internete çıkması gerekmez. Hazır ikonlar: <span class="mono">cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/&lt;ad&gt;.png</span></p>
-    <div class="field"><label for="eTags">Etiketler <small>(virgülle ayır)</small></label><input id="eTags" value="${esc((ov.tags || []).join(", "))}"></div>
-    <div class="field"><label for="eNote">Not</label><textarea id="eNote" maxlength="500">${esc(ov.note || "")}</textarea></div>
-    <label class="check"><input type="checkbox" id="eHidden"${n.hidden ? " checked" : ""}> Haritada gizle</label>
-    <div class="actions"><button class="btn primary" type="submit">Kaydet</button><button class="btn line" type="button" id="eCancel">Vazgeç</button>
-      ${n.edited ? `<button class="btn danger" type="button" id="eReset">Düzenlemeleri sil</button>` : ""}</div>
+    <div class="field"><label for="eName">${_("Name")}</label><input id="eName" maxlength="60" value="${esc(ov.name || "")}" placeholder="${esc(n.auto_label || n.label)}"></div>
+    <div class="field"><label for="eIcon">${_("Icon URL")} <small>(https://…png / svg)</small></label><input id="eIcon" maxlength="300" value="${esc(ov.icon || "")}" placeholder="${esc(n.icon_url || _("automatic"))}"></div>
+    <p class="hint" style="margin-top:-4px">${_("The Pi downloads the icon once; devices viewing the map need no internet access. Ready-made icons:")} <span class="mono">cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/&lt;name&gt;.png</span></p>
+    <div class="field"><label for="eTags">${_("Tags")} <small>(${_("comma separated")})</small></label><input id="eTags" value="${esc((ov.tags || []).join(", "))}"></div>
+    <div class="field"><label for="eNote">${_("Note")}</label><textarea id="eNote" maxlength="500">${esc(ov.note || "")}</textarea></div>
+    <label class="check"><input type="checkbox" id="eHidden"${n.hidden ? " checked" : ""}> ${_("Hide on the map")}</label>
+    <div class="actions"><button class="btn primary" type="submit">${_("Save")}</button><button class="btn line" type="button" id="eCancel">${_("Cancel")}</button>
+      ${n.edited ? `<button class="btn danger" type="button" id="eReset">${_("Clear edits")}</button>` : ""}</div>
     <div class="err-msg" id="eErr"></div>
   </form>`;
   const save = async (body) => {
     try { await api("PUT", "/api/device?id=" + encodeURIComponent(n.id), body); editing = false; await load(true); }
-    catch (e) { $("#eErr").textContent = "Kaydedilemedi: " + e.message; }
+    catch (e) { $("#eErr").textContent = _("Could not save: ") + _x(e.message); }
   };
   $("#eCancel").onclick = () => { editing = false; renderPanel(n); };
   if ($("#eReset")) $("#eReset").onclick = () => save({});
@@ -1156,15 +1383,15 @@ function openSitePanel(id) {
   const root = byId.get(id + "-gw");
   const members = DATA.nodes.filter((n) => n.site === id && !isSvc(n) && !n.placeholder);
   const on = members.filter((n) => n.online).length;
-  let html = `<h2>${esc(site.name)}</h2><div class="kind">Grup · ${members.length} cihaz, ${on} çevrimiçi</div>`;
+  let html = `<h2>${esc(_x(site.name))}</h2><div class="kind">${_("Group · {n} devices, {on} online", { n: members.length, on })}</div>`;
   if (CAN_EDIT) {
     html += `<form id="siteForm">
-      <div class="field"><label for="sName">Grubun adı</label><input id="sName" maxlength="40" value="${esc(site.name !== site.auto_name ? site.name : "")}" placeholder="${esc(site.auto_name || site.name)}"></div>
-      ${root && root.placeholder ? `<div class="field"><label for="sRoot">Üstteki kartın adı</label><input id="sRoot" maxlength="60" value="${esc((root.override || {}).name || "")}" placeholder="${esc(root.auto_label || root.label)}"></div>` : ""}
-      <div class="actions"><button class="btn primary" type="submit">Kaydet</button></div>
+      <div class="field"><label for="sName">${_("Group name")}</label><input id="sName" maxlength="40" value="${esc(site.name !== site.auto_name ? site.name : "")}" placeholder="${esc(site.auto_name || site.name)}"></div>
+      ${root && root.placeholder ? `<div class="field"><label for="sRoot">${_("Name of the top card")}</label><input id="sRoot" maxlength="60" value="${esc((root.override || {}).name || "")}" placeholder="${esc(root.auto_label || root.label)}"></div>` : ""}
+      <div class="actions"><button class="btn primary" type="submit">${_("Save")}</button></div>
       <div class="err-msg" id="sErr2"></div></form>
-      <p class="hint">Boş bırakırsan varsayılan ada döner. Ad sadece haritada görünür; ağ ayarlarına dokunmaz.</p>`;
-  } else html += `<p class="hint">Adlandırmak için Nodesk servisine ulaşılamıyor.</p>`;
+      <p class="hint">${_("Leave empty to go back to the default name. The name only shows on the map; network settings are untouched.")}</p>`;
+  } else html += `<p class="hint">${_("Cannot reach the Nodesk service to rename.")}</p>`;
   $("#pbody").innerHTML = html;
   openDrawer("panel");
   const f = $("#siteForm");
@@ -1174,7 +1401,7 @@ function openSitePanel(id) {
       await api("PUT", "/api/site?id=" + encodeURIComponent(id), { name: $("#sName").value.trim() });
       if ($("#sRoot")) await api("PUT", "/api/device?id=" + encodeURIComponent(id + "-gw"), { name: $("#sRoot").value.trim() });
       await load(true); openSitePanel(id);
-    } catch (err) { $("#sErr2").textContent = "Kaydedilemedi: " + err.message; }
+    } catch (err) { $("#sErr2").textContent = _("Could not save: ") + _x(err.message); }
   };
 }
 function renderPanel(n) {
@@ -1183,61 +1410,61 @@ function renderPanel(n) {
   if (editing) return renderEditor(n);
   const rows = [];
   const add = (k, v, mono) => { if (v !== undefined && v !== null && v !== "") rows.push(`<dt>${k}</dt><dd${mono ? ' class="mono"' : ""}>${v}</dd>`); };
-  const st = n.online ? `<span class="status on">Çevrimiçi</span>` : n.stale ? `<span class="status warn">Veri alınamadı</span>` : `<span class="status">Görünmüyor</span>`;
-  add("Durum", st);
-  add("Yerel IP", (n.ips || []).filter((i) => !i.startsWith("100.")).map(esc).join("<br>"), true);
-  add("MAC", n.mac ? [n.mac, ...(n.aliases || [])].map(esc).join("<br>") + (n.random_mac ? "<br><small>rastgele (gizlilik) MAC</small>" : "") : (n.macs || []).map(esc).join("<br>"), true);
-  add("Üretici", esc(n.vendor || (n.mac ? (n.random_mac ? "gizli (rastgele MAC)" : "bilinmiyor") : "")));
-  add("İşletim sist.", esc(n.os || ""));
+  const st = n.online ? `<span class="status on">${_("Online")}</span>` : n.stale ? `<span class="status warn">${_("No data")}</span>` : `<span class="status">${_("Not visible")}</span>`;
+  add(_("Status"), st);
+  add(_("Local IP"), (n.ips || []).filter((i) => !i.startsWith("100.")).map(esc).join("<br>"), true);
+  add("MAC", n.mac ? [n.mac, ...(n.aliases || [])].map(esc).join("<br>") + (n.random_mac ? `<br><small>${_("random (privacy) MAC")}</small>` : "") : (n.macs || []).map(esc).join("<br>"), true);
+  add(_("Vendor"), esc(n.vendor || (n.mac ? (n.random_mac ? _("hidden (random MAC)") : _("unknown")) : "")));
+  add(_("OS"), esc(_x(n.os || "")));
   const lnk = (id) => `<a href="#" data-open="${esc(id)}">${esc((byId.get(id) || {}).label || id)}</a>`;
-  if (n.exit_via) add("İnternet çıkışı", `${lnk(n.exit_via)} üzerinden <small>(exit node)</small>`);
-  if ((n.exit_users || []).length) add("Exit node", "kullananlar: " + n.exit_users.map(lnk).join(", "));
+  if (n.exit_via) add(_("Internet exit"), _("through {b}", { b: lnk(n.exit_via) }) + " <small>(exit node)</small>");
+  if ((n.exit_users || []).length) add("Exit node", _("used by: ") + n.exit_users.map(lnk).join(", "));
   const nm = n.names || {};
-  add("Kendi adı", esc([...new Set([nm.dhcp_name, nm.mdns_name, nm.nb_name].filter(Boolean))].join(" · ")));
+  add(_("Own name"), esc([...new Set([nm.dhcp_name, nm.mdns_name, nm.nb_name].filter(Boolean))].join(" · ")));
   add("Model", esc([nm.friendly, nm.model].filter(Boolean).join(" · ")));
   if (nm.ssdp_server) add("UPnP", esc(nm.ssdp_server));
-  if (nm.mdns_services) add("Yayınladığı", esc(nm.mdns_services.map((s) => s.replace(/^_|\._(tcp|udp)$/g, "")).join(", ")));
-  if (n.ifaces) add("Arayüzler", n.ifaces.map(esc).join("<br>"), true);
-  if (n.via && n.via.length) add("Nasıl bulundu", esc(n.via.map((v) => VIA_TR[v] || v).join(", ")));
-  add("İlk görülme", n.first_seen ? fmtTime(n.first_seen) : "");
-  add("Son görülme", n.last_seen ? `${ago(n.last_seen)} <small>(${fmtTime(n.last_seen)})</small>` : (n.mac ? "henüz çevrimiçi görülmedi" : ""));
-  let html = `<h2>${esc(n.label)}</h2><div class="kind">${esc(KIND_TR[n.kind] || n.kind)}${siteName(n.site) ? " · " + esc(siteName(n.site)) : ""}${n.edited ? " · düzenlendi" : ""}</div>`;
+  if (nm.mdns_services) add(_("Announces"), esc(nm.mdns_services.map((s) => s.replace(/^_|\._(tcp|udp)$/g, "")).join(", ")));
+  if (n.ifaces) add(_("Interfaces"), n.ifaces.map(esc).join("<br>"), true);
+  if (n.via && n.via.length) add(_("Found by"), esc(n.via.map((v) => _(VIA[v] || v)).join(", ")));
+  add(_("First seen"), n.first_seen ? fmtTime(n.first_seen) : "");
+  add(_("Last seen"), n.last_seen ? `${ago(n.last_seen)} <small>(${fmtTime(n.last_seen)})</small>` : (n.mac ? _("not seen online yet") : ""));
+  let html = `<h2>${esc(n.label)}</h2><div class="kind">${esc(kindName(n.kind))}${siteName(n.site) ? " · " + esc(siteName(n.site)) : ""}${n.edited ? " · " + _("edited") : ""}</div>`;
   if ((n.tags || []).length) html += `<div class="chips" style="margin-bottom:12px">${n.tags.map((t) => `<span class="chip static">#${esc(t)}</span>`).join("")}</div>`;
-  if (n.unnamed && CAN_EDIT && !n.same_hint) html += `<p class="note">Bu cihazın adı bilinmiyor; gösterilen ad üretici, işletim sistemi ya da IP'den tahmin. Düzenle'den bir kez adlandırırsan kalıcı olur.</p>`;
-  if (n.same_hint && CAN_EDIT) html += `<div class="note">Bu cihaz, az önce kaybolan <b>${esc(n.same_hint.label)}</b> ile aynı telefon olabilir: telefonlar her Wi-Fi ağında farklı (rastgele) MAC kullanır.
-    <div class="actions"><button class="btn primary" id="bSame">Aynı cihaz</button><button class="btn line" id="bNotSame">Farklı cihaz</button></div></div>`;
+  if (n.unnamed && CAN_EDIT && !n.same_hint) html += `<p class="note">${_("This device's name is unknown; the name shown is a guess from vendor, OS or IP. Name it once under Edit and it sticks.")}</p>`;
+  if (n.same_hint && CAN_EDIT) html += `<div class="note">${_("This may be the same phone as <b>{b}</b>, which just disappeared: phones use a different (random) MAC on every Wi-Fi network.", { b: esc(n.same_hint.label) })}
+    <div class="actions"><button class="btn primary" id="bSame">${_("Same device")}</button><button class="btn line" id="bNotSame">${_("Different device")}</button></div></div>`;
   html += `<dl>${rows.join("")}</dl>`;
   html += historyHtml(n.history);
-  if (n.note) html += `<p class="note">${esc(n.note)}</p>`;
-  if (n.stale) html += `<p class="note">Bu bölgeden son taramada veri alınamadı; gösterilen bilgiler son başarılı taramadan.</p>`;
-  if (n.roam) html += `<p class="note">Tailscale cihazı şu an <b>${esc(siteName(n.site))}</b> ağında. Evden ayrılınca ${esc(siteName("mobile") || "Uzak / Mobil")} grubuna döner.</p>`;
-  if (n.agent) html += `<p class="hint">Ajan <b>${esc(n.agent.name)}</b>: son rapor ${esc(ago(n.agent.received))}${n.agent.fresh ? "" : " (eski)"}</p>`;
+  if (n.note) html += `<p class="note">${esc(_x(n.note))}</p>`;
+  if (n.stale) html += `<p class="note">${_("No data from this site in the last scan; showing the last successful scan.")}</p>`;
+  if (n.roam) html += `<p class="note">${_("This Tailscale device is on the <b>{a}</b> network right now. It moves back to {b} when it leaves.", { a: esc(siteName(n.site)), b: esc(siteName("mobile") || _("Remote / Mobile")) })}</p>`;
+  if (n.agent) html += `<p class="hint">${_("Agent <b>{a}</b>: last report {b}", { a: esc(n.agent.name), b: esc(ago(n.agent.received)) })}${n.agent.fresh ? "" : " " + _("(stale)")}</p>`;
   if (n.tailscale) {
     const t = n.tailscale, p = tsPath(n), tr = [];
     const a2 = (k, v, m) => { if (v) tr.push(`<dt>${k}</dt><dd${m ? ' class="mono"' : ""}>${v}</dd>`); };
     a2("Tailscale IP", esc(t.ip), true);
-    a2("Bağlantı", `<span class="status ${p === "direct" ? "on" : p === "relay" ? "warn" : ""}">${esc(t.path)}</span>`);
-    a2("İşletim sist.", esc(t.os));
-    a2("Yönlendirilen", (t.routes || []).filter((r) => !r.includes("/0")).map(esc).join("<br>"), true);
-    a2("Exit node", t.exit_offer || (t.routes || []).includes("0.0.0.0/0") ? "sunuyor" : "");
-    if (!t.online && t.last_seen) a2("Son bağlantı", ago(t.last_seen));
+    a2(_("Connection"), `<span class="status ${p === "direct" ? "on" : p === "relay" ? "warn" : ""}">${esc(_x(t.path))}</span>`);
+    a2(_("OS"), esc(t.os));
+    a2(_("Routes"), (t.routes || []).filter((r) => !r.includes("/0")).map(esc).join("<br>"), true);
+    a2("Exit node", t.exit_offer || (t.routes || []).includes("0.0.0.0/0") ? _("offered") : "");
+    if (!t.online && t.last_seen) a2(_("Last connected"), ago(t.last_seen));
     html += `<h3>Tailscale</h3><dl>${tr.join("")}</dl>`;
   }
   const svcs = (n.service_ids || []).map((id) => byId.get(id)).filter(Boolean);
   if (svcs.length) {
-    html += `<h3>Servisler</h3><ul class="svc-list">` + svcs.map((m) => {
+    html += `<h3>${_("Services")}</h3><ul class="svc-list">` + svcs.map((m) => {
       const [stc, stt] = svcStatus(m);
       return `<li><a href="#" data-open="${esc(m.id)}"><span class="status ${stc}">${esc(m.label)}</span><small>${m.state && m.state !== "running" ? esc(stt.toLowerCase()) : (m.ports || []).map((p) => ":" + p).join(" ")}</small></a></li>`;
     }).join("") + `</ul>`;
   }
-  if (CAN_EDIT && !n.placeholder) html += `<div class="actions"><button class="btn line" id="bEdit">Düzenle</button></div>`;
-  else if (!API_OK && n.mac) html += `<p class="hint">Düzenleme için Nodesk servisine ulaşılamıyor.</p>`;
-  else if (!n.placeholder) html += `<p class="hint">Düzenlemek için <a href="#" data-login>giriş yap</a>.</p>`;
+  if (CAN_EDIT && !n.placeholder) html += `<div class="actions"><button class="btn line" id="bEdit">${_("Edit")}</button></div>`;
+  else if (!API_OK && n.mac) html += `<p class="hint">${_("Cannot reach the Nodesk service to edit.")}</p>`;
+  else if (!n.placeholder) html += `<p class="hint">${_("<a href=\"#\" data-login>Log in</a> to edit.")}</p>`;
   $("#pbody").innerHTML = html;
   const be = $("#bEdit"); if (be) be.onclick = () => { editing = true; renderPanel(n); };
   const putOv = async (patch) => {
     try { await api("PUT", "/api/device?id=" + encodeURIComponent(n.id), { ...(n.override || {}), ...patch }); await load(true); }
-    catch (e) { alert("Kaydedilemedi: " + e.message); }
+    catch (e) { alert(_("Could not save: ") + _x(e.message)); }
   };
   if ($("#bSame")) $("#bSame").onclick = () => putOv({ same_as: n.same_hint.id });
   if ($("#bNotSame")) $("#bNotSame").onclick = () => putOv({ not_same: n.same_hint.id });
@@ -1250,35 +1477,35 @@ function descendants(id) {
   return out;
 }
 function renderEditor(n) {
-  const types = (STATE && STATE.types) || Object.keys(KIND_TR);
+  const types = (STATE && STATE.types) || Object.keys(KIND_LABEL);
   const banned = descendants(n.id);
   const parents = DATA.nodes.filter((x) => x.site === n.site && !banned.has(x.id) && x.kind !== "internet" && !isSvc(x))
-    .sort((a, b) => a.label.localeCompare(b.label, "tr"));
+    .sort((a, b) => a.label.localeCompare(b.label, LANG));
   const ov = n.override || {};
   const manual = (n.services || []).filter((s) => s.source === "manual");
   const twins = DATA.nodes.filter((x) => x.mac && x.id !== n.id && x.id.startsWith("mac:"))
-    .sort((a, b) => a.label.localeCompare(b.label, "tr"));
-  let html = `<h2>${esc(n.label)}</h2><div class="kind">Düzenleniyor · boş bırakılan alanlar otomatik kalır</div>
+    .sort((a, b) => a.label.localeCompare(b.label, LANG));
+  let html = `<h2>${esc(n.label)}</h2><div class="kind">${_("Editing · empty fields stay automatic")}</div>
   <form id="edit">
-    <div class="field"><label for="eName">Ad</label><input id="eName" maxlength="60" value="${esc(ov.name || "")}" placeholder="${esc(n.auto_label || n.label)}"></div>
-    <div class="field"><label for="eType">Tür</label><select id="eType"><option value="">Otomatik (${esc(KIND_TR[n.auto_kind] || n.auto_kind || "?")})</option>${types.map((t) => `<option value="${t}"${t === ov.type ? " selected" : ""}>${esc(KIND_TR[t] || t)}</option>`).join("")}</select></div>
-    <div class="field"><label for="eParent">Bağlı olduğu cihaz</label><select id="eParent"><option value="">Otomatik (bulunduğu yer)</option>${parents.map((p) => `<option value="${esc(p.id)}"${p.id === ov.parent ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></div>
-    ${n.id.startsWith("mac:") ? `<div class="field"><label for="eSame">Aynı cihaz <small>(telefonun başka Wi-Fi ağındaki MAC'i)</small></label><select id="eSame"><option value="">—</option>${twins.map((p) => `<option value="${esc(p.id)}"${p.id === ov.same_as ? " selected" : ""}>${esc(p.label)} · ${esc(p.mac)}</option>`).join("")}</select></div>` : ""}
-    <div class="field"><label for="eTags">Etiketler <small>(virgülle ayır)</small></label><input id="eTags" value="${esc((ov.tags || []).join(", "))}" placeholder="örn. salon, IoT"></div>
-    <div class="field"><label for="eNote">Not</label><textarea id="eNote" maxlength="500">${esc(ov.note || "")}</textarea></div>
-    <div class="field"><span class="lbl">Elle eklenen servisler</span><div id="eSvcs"></div>
-      <div><button type="button" class="btn line" id="eAddSvc">+ Servis ekle</button></div></div>
-    <label class="check"><input type="checkbox" id="eHidden"${n.hidden ? " checked" : ""}> Haritada gizle <small>(filtreden "gizlileri göster" ile görünür)</small></label>
-    <div class="actions"><button class="btn primary" type="submit">Kaydet</button><button class="btn line" type="button" id="eCancel">Vazgeç</button>
-      ${n.edited ? `<button class="btn danger" type="button" id="eReset">Düzenlemeleri sil</button>` : ""}</div>
+    <div class="field"><label for="eName">${_("Name")}</label><input id="eName" maxlength="60" value="${esc(ov.name || "")}" placeholder="${esc(n.auto_label || n.label)}"></div>
+    <div class="field"><label for="eType">${_("Type")}</label><select id="eType"><option value="">${_("Automatic ({k})", { k: esc(kindName(n.auto_kind)) })}</option>${types.map((k) => `<option value="${k}"${k === ov.type ? " selected" : ""}>${esc(kindName(k))}</option>`).join("")}</select></div>
+    <div class="field"><label for="eParent">${_("Connected to")}</label><select id="eParent"><option value="">${_("Automatic (where it was found)")}</option>${parents.map((p) => `<option value="${esc(p.id)}"${p.id === ov.parent ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></div>
+    ${n.id.startsWith("mac:") ? `<div class="field"><label for="eSame">${_("Same device")} <small>(${_("the phone's MAC on another Wi-Fi network")})</small></label><select id="eSame"><option value="">—</option>${twins.map((p) => `<option value="${esc(p.id)}"${p.id === ov.same_as ? " selected" : ""}>${esc(p.label)} · ${esc(p.mac)}</option>`).join("")}</select></div>` : ""}
+    <div class="field"><label for="eTags">${_("Tags")} <small>(${_("comma separated")})</small></label><input id="eTags" value="${esc((ov.tags || []).join(", "))}" placeholder="${_("e.g. living room, IoT")}"></div>
+    <div class="field"><label for="eNote">${_("Note")}</label><textarea id="eNote" maxlength="500">${esc(ov.note || "")}</textarea></div>
+    <div class="field"><span class="lbl">${_("Services added by hand")}</span><div id="eSvcs"></div>
+      <div><button type="button" class="btn line" id="eAddSvc">${_("+ Add service")}</button></div></div>
+    <label class="check"><input type="checkbox" id="eHidden"${n.hidden ? " checked" : ""}> ${_("Hide on the map")} <small>(${_("visible with \"show hidden\" in the filter")})</small></label>
+    <div class="actions"><button class="btn primary" type="submit">${_("Save")}</button><button class="btn line" type="button" id="eCancel">${_("Cancel")}</button>
+      ${n.edited ? `<button class="btn danger" type="button" id="eReset">${_("Clear edits")}</button>` : ""}</div>
     <div class="err-msg" id="eErr"></div>
   </form>`;
-  if (n.mac) html += `<p class="hint">Değişiklikler MAC adresine (<span class="mono">${esc(n.mac)}</span>) bağlı saklanır; IP değişse de korunur.</p>`;
+  if (n.mac) html += `<p class="hint">${_("Edits are stored against the MAC address ({mac}), so they survive IP changes.", { mac: `<span class="mono">${esc(n.mac)}</span>` })}</p>`;
   $("#pbody").innerHTML = html;
   const box = $("#eSvcs");
   const addRow = (s = {}) => {
     const r = document.createElement("div"); r.className = "svc-edit";
-    r.innerHTML = `<input placeholder="Ad" value="${esc(s.name || "")}" aria-label="Servis adı"><input placeholder="Port" inputmode="numeric" value="${esc((s.ports || [])[0] || s.port || "")}" aria-label="Port"><input placeholder="Bağlantı (isteğe bağlı)" value="${esc(s.url || "")}" aria-label="Bağlantı"><button type="button" class="btn danger" aria-label="Kaldır">×</button>`;
+    r.innerHTML = `<input placeholder="${_("Name")}" value="${esc(s.name || "")}" aria-label="${_("Service name")}"><input placeholder="Port" inputmode="numeric" value="${esc((s.ports || [])[0] || s.port || "")}" aria-label="Port"><input placeholder="${_("Link (optional)")}" value="${esc(s.url || "")}" aria-label="${_("Link")}"><button type="button" class="btn danger" aria-label="${_("Remove")}">×</button>`;
     r.querySelector("button").onclick = () => r.remove();
     box.appendChild(r);
   };
@@ -1287,7 +1514,7 @@ function renderEditor(n) {
   $("#eCancel").onclick = () => { editing = false; renderPanel(n); };
   const save = async (body) => {
     try { await api("PUT", "/api/device?id=" + encodeURIComponent(n.id), body); editing = false; await load(true); }
-    catch (e) { $("#eErr").textContent = "Kaydedilemedi: " + e.message; }
+    catch (e) { $("#eErr").textContent = _("Could not save: ") + _x(e.message); }
   };
   if ($("#eReset")) $("#eReset").onclick = () => save({});
   $("#edit").onsubmit = (ev) => {
@@ -1306,16 +1533,16 @@ function renderEditor(n) {
 function renderFilters() {
   const f = prefs.filters;
   const kinds = [...new Set(DATA.nodes.filter((n) => !n.placeholder && n.kind !== "internet").map((n) => n.kind))].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
-  const tags = [...new Set(DATA.nodes.flatMap((n) => n.tags || []))].sort((a, b) => a.localeCompare(b, "tr"));
+  const tags = [...new Set(DATA.nodes.flatMap((n) => n.tags || []))].sort((a, b) => a.localeCompare(b, LANG));
   const chip = (group, val, label) => `<button class="chip" data-f="${group}" data-v="${esc(val)}" aria-pressed="${(group === "status" ? f.status === val : f[group].includes(val))}">${esc(label)}</button>`;
-  let html = `<h2>Filtre</h2><p class="hint">Eşleşmeyen cihazlar soluklaşır.</p>
-    <h3>Grup</h3><div class="chips">${DATA.sites.map((s) => chip("sites", s.id, s.name)).join("")}</div>
-    <h3>Tür</h3><div class="chips">${kinds.map((k) => chip("kinds", k, KIND_TR[k] || k)).join("")}</div>
-    <h3>Durum</h3><div class="chips">${chip("status", "on", "Çevrimiçi")}${chip("status", "off", "Çevrimdışı")}</div>`;
-  html += `<h3>Etiket</h3>` + (tags.length ? `<div class="chips">${tags.map((t) => chip("tags", t, "#" + t)).join("")}</div>` : `<p class="hint">Henüz etiket yok. Bir cihazı düzenleyip etiket ekleyebilirsin.</p>`);
-  html += `<label class="check" style="margin-top:14px"><input type="checkbox" id="fUnnamed"${f.unnamed ? " checked" : ""}> Sadece adı bilinmeyenler <small>(adlandırılmayı bekleyenler)</small></label>
-    <label class="check"><input type="checkbox" id="fHidden"${f.hidden ? " checked" : ""}> Gizlenmiş cihazları göster</label>
-    <div class="actions"><button class="btn line" id="fClear">Filtreyi temizle</button></div>`;
+  let html = `<h2>${_("Filter")}</h2><p class="hint">${_("Devices that do not match are dimmed.")}</p>
+    <h3>${_("Group")}</h3><div class="chips">${DATA.sites.map((s) => chip("sites", s.id, _x(s.name))).join("")}</div>
+    <h3>${_("Type")}</h3><div class="chips">${kinds.map((k) => chip("kinds", k, kindName(k))).join("")}</div>
+    <h3>${_("Status")}</h3><div class="chips">${chip("status", "on", _("Online"))}${chip("status", "off", _("Offline"))}</div>`;
+  html += `<h3>${_("Tag")}</h3>` + (tags.length ? `<div class="chips">${tags.map((g) => chip("tags", g, "#" + g)).join("")}</div>` : `<p class="hint">${_("No tags yet. Edit a device to add some.")}</p>`);
+  html += `<label class="check" style="margin-top:14px"><input type="checkbox" id="fUnnamed"${f.unnamed ? " checked" : ""}> ${_("Only unnamed devices")} <small>(${_("waiting for a name")})</small></label>
+    <label class="check"><input type="checkbox" id="fHidden"${f.hidden ? " checked" : ""}> ${_("Show hidden devices")}</label>
+    <div class="actions"><button class="btn line" id="fClear">${_("Clear filter")}</button></div>`;
   $("#fbody").innerHTML = html;
   $$("[data-f]", $("#fbody")).forEach((b) => b.onclick = () => {
     const g = b.dataset.f, v = b.dataset.v;
@@ -1337,24 +1564,25 @@ function afterFilter() {
 let AGENTS = [];
 async function openSettings() {
   openDrawer("settings");
-  $("#sbody").innerHTML = `<h2>Ayarlar</h2><p class="hint">Yükleniyor…</p>`;
+  $("#sbody").innerHTML = `<h2>${_("Settings")}</h2><p class="hint">${_("Loading…")}</p>`;
   try { [STATE, AGENTS] = await Promise.all([api("GET", "/api/state"), api("GET", "/api/agents")]); }
-  catch (e) { $("#sbody").innerHTML = `<h2>Ayarlar</h2><p class="note">Nodesk servisine ulaşılamadı (${esc(e.message)}). Pi'de <span class="mono">sudo nodesk status</span> ile kontrol et.</p>`; return; }
+  catch (e) { $("#sbody").innerHTML = `<h2>${_("Settings")}</h2><p class="note">${_("Could not reach the Nodesk service ({e}). Check with <span class=\"mono\">sudo nodesk status</span> on the Pi.", { e: esc(_x(e.message)) })}</p>`; return; }
   renderSettings();
 }
 /* Erişim ve Gruplar: Ayarlar'da ve kurulum sihirbazında aynı parçalar */
 function accessHtml(s) {
-  return `  <p class="hint">Şu an ${esc({ parola: "parolayla giriş yapmış olarak", pi: "Pi'nin kendisinden", tailnet: "Tailscale üzerinden", herkes: "herkese açık düzenlemeyle" }[AUTH && AUTH.how] || (AUTH && AUTH.how ? AUTH.how + " hesabıyla" : ""))} düzenliyorsun. Ajanların raporları bu ayarlardan etkilenmez (onlar kendi anahtarıyla gelir).</p>
-  <div class="field"><label for="aEdit">Kim düzenleyebilir</label><select id="aEdit">
-    <option value="tailnet"${s.access.edit === "tailnet" ? " selected" : ""}>Tailscale üzerinden bağlananlar (önerilen)</option>
-    <option value="password"${s.access.edit === "password" ? " selected" : ""}>Yalnızca parolayla giriş yapanlar</option>
-    <option value="everyone"${s.access.edit === "everyone" ? " selected" : ""}>Herkes (ev ağındaki misafirler dahil, önerilmez)</option></select></div>
-  <div class="field"><label for="aUsers">İzinli Tailscale hesapları <small>(virgülle; boşsa tailnet'teki herkes)</small></label><input id="aUsers" value="${esc((s.access.ts_users || []).join(", "))}" placeholder="ornek@gmail.com"${s.access.edit === "tailnet" ? "" : " disabled"}></div>
-  <div class="field"><label for="aView">Haritayı kim görebilir</label><select id="aView">
-    <option value="everyone"${s.access.view === "everyone" ? " selected" : ""}>Ağdaki herkes</option>
-    <option value="login"${s.access.view === "login" ? " selected" : ""}>Yalnızca düzenleyebilenler</option></select></div>
-  <form id="pwForm" class="row"><input id="aPw" type="password" minlength="8" autocomplete="new-password" placeholder="${AUTH && AUTH.password ? "yeni parola" : "parola belirle (en az 8 karakter)"}" aria-label="Parola" style="flex:1;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px 8px">
-    <button class="btn line" type="submit">${AUTH && AUTH.password ? "Parolayı değiştir" : "Parola belirle"}</button></form>`;
+  const how = AUTH && AUTH.how, HOW = { password: "logged in with the password", pi: "on the Pi itself", tailnet: "over Tailscale", everyone: "with open editing" };
+  return `  <p class="hint">${_("You are editing {how}. Agent reports are not affected by these settings (they use their own key).", { how: esc(HOW[how] ? _(HOW[how]) : how ? _("as {u}", { u: how }) : "") })}</p>
+  <div class="field"><label for="aEdit">${_("Who can edit")}</label><select id="aEdit">
+    <option value="tailnet"${s.access.edit === "tailnet" ? " selected" : ""}>${_("Anyone connecting over Tailscale (recommended)")}</option>
+    <option value="password"${s.access.edit === "password" ? " selected" : ""}>${_("Only after logging in with the password")}</option>
+    <option value="everyone"${s.access.edit === "everyone" ? " selected" : ""}>${_("Everyone (including guests on the LAN, not recommended)")}</option></select></div>
+  <div class="field"><label for="aUsers">${_("Allowed Tailscale accounts")} <small>(${_("comma separated; empty = everyone on the tailnet")})</small></label><input id="aUsers" value="${esc((s.access.ts_users || []).join(", "))}" placeholder="name@example.com"${s.access.edit === "tailnet" ? "" : " disabled"}></div>
+  <div class="field"><label for="aView">${_("Who can see the map")}</label><select id="aView">
+    <option value="everyone"${s.access.view === "everyone" ? " selected" : ""}>${_("Everyone on the network")}</option>
+    <option value="login"${s.access.view === "login" ? " selected" : ""}>${_("Only those who can edit")}</option></select></div>
+  <form id="pwForm" class="row"><input id="aPw" type="password" minlength="8" autocomplete="new-password" placeholder="${AUTH && AUTH.password ? _("new password") : _("set a password (8+ characters)")}" aria-label="${_("Password")}" style="flex:1;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px 8px">
+    <button class="btn line" type="submit">${AUTH && AUTH.password ? _("Change password") : _("Set password")}</button></form>`;
 }
 function bindAccess(put, rerender) {
   $("#aEdit").onchange = (e) => put({ access: { edit: e.target.value } });
@@ -1363,28 +1591,28 @@ function bindAccess(put, rerender) {
   $("#pwForm").onsubmit = async (e) => {
     e.preventDefault();
     try { await api("PUT", "/api/password", { password: $("#aPw").value }); AUTH = await api("GET", "/api/auth"); rerender(); }
-    catch (err) { $("#sErr").textContent = "Parola kaydedilemedi: " + err.message; }
+    catch (err) { $("#sErr").textContent = _("Could not save the password: ") + _x(err.message); }
   };
 }
-const SITE_TYPE_TR = { local: "Pi'nin ağı", router: "router ajanı", group: "Tailscale grubu" };
-function siteLabel(x) { return (DATA && siteName(x.id)) || x.name; }
+const SITE_TYPE = { local: "the Pi's network", router: "router agent", group: "Tailscale group" };
+function siteLabel(x) { return (DATA && siteName(x.id)) || _x(x.name); }
 function groupsHtml() {
   const S = STATE.sites || [], groups = S.filter((x) => x.type === "group");
   const def = (groups.find((g) => g.default) || {}).id, tsSite = STATE.settings.ts_site || {};
   const devs = DATA.nodes.filter((n) => n.tailscale && !isSvc(n) && n.id !== "self" && n.kind !== "router" && !n.placeholder)
-    .sort((a, b) => a.label.localeCompare(b.label, "tr"));
-  let h = `<p class="hint">Haritadaki her çerçeve bir grup. Pi'nin ağı ve her router ajanı kendiliğinden grup olur; Tailscale cihazlarını aşağıdan istediğin gruba koyabilirsin. Grubun adını haritada başlığına tıklayarak değiştirebilirsin.</p>
-    <div class="colors">${S.map((x) => `<div class="color-row"><span class="nm">${esc(siteLabel(x))} <small>· ${esc(SITE_TYPE_TR[x.type] || x.type)}${x.default ? " · atanmamış cihazlar burada" : ""}</small></span>${x.type === "group" && !x.default ? `<button class="btn danger" type="button" data-grp-del="${esc(x.id)}">Sil</button>` : ""}</div>`).join("")}</div>
-    <form id="grpAdd" class="row" style="margin-top:6px"><input id="gName" maxlength="40" placeholder="yeni grup (örn. Bulut)" aria-label="Yeni grubun adı" style="flex:1;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px 8px">
-      <select id="gKind" aria-label="Grubun türü" style="background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px"><option value="cloud">Bulut / sunucular</option><option value="site">Başka bir yer</option></select>
-      <button class="btn line" type="submit">Ekle</button></form>`;
-  if (devs.length) h += `<p class="hint" style="margin:12px 0 4px">Tailscale cihazları hangi grupta görünsün:</p><div class="colors">` +
-    devs.map((n) => `<div class="color-row"><span class="nm">${esc(n.label)}</span><select data-ts="${esc(n.tailscale.name)}" aria-label="${esc(n.label)} grubu" style="background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:4px 6px">${groups.map((g) => `<option value="${esc(g.id)}"${g.id === (tsSite[n.tailscale.name] || def) ? " selected" : ""}>${esc(siteLabel(g))}</option>`).join("")}</select></div>`).join("") + `</div>`;
+    .sort((a, b) => a.label.localeCompare(b.label, LANG));
+  let h = `<p class="hint">${_("Every frame on the map is a group. The Pi's network and each router agent become groups automatically; put Tailscale devices into any group below. Rename a group by clicking its title on the map.")}</p>
+    <div class="colors">${S.map((x) => `<div class="color-row"><span class="nm">${esc(siteLabel(x))} <small>· ${esc(_(SITE_TYPE[x.type] || x.type))}${x.default ? " · " + _("unassigned devices go here") : ""}</small></span>${x.type === "group" && !x.default ? `<button class="btn danger" type="button" data-grp-del="${esc(x.id)}">${_("Delete")}</button>` : ""}</div>`).join("")}</div>
+    <form id="grpAdd" class="row" style="margin-top:6px"><input id="gName" maxlength="40" placeholder="${_("new group (e.g. Cloud)")}" aria-label="${_("Name of the new group")}" style="flex:1;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px 8px">
+      <select id="gKind" aria-label="${_("Group type")}" style="background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px"><option value="cloud">${_("Cloud / servers")}</option><option value="site">${_("Another place")}</option></select>
+      <button class="btn line" type="submit">${_("Add")}</button></form>`;
+  if (devs.length) h += `<p class="hint" style="margin:12px 0 4px">${_("Which group each Tailscale device shows in:")}</p><div class="colors">` +
+    devs.map((n) => `<div class="color-row"><span class="nm">${esc(n.label)}</span><select data-ts="${esc(n.tailscale.name)}" aria-label="${esc(_("{n} group", { n: n.label }))}" style="background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:4px 6px">${groups.map((g) => `<option value="${esc(g.id)}"${g.id === (tsSite[n.tailscale.name] || def) ? " selected" : ""}>${esc(siteLabel(g))}</option>`).join("")}</select></div>`).join("") + `</div>`;
   return h;
 }
 function slugId(name, taken) {
-  let b = name.toLocaleLowerCase("tr").replace(/ı/g, "i").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 20) || "grup";
+  let b = name.toLocaleLowerCase(LANG).replace(/ı/g, "i").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 20) || "group";
   let id = b, i = 2;
   while (taken.has(id)) id = `${b}-${i++}`;
   return id;
@@ -1401,7 +1629,7 @@ function bindGroups(put) {
   };
   $$("[data-grp-del]", $("#sbody")).forEach((a) => a.onclick = (e) => {
     e.preventDefault();
-    if (!confirm("Grup silinsin mi? İçindeki Tailscale cihazları varsayılan gruba geçer.")) return;
+    if (!confirm(_("Delete the group? Its Tailscale devices move to the default group."))) return;
     put({ sites: own.filter((x) => x.id !== a.dataset.grpDel) });
   });
 }
@@ -1411,16 +1639,16 @@ function openNaming() {
   const list = DATA.nodes.filter((n) => n.unnamed && !n.hidden && !isSvc(n))
     .sort((a, b) => (a.site || "").localeCompare(b.site || "") || ipNum((a.ips || [])[0]) - ipNum((b.ips || [])[0]));
   const devs = DATA.nodes.filter((n) => !n.placeholder && n.kind !== "internet" && !isSvc(n));
-  const named = devs.length - devs.filter((n) => n.unnamed).length, types = (STATE && STATE.types) || Object.keys(KIND_TR);
-  const hint = (n) => [(n.ips || []).filter((i) => !i.startsWith("100."))[0], n.vendor ? util_short(n) : (n.random_mac ? "rastgele MAC" : ""), n.os,
-    (n.names || {}).dhcp_name || (n.names || {}).mdns_name, siteName(n.site), n.online ? "çevrimiçi" : "görünmüyor"].filter(Boolean).join(" · ");
-  $("#sbody").innerHTML = `<h2>Adsız cihazlar</h2>
-    <p class="hint">${named}/${devs.length} cihaz tanınıyor (%${Math.round(100 * named / Math.max(1, devs.length))}). Kendi adını söylemeyen cihazları burada bir kez adlandırman yeter: ad MAC adresine bağlı kalır. Telefonun başka Wi-Fi ağındaki MAC'i ayrı görünüyorsa cihazın "Düzenle" ekranındaki "Aynı cihaz" ile birleştir.</p>
+  const named = devs.length - devs.filter((n) => n.unnamed).length, types = (STATE && STATE.types) || Object.keys(KIND_LABEL);
+  const hint = (n) => [(n.ips || []).filter((i) => !i.startsWith("100."))[0], n.vendor ? util_short(n) : (n.random_mac ? _("random MAC") : ""), _x(n.os),
+    (n.names || {}).dhcp_name || (n.names || {}).mdns_name, siteName(n.site), n.online ? _("online") : _("not visible")].filter(Boolean).join(" · ");
+  $("#sbody").innerHTML = `<h2>${_("Unnamed devices")}</h2>
+    <p class="hint">${_("{a}/{b} devices are identified ({p}%). Name the devices that do not announce a name once; the name sticks to the MAC address. If a phone's MAC on another Wi-Fi network shows up separately, merge it with \"Same device\" in its Edit screen.", { a: named, b: devs.length, p: Math.round(100 * named / Math.max(1, devs.length)) })}</p>
     ${list.length ? list.map((n) => `<div class="field" style="border-top:1px solid var(--card-line);padding-top:10px">
       <label for="nm-${esc(n.id)}"><b>${esc(n.label)}</b> <small>${esc(hint(n))}</small></label>
-      <input id="nm-${esc(n.id)}" data-nm="${esc(n.id)}" maxlength="60" placeholder="ad (örn. Annemin telefonu)" style="width:100%;margin-bottom:6px">
-      <div class="row"><select data-nt="${esc(n.id)}" aria-label="Tür" style="flex:1;min-width:0;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px">${types.map((t) => `<option value="${t}"${t === n.kind ? " selected" : ""}>${esc(KIND_TR[t] || t)}</option>`).join("")}</select>
-      <button class="btn line" data-ns="${esc(n.id)}">Kaydet</button></div></div>`).join("") : `<p class="note">Adsız cihaz kalmadı.</p>`}
+      <input id="nm-${esc(n.id)}" data-nm="${esc(n.id)}" maxlength="60" placeholder="${_("name (e.g. Mum's phone)")}" style="width:100%;margin-bottom:6px">
+      <div class="row"><select data-nt="${esc(n.id)}" aria-label="${_("Type")}" style="flex:1;min-width:0;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px">${types.map((k) => `<option value="${k}"${k === n.kind ? " selected" : ""}>${esc(kindName(k))}</option>`).join("")}</select>
+      <button class="btn line" data-ns="${esc(n.id)}">${_("Save")}</button></div></div>`).join("") : `<p class="note">${_("No unnamed devices left.")}</p>`}
     <div class="err-msg" id="sErr"></div>`;
   $$("[data-ns]", $("#sbody")).forEach((b) => b.onclick = async () => {
     const id = b.dataset.ns, n = byId.get(id), name = $(`[data-nm="${CSS.escape(id)}"]`).value.trim();
@@ -1428,92 +1656,92 @@ function openNaming() {
     try {
       await api("PUT", "/api/device?id=" + encodeURIComponent(id), { ...(n.override || {}), name, type: $(`[data-nt="${CSS.escape(id)}"]`).value });
       await load(true); openNaming();
-    } catch (e) { $("#sErr").textContent = "Kaydedilemedi: " + e.message; }
+    } catch (e) { $("#sErr").textContent = _("Could not save: ") + _x(e.message); }
   });
 }
 function util_short(n) { return n.short_vendor || n.vendor; }
 /* İlk kurulum sihirbazı: yeni kurulumda (setup_done yoksa) bir kez açılır */
 function renderWizard() {
   const s = STATE.settings, L = STATE.local || {}, loc = (STATE.sites || []).find((x) => x.type === "local") || {};
-  $("#sbody").innerHTML = `<h2>Nodesk'e hoş geldin</h2>
-    <p class="hint">Birkaç adımda haritanı hazırlayalım. Hepsi sonradan Ayarlar'dan değiştirilebilir.</p>
-    <h3>1 · Bu ağ</h3>
-    <p style="margin:0 0 8px">Pi'nin bağlı olduğu ağ kendiliğinden bulundu: <span class="mono">${esc(L.iface || "?")}</span> · <span class="mono">${esc(L.subnet || "?")}</span> · geçit <span class="mono">${esc(L.gateway || "?")}</span></p>
-    <div class="field"><label for="wName">Bu ağın (evin) adı</label><input id="wName" maxlength="40" value="${esc(siteLabel(loc) || "")}" placeholder="örn. Ev"></div>
-    <h3>2 · Başka ağlar ve sunucular (isteğe bağlı)</h3>
-    <p class="hint">OpenWrt router'ı olan başka bir evi eklemek için Ayarlar &gt; Ajanlar'dan router ajanı ekle; o ev kendi grubu olur. Sunucuların servislerini görmek için sunucu ajanı ekle. Pi hiçbir cihaza bağlanmaz; ajanlar kendileri rapor gönderir.</p>
-    <h3>3 · Gruplar ve Tailscale cihazları</h3>${groupsHtml()}
-    <h3>4 · Erişim</h3>${accessHtml(s)}
-    <div class="actions"><button class="btn primary" id="wDone">Kurulumu bitir</button></div><div class="err-msg" id="sErr"></div>`;
+  $("#sbody").innerHTML = `<h2>${_("Welcome to Nodesk")}</h2>
+    <p class="hint">${_("Let's set up your map in a few steps. Everything can be changed later in Settings.")}</p>
+    <h3>1 · ${_("This network")}</h3>
+    <p style="margin:0 0 8px">${_("The Pi's network was detected automatically:")} <span class="mono">${esc(L.iface || "?")}</span> · <span class="mono">${esc(L.subnet || "?")}</span> · ${_("gateway")} <span class="mono">${esc(L.gateway || "?")}</span></p>
+    <div class="field"><label for="wName">${_("Name of this network (home)")}</label><input id="wName" maxlength="40" value="${esc(siteLabel(loc) || "")}" placeholder="${_("e.g. Home")}"></div>
+    <h3>2 · ${_("Other networks and servers (optional)")}</h3>
+    <p class="hint">${_("To add another home with an OpenWrt router, add a router agent under Settings &gt; Agents; that home becomes its own group. Add a server agent to see a server's services. The Pi never connects to any device; agents send their own reports.")}</p>
+    <h3>3 · ${_("Groups and Tailscale devices")}</h3>${groupsHtml()}
+    <h3>4 · ${_("Access")}</h3>${accessHtml(s)}
+    <div class="actions"><button class="btn primary" id="wDone">${_("Finish setup")}</button></div><div class="err-msg" id="sErr"></div>`;
   const put = async (patch) => {
     try { STATE.settings = await api("PUT", "/api/settings", patch); STATE = await api("GET", "/api/state"); await load(true); renderWizard(); }
-    catch (e) { $("#sErr").textContent = "Kaydedilemedi: " + e.message; }
+    catch (e) { $("#sErr").textContent = _("Could not save: ") + _x(e.message); }
   };
-  $("#wName").onchange = async (e) => { try { await api("PUT", "/api/site?id=" + encodeURIComponent(loc.id), { name: e.target.value.trim() }); await load(true); } catch (err) { $("#sErr").textContent = err.message; } };
+  $("#wName").onchange = async (e) => { try { await api("PUT", "/api/site?id=" + encodeURIComponent(loc.id), { name: e.target.value.trim() }); await load(true); } catch (err) { $("#sErr").textContent = _x(err.message); } };
   bindAccess(put, renderWizard);
   bindGroups(put);
-  $("#wDone").onclick = async () => { try { await api("PUT", "/api/settings", { setup_done: true }); STATE = await api("GET", "/api/state"); closeDrawers(); } catch (e) { $("#sErr").textContent = e.message; } };
+  $("#wDone").onclick = async () => { try { await api("PUT", "/api/settings", { setup_done: true }); STATE = await api("GET", "/api/state"); closeDrawers(); } catch (e) { $("#sErr").textContent = _x(e.message); } };
 }
 function renderSettings() {
   const s = STATE.settings, sc = STATE.scan, src = STATE.sources || {}, appi = STATE.app || {};
   const live = (DATA && DATA.sources) || {};
   const srcLine = (k) => {
     const x = { ...(live[k] || {}), ...(src[k] || {}) };
-    if (!s.sources[k]) return `<small>kapalı</small>`;
-    if (x.ok === false) return `<small class="bad">${esc(x.error || "hata")}</small>`;
+    if (!s.sources[k]) return `<small>${_("off")}</small>`;
+    if (x.ok === false) return `<small class="bad">${esc(_x(x.error) || _("error"))}</small>`;
     if (k === "router" || k === "agents") {
       const ags = (DATA.agents || []).filter((a) => (k === "router") === (a.kind === "router"));
-      if (!ags.length) return `<small>${k === "router" ? "kurulmadı" : "ajan yok"}</small>`;
-      return `<small${ags.some((a) => !a.fresh) ? ' class="bad"' : ""}>${ags.map((a) => `${esc(a.name)}: ${a.age_min == null ? "rapor yok" : Math.round(a.age_min) + " dk önce"}`).join(", ")}</small>`;
+      if (!ags.length) return `<small>${k === "router" ? _("not installed") : _("no agents")}</small>`;
+      return `<small${ags.some((a) => !a.fresh) ? ' class="bad"' : ""}>${ags.map((a) => `${esc(a.name)}: ${a.age_min == null ? _("no report") : _("{n} min ago", { n: Math.round(a.age_min) })}`).join(", ")}</small>`;
     }
-    return x.count != null ? `<small>${x.count}${k === "passive" ? " cihaz" : ""}</small>` : `<small></small>`;
+    return x.count != null ? `<small>${k === "passive" ? _("{n} devices", { n: x.count }) : x.count}</small>` : `<small></small>`;
   };
-  let html = `<h2>Ayarlar</h2>
-  <h3>Tarama</h3>
-  <label class="check"><input type="checkbox" id="sAuto"${s.auto ? " checked" : ""}> Otomatik tarama</label>
-  <div class="field"><label for="sInt">Sıklık</label><select id="sInt"${s.auto ? "" : " disabled"}>${STATE.intervals.map((m) => `<option value="${m}"${m === s.interval_min ? " selected" : ""}>${m} dakikada bir</option>`).join("")}</select></div>
-  <div class="field"><label for="sWin">Pasif dinlemede çevrimiçi sayılma süresi</label><select id="sWin">${[5, 10, 15, 30, 60].map((m) => `<option value="${m}"${m === s.online_window_min ? " selected" : ""}>son ${m} dakikada ses verdiyse</option>`).join("")}</select></div>
-  <div class="row"><button class="btn primary" id="sScan"${sc.running ? " disabled" : ""}>${sc.running ? "Taranıyor…" : "Şimdi tara"}</button>
-    <span class="hint" style="font-size:14px;color:var(--muted)">Son: ${esc(ago(sc.last_end))}${s.auto && sc.next ? " · sıradaki: " + esc(fmtTime(sc.next).split(" ").pop()) : ""}</span></div>
-  <h3>Kaynaklar</h3>
-  <p class="hint">Hiçbiri port taraması yapmaz.</p>
-  ${Object.keys(SOURCE_TR).map((k) => `<label class="check" title="${esc(SOURCE_TR[k][1])}"><input type="checkbox" data-src="${k}"${s.sources[k] ? " checked" : ""}> ${esc(SOURCE_TR[k][0])} ${srcLine(k)}</label>`).join("")}
-  <h3>Gruplar</h3>${groupsHtml()}
-  <h3>Erişim</h3>${accessHtml(s)}
-  <h3>Bildirimler</h3>
-  <p class="hint">Telefonuna haber: <b>ntfy</b> (ücretsiz uygulama; bir konu adı seç, örn. https://ntfy.sh/benim-agim-x7q) ya da <b>Telegram</b> botu. Boş bırakılırsa kapalı.</p>
-  <div class="field"><label for="nUrl">ntfy adresi</label><input id="nUrl" value="${esc((s.alerts || {}).ntfy_url || "")}" placeholder="https://ntfy.sh/konu-adi"></div>
-  <div class="field"><label for="nTok">Telegram bot anahtarı</label><input id="nTok" type="password" autocomplete="off" value="${esc((s.alerts || {}).telegram_token || "")}" placeholder="123456:ABC..."></div>
-  <div class="field"><label for="nChat">Telegram sohbet kimliği</label><input id="nChat" value="${esc((s.alerts || {}).telegram_chat || "")}" placeholder="-100123... ya da @kanal"></div>
-  ${[["new_device", "Yeni cihaz ağa katıldı"], ["service_down", "Servis kapandı / düzeldi"], ["agent_silent", "Ajan rapor göndermez oldu / döndü"], ["exit_change", "Exit node değişti"]].map(([k, l]) => `<label class="check"><input type="checkbox" data-ev="${k}"${((s.alerts || {}).events || {})[k] !== false ? " checked" : ""}> ${l}</label>`).join("")}
-  <div class="actions"><button class="btn line" id="nTest" type="button">Deneme gönder</button><span class="hint" id="nRes"></span></div>
-  <h3>Renkler</h3>
-  <p class="hint">Kartların rol renkleri. Hazır bir tema seç ya da tek tek değiştir; "renksiz" rol nötr görünür. Tüm cihazlarda aynı görünür.</p>
-  <div class="chips">${Object.keys(PALETTES).map((p) => `<button class="chip" data-pal="${esc(p)}" aria-pressed="${Object.keys(CAT_TR).every((k) => (PALETTES[p][k] || "") === (COLORS[k] || ""))}">${esc(p)}</button>`).join("")}</div>
-  <div class="colors">${Object.entries(CAT_TR).map(([k, l]) => `<div class="color-row"><input type="color" data-col="${k}" value="${COLORS[k] || PALETTES.Nodesk[k] || "#8a96a0"}"${COLORS[k] ? "" : " disabled"} aria-label="${esc(l)} rengi"><span class="nm">${esc(l)}</span><label class="check" style="margin:0"><input type="checkbox" data-coloff="${k}"${COLORS[k] ? "" : " checked"}> <small>renksiz</small></label></div>`).join("")}</div>
-  <h3>Ajanlar</h3>
-  <p class="hint">Ajanlar 5 dakikada bir kendi verilerini Pi'ye gönderir; Pi hiçbir cihaza bağlanmaz.</p>
-  <label class="check"><input type="checkbox" id="sAgentUpd"${s.agent_auto_update !== false ? " checked" : ""}> Ajanlar yeni sürümü Pi'den kendileri alsın <small>SSH gerekmez</small></label>
-  <div id="agentList">${AGENTS.map(agentHtml).join("") || `<p class="hint">Henüz ajan yok.</p>`}</div>
-  <form id="agentAdd" class="row" style="margin-top:6px"><input id="aName" placeholder="ad (örn. cloud-arm)" style="flex:1;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px 8px" maxlength="32" aria-label="Ajan adı">
-    <select id="aKind" style="background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px" aria-label="Ajan türü"><option value="linux">Sunucu</option><option value="router">Router</option></select>
-    <button class="btn line" type="submit">Ekle</button></form>
+  let html = `<h2>${_("Settings")}</h2>
+  <h3>${_("Scanning")}</h3>
+  <label class="check"><input type="checkbox" id="sAuto"${s.auto ? " checked" : ""}> ${_("Automatic scan")}</label>
+  <div class="field"><label for="sInt">${_("Interval")}</label><select id="sInt"${s.auto ? "" : " disabled"}>${STATE.intervals.map((m) => `<option value="${m}"${m === s.interval_min ? " selected" : ""}>${_("every {n} minutes", { n: m })}</option>`).join("")}</select></div>
+  <div class="field"><label for="sWin">${_("Passive listening: count as online")}</label><select id="sWin">${[5, 10, 15, 30, 60].map((m) => `<option value="${m}"${m === s.online_window_min ? " selected" : ""}>${_("if heard in the last {n} minutes", { n: m })}</option>`).join("")}</select></div>
+  <div class="row"><button class="btn primary" id="sScan"${sc.running ? " disabled" : ""}>${sc.running ? _("Scanning…") : _("Scan now")}</button>
+    <span class="hint" style="font-size:14px;color:var(--muted)">${_("Last:")} ${esc(ago(sc.last_end))}${s.auto && sc.next ? " · " + _("next:") + " " + esc(fmtTime(sc.next).split(" ").pop()) : ""}</span></div>
+  <h3>${_("Sources")}</h3>
+  <p class="hint">${_("None of them scans ports.")}</p>
+  ${Object.keys(SOURCES).map((k) => `<label class="check" title="${esc(_(SOURCES[k][1]))}"><input type="checkbox" data-src="${k}"${s.sources[k] ? " checked" : ""}> ${esc(_(SOURCES[k][0]))} ${srcLine(k)}</label>`).join("")}
+  <h3>${_("Groups")}</h3>${groupsHtml()}
+  <h3>${_("Access")}</h3>${accessHtml(s)}
+  <h3>${_("Notifications")}</h3>
+  <p class="hint">${_("Alerts on your phone: <b>ntfy</b> (free app; pick a topic name, e.g. https://ntfy.sh/my-net-x7q) or a <b>Telegram</b> bot. Leave empty to turn off.")}</p>
+  <div class="field"><label for="nUrl">${_("ntfy URL")}</label><input id="nUrl" value="${esc((s.alerts || {}).ntfy_url || "")}" placeholder="https://ntfy.sh/topic-name"></div>
+  <div class="field"><label for="nTok">${_("Telegram bot token")}</label><input id="nTok" type="password" autocomplete="off" value="${esc((s.alerts || {}).telegram_token || "")}" placeholder="123456:ABC..."></div>
+  <div class="field"><label for="nChat">${_("Telegram chat id")}</label><input id="nChat" value="${esc((s.alerts || {}).telegram_chat || "")}" placeholder="-100123... / @channel"></div>
+  ${[["new_device", "A new device joined"], ["service_down", "A service went down / recovered"], ["agent_silent", "An agent stopped / resumed reporting"], ["exit_change", "Exit node changed"]].map(([k, l]) => `<label class="check"><input type="checkbox" data-ev="${k}"${((s.alerts || {}).events || {})[k] !== false ? " checked" : ""}> ${_(l)}</label>`).join("")}
+  <div class="actions"><button class="btn line" id="nTest" type="button">${_("Send a test")}</button><span class="hint" id="nRes"></span></div>
+  <h3>${_("Colors")}</h3>
+  <p class="hint">${_("Role colors of the cards. Pick a theme or change them one by one; \"no color\" makes a role neutral. Same on every device.")}</p>
+  <div class="chips">${Object.keys(PALETTES).map((p) => `<button class="chip" data-pal="${esc(p)}" aria-pressed="${Object.keys(CAT_LABEL).every((k) => (PALETTES[p][k] || "") === (COLORS[k] || ""))}">${esc(_(p))}</button>`).join("")}</div>
+  <div class="colors">${Object.entries(CAT_LABEL).map(([k, l]) => `<div class="color-row"><input type="color" data-col="${k}" value="${COLORS[k] || PALETTES.Nodesk[k] || "#8a96a0"}"${COLORS[k] ? "" : " disabled"} aria-label="${esc(_("{n} color", { n: _(l) }))}"><span class="nm">${esc(_(l))}</span><label class="check" style="margin:0"><input type="checkbox" data-coloff="${k}"${COLORS[k] ? "" : " checked"}> <small>${_("no color")}</small></label></div>`).join("")}</div>
+  <h3>${_("Agents")}</h3>
+  <p class="hint">${_("Agents send their own data to the Pi every 5 minutes; the Pi never connects to any device.")}</p>
+  <label class="check"><input type="checkbox" id="sAgentUpd"${s.agent_auto_update !== false ? " checked" : ""}> ${_("Agents fetch new versions from the Pi themselves")} <small>${_("no SSH needed")}</small></label>
+  <div id="agentList">${AGENTS.map(agentHtml).join("") || `<p class="hint">${_("No agents yet.")}</p>`}</div>
+  <form id="agentAdd" class="row" style="margin-top:6px"><input id="aName" placeholder="${_("name (e.g. cloud-arm)")}" style="flex:1;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px 8px" maxlength="32" aria-label="${_("Agent name")}">
+    <select id="aKind" style="background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px" aria-label="${_("Agent type")}"><option value="linux">${_("Server")}</option><option value="router">Router</option></select>
+    <button class="btn line" type="submit">${_("Add")}</button></form>
   <div class="err-msg" id="aErr"></div>
-  <h3>Sürüm</h3>
+  <h3>${_("Version")}</h3>
   <p style="margin:0 0 8px">Nodesk <b>${esc(appi.version)}</b> <span class="mono" style="color:var(--muted)">${esc(appi.rev || "")}</span></p>
-  ${STATE.usage && STATE.usage.rss_mb ? `<p class="hint">Pi'de ${STATE.usage.rss_mb} MB bellek kullanıyor (sınır 150 MB) · ${esc(dur(STATE.usage.uptime_s))} süredir çalışıyor.</p>` : ""}`;
+  ${STATE.usage && STATE.usage.rss_mb ? `<p class="hint">${_("Using {mb} MB of memory on the Pi (limit 150 MB) · running for {up}.", { mb: STATE.usage.rss_mb, up: esc(dur(STATE.usage.uptime_s)) })}</p>` : ""}`;
   if (appi.update) {
-    html += `<div class="note"><b>Yeni sürüm: ${esc(appi.update.latest)}</b>${(appi.update.changes || []).length ? `<ul style="margin:6px 0 0;padding-left:18px">${appi.update.changes.slice(0, 8).map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}</div>
-    <div class="actions"><button class="btn primary" id="sUpdate"${appi.updating ? " disabled" : ""}>${appi.updating ? "Güncelleniyor…" : "Güncelle"}</button></div>`;
+    html += `<div class="note"><b>${_("New version:")} ${esc(appi.update.latest)}</b>${(appi.update.changes || []).length ? `<ul style="margin:6px 0 0;padding-left:18px">${appi.update.changes.slice(0, 8).map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}</div>
+    <div class="actions"><button class="btn primary" id="sUpdate"${appi.updating ? " disabled" : ""}>${appi.updating ? _("Updating…") : _("Update")}</button></div>`;
   } else {
-    html += `<p class="hint">Güncel. Son denetim: ${esc(ago(appi.update_checked))}.</p>`;
+    html += `<p class="hint">${_("Up to date. Last check: {a}.", { a: esc(ago(appi.update_checked)) })}</p>`;
   }
-  html += `<div class="actions"><button class="btn line" id="sCheck">Güncellemeleri denetle</button></div><div class="err-msg" id="sErr"></div>`;
+  html += `<div class="actions"><button class="btn line" id="sCheck">${_("Check for updates")}</button></div><div class="err-msg" id="sErr"></div>`;
   $("#sbody").innerHTML = html;
 
   const put = async (patch) => {
     try { STATE.settings = await api("PUT", "/api/settings", patch); STATE = await api("GET", "/api/state"); await load(true); renderSettings(); }
-    catch (e) { $("#sErr").textContent = "Kaydedilemedi: " + e.message; }
+    catch (e) { $("#sErr").textContent = _("Could not save: ") + _x(e.message); }
   };
   $("#sAuto").onchange = (e) => put({ auto: e.target.checked });
   $("#sInt").onchange = (e) => put({ interval_min: +e.target.value });
@@ -1528,9 +1756,9 @@ function renderSettings() {
   $("#nChat").onchange = (e) => put({ alerts: { telegram_chat: e.target.value.trim() } });
   $$("[data-ev]", $("#sbody")).forEach((c) => c.onchange = () => put({ alerts: { events: { [c.dataset.ev]: c.checked } } }));
   $("#nTest").onclick = async () => {
-    $("#nRes").textContent = "gönderiliyor…";
-    try { await api("POST", "/api/alerts/test"); $("#nRes").textContent = "gönderildi, telefonuna bak"; }
-    catch (e) { $("#nRes").textContent = e.message; }
+    $("#nRes").textContent = _("sending…");
+    try { await api("POST", "/api/alerts/test"); $("#nRes").textContent = _("sent, check your phone"); }
+    catch (e) { $("#nRes").textContent = _x(e.message); }
   };
   $$("[data-col]", $("#sbody")).forEach((c) => {
     c.oninput = () => document.documentElement.style.setProperty("--c-" + c.dataset.col, c.value);   // anında önizleme
@@ -1542,26 +1770,26 @@ function renderSettings() {
   });
   $("#sScan").onclick = scanNow;
   $("#sCheck").onclick = async (e) => {
-    e.target.disabled = true; e.target.textContent = "Denetleniyor…";
+    e.target.disabled = true; e.target.textContent = _("Checking…");
     try { await api("POST", "/api/update/check"); STATE = await api("GET", "/api/state"); renderSettings(); }
-    catch (err) { $("#sErr").textContent = "Denetlenemedi: " + err.message; e.target.disabled = false; e.target.textContent = "Güncellemeleri denetle"; }
+    catch (err) { $("#sErr").textContent = _("Check failed: ") + _x(err.message); e.target.disabled = false; e.target.textContent = _("Check for updates"); }
   };
   if ($("#sUpdate")) $("#sUpdate").onclick = startUpdate;
   $("#agentAdd").onsubmit = async (e) => {
     e.preventDefault();
     try { AGENTS = await api("POST", "/api/agents", { name: $("#aName").value.trim(), kind: $("#aKind").value }); openAgent = $("#aName").value.trim().toLowerCase(); renderSettings(); }
-    catch (err) { $("#aErr").textContent = err.message; }
+    catch (err) { $("#aErr").textContent = _x(err.message); }
   };
   $$("[data-agent-show]", $("#sbody")).forEach((b) => b.onclick = () => { openAgent = openAgent === b.dataset.agentShow ? null : b.dataset.agentShow; renderSettings(); });
   $$("[data-agent-del]", $("#sbody")).forEach((b) => b.onclick = async () => {
-    if (!confirm(`"${b.dataset.agentDel}" ajanı silinsin mi?\n\nCihaz bir sonraki raporunda (en geç 5 dakika) kendini tamamen kaldırır: zamanlayıcıyı, dinleyici servisini ve dosyalarını siler, sonra kayıt da silinir.`)) return;
+    if (!confirm(_("Delete agent \"{a}\"?\n\nOn its next report (5 minutes at most) the device removes itself completely: scheduler, listener service and files; then the record is deleted too.", { a: b.dataset.agentDel }))) return;
     try { await api("DELETE", "/api/agent?name=" + encodeURIComponent(b.dataset.agentDel)); AGENTS = await api("GET", "/api/agents"); await load(true); renderSettings(); }
-    catch (err) { $("#aErr").textContent = err.message; }
+    catch (err) { $("#aErr").textContent = _x(err.message); }
   });
   $$("[data-agent-force]", $("#sbody")).forEach((b) => b.onclick = async () => {
-    if (!confirm(`"${b.dataset.agentForce}" kaydı şimdi silinsin mi? Cihazdaki ajan kendini kaldıramaz; yukarıdaki komutu cihazda elle çalıştırman gerekir.`)) return;
+    if (!confirm(_("Delete the \"{a}\" record now? The agent on the device cannot remove itself then; run the command above on the device by hand.", { a: b.dataset.agentForce }))) return;
     try { await api("DELETE", "/api/agent?force=1&name=" + encodeURIComponent(b.dataset.agentForce)); AGENTS = await api("GET", "/api/agents"); await load(true); renderSettings(); }
-    catch (err) { $("#aErr").textContent = err.message; }
+    catch (err) { $("#aErr").textContent = _x(err.message); }
   });
   $$("[data-copy]", $("#sbody")).forEach((b) => b.onclick = () => copyText(b.previousElementSibling.textContent, b));
 }
@@ -1569,21 +1797,21 @@ let openAgent = null;
 function agentHtml(a) {
   const d = (DATA.agents || []).find((x) => x.name === a.name) || {}, u = d.usage || {};
   const cls = !a.received ? "" : d.fresh ? "on" : "warn";
-  let h = `<div class="agent"><header><span class="status ${cls}"></span><b>${esc(a.name)}</b><small>${a.kind === "router" ? "router" : "sunucu"} · ${a.received ? "son rapor " + esc(ago(a.received)) : "henüz rapor yok"}</small>
-    ${u.listen_rss_kb ? `<small title="Router'da Nodesk dinleyicisinin belleği / router'ın boş belleği">${(u.listen_rss_kb / 1024).toFixed(1)} MB · boş ${Math.round((u.mem_available_kb || 0) / 1024)} MB</small>` : ""}
-    ${a.removing ? `<button class="btn danger" data-agent-force="${esc(a.name)}">Yine de sil</button></header>
-      <p class="hint" style="margin:6px 0 0">Kaldırılıyor: cihaz bir sonraki raporunda (en geç 5 dakika) kendini tamamen silecek: zamanlayıcı, dinleyici servisi, dosyalar. Cihaz kapalıysa ya da ulaşılamıyorsa "Yine de sil" ile kaydı silebilirsin; o zaman cihazda şunu çalıştır:</p><pre>${esc(a.manual_uninstall || "")}</pre><button class="btn line" data-copy>Kopyala</button>`
-    : `<button class="btn line" data-agent-show="${esc(a.name)}">${openAgent === a.name ? "Gizle" : "Kurulum"}</button><button class="btn danger" data-agent-del="${esc(a.name)}" aria-label="Sil">Sil</button></header>`}`;
+  let h = `<div class="agent"><header><span class="status ${cls}"></span><b>${esc(a.name)}</b><small>${a.kind === "router" ? "router" : _("server")} · ${a.received ? _("last report") + " " + esc(ago(a.received)) : _("no report yet")}</small>
+    ${u.listen_rss_kb ? `<small title="${_("Memory of the Nodesk listener on the router / free memory on the router")}">${(u.listen_rss_kb / 1024).toFixed(1)} MB · ${_("free")} ${Math.round((u.mem_available_kb || 0) / 1024)} MB</small>` : ""}
+    ${a.removing ? `<button class="btn danger" data-agent-force="${esc(a.name)}">${_("Delete anyway")}</button></header>
+      <p class="hint" style="margin:6px 0 0">${_("Removing: on its next report (5 minutes at most) the device deletes itself completely: scheduler, listener service, files. If the device is off or unreachable, \"Delete anyway\" removes the record; then run this on the device:")}</p><pre>${esc(a.manual_uninstall || "")}</pre><button class="btn line" data-copy>${_("Copy")}</button>`
+    : `<button class="btn line" data-agent-show="${esc(a.name)}">${openAgent === a.name ? _("Hide") : _("Install")}</button><button class="btn danger" data-agent-del="${esc(a.name)}" aria-label="${_("Delete")}">${_("Delete")}</button></header>`}`;
   if (openAgent === a.name && !a.removing) {
     const c = a.commands || {};
-    h += `<p class="hint" style="margin:8px 0 2px">${a.kind === "router" ? "Router'da (OpenWrt):" : "O sunucuda:"}</p><pre>${esc(c.direct)}</pre><button class="btn line" data-copy>Kopyala</button>`;
-    if (c.ssh) h += `<p class="hint" style="margin:8px 0 2px">Ya da router'a SSH ile girebildiğin bir bilgisayardan (ROUTER_IP yerine router'ın adresi):</p><pre>${esc(c.ssh)}</pre><button class="btn line" data-copy>Kopyala</button>`;
-    h += `<p class="hint" style="margin-top:6px">Tekrar çalıştırmak güvenli; güncelleme için de aynı komut kullanılır.</p>`;
+    h += `<p class="hint" style="margin:8px 0 2px">${a.kind === "router" ? _("On the router (OpenWrt):") : _("On that server:")}</p><pre>${esc(c.direct)}</pre><button class="btn line" data-copy>${_("Copy")}</button>`;
+    if (c.ssh) h += `<p class="hint" style="margin:8px 0 2px">${_("Or from a computer that can SSH into the router (replace ROUTER_IP with the router's address):")}</p><pre>${esc(c.ssh)}</pre><button class="btn line" data-copy>${_("Copy")}</button>`;
+    h += `<p class="hint" style="margin-top:6px">${_("Safe to run again; the same command also updates.")}</p>`;
   }
   return h + `</div>`;
 }
 async function scanNow() {
-  try { await api("POST", "/api/scan"); } catch (e) { alertBox("warn", "Tarama başlatılamadı: " + e.message); return; }
+  try { await api("POST", "/api/scan"); } catch (e) { alertBox("warn", esc(_("Could not start the scan: ") + _x(e.message))); return; }
   scanning(true);
   const started = Date.now();
   const poll = async () => {
@@ -1597,18 +1825,18 @@ async function scanNow() {
 }
 function scanning(on) {
   $("#scanIcon").classList.toggle("spin", on); $("#bScan").disabled = on;
-  if (on) $("#meta").innerHTML = `<span class="scanning">Taranıyor…</span>`;
+  if (on) $("#meta").innerHTML = `<span class="scanning">${_("Scanning…")}</span>`;
 }
 async function startUpdate() {
-  if (!confirm("Nodesk güncellensin mi? Servis yeniden başlar; harita birkaç saniye eski kalabilir.")) return;
-  try { await api("POST", "/api/update"); } catch (e) { $("#sErr").textContent = e.message; return; }
+  if (!confirm(_("Update Nodesk? The service restarts; the map may be stale for a few seconds."))) return;
+  try { await api("POST", "/api/update"); } catch (e) { $("#sErr").textContent = _x(e.message); return; }
   const from = STATE.app.version + (STATE.app.rev || "");
-  $("#sUpdate").disabled = true; $("#sUpdate").textContent = "Güncelleniyor…";
+  $("#sUpdate").disabled = true; $("#sUpdate").textContent = _("Updating…");
   const t0 = Date.now();
   const poll = async () => {
     try { const s = await api("GET", "/api/state"); if (s.app.version + (s.app.rev || "") !== from) { location.reload(); return; } } catch (e) {}
     if (Date.now() - t0 < 300000) setTimeout(poll, 3000);
-    else $("#sErr").textContent = "Güncelleme 5 dakikada bitmedi. Pi'de: journalctl -u 'nodesk-update-*' -n 50";
+    else $("#sErr").textContent = _("The update did not finish in 5 minutes. On the Pi: journalctl -u 'nodesk-update-*' -n 50");
   };
   setTimeout(poll, 5000);
 }
@@ -1617,35 +1845,35 @@ async function startUpdate() {
 function alertBox(kind, html, key) {
   if (key && prefs.dismissed[key]) return;
   const d = document.createElement("div");
-  d.className = `alert ${kind}`; d.innerHTML = html + `<button class="btn x" aria-label="Kapat">×</button>`;
+  d.className = `alert ${kind}`; d.innerHTML = html + `<button class="btn x" aria-label="${_("Close")}">×</button>`;
   d.querySelector(".x").onclick = () => { d.remove(); if (key) { prefs.dismissed[key] = 1; savePrefs(); } };
   $("#alerts").appendChild(d); placeAlerts();
 }
 function placeAlerts() { $("#alerts").style.top = Math.round($(".bar").getBoundingClientRect().bottom + 8) + "px"; }
 function updateAlerts() {
   $("#alerts").textContent = "";
-  const items = (DATA.errors || []).map(esc).map((e) => e.replace(/(ssh pi@\S+ sudo nodesk router-script \| ssh root@\S+ sh)/, '<span class="mono">$1</span>'));
+  const items = (DATA.errors || []).map((e) => esc(_x(e)));
   const age = (Date.now() - new Date(DATA.generated).getTime()) / 60000;
   const interval = (DATA.settings && DATA.settings.interval_min) || 5;
-  if (age > Math.max(15, interval * 3) && (!DATA.settings || DATA.settings.auto)) items.unshift(`Harita ${Math.round(age)} dakikadır güncellenmedi. Pi'de <span class="mono">sudo nodesk status</span> ile kontrol et.`);
+  if (age > Math.max(15, interval * 3) && (!DATA.settings || DATA.settings.auto)) items.unshift(_("The map has not been updated for {n} minutes. Check with <span class=\"mono\">sudo nodesk status</span> on the Pi.", { n: Math.round(age) }));
   const rs = DATA.router_script || {};
   const autoUpd = !DATA.settings || DATA.settings.agent_auto_update !== false;
-  if (rs.ok === false && !(rs.self_update && autoUpd)) items.push(`Router ajanının bu sürümü (${esc(rs.installed)}) kendini güncelleyemiyor. <b>Son kez</b> Laptop'tan çalıştır; sonraki sürümleri kendisi alacak: <span class="mono">ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh</span>`);
-  if (items.length) alertBox("warn", `<b>Dikkat</b><ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul>`, "w:" + items.join("|"));
+  if (rs.ok === false && !(rs.self_update && autoUpd)) items.push(_("This router agent version ({v}) cannot update itself. Run its install command (Settings &gt; Agents) on the router <b>one last time</b>; later versions update themselves.", { v: esc(rs.installed) }));
+  if (items.length) alertBox("warn", `<b>${_("Attention")}</b><ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul>`, "w:" + items.join("|"));
   const up = DATA.app && DATA.app.update;
   $("#updBadge").hidden = !up;
-  if (up) alertBox("info", `Yeni sürüm var: <b>${esc(up.latest)}</b> (şu an ${esc(DATA.app.version)}). Ayarlar → Güncelle.`, "u:" + up.latest);
-  if (!API_OK) alertBox("warn", "Nodesk servisine ulaşılamıyor: harita salt okunur. Pi'de <span class=\"mono\">sudo nodesk status</span>.", "noapi:" + new Date().toDateString());
+  if (up) alertBox("info", _("New version available: <b>{a}</b> (now {b}). Settings → Update.", { a: esc(up.latest), b: esc(DATA.app.version) }), "u:" + up.latest);
+  if (!API_OK) alertBox("warn", _("Cannot reach the Nodesk service: the map is read-only. On the Pi: <span class=\"mono\">sudo nodesk status</span>."), "noapi:" + new Date().toDateString());
 }
 function updateMeta() {
   const nodes = DATA.nodes.filter((n) => !n.placeholder && n.kind !== "internet" && !isSvc(n));
   const on = nodes.filter((n) => n.online).length;
   const sv = DATA.nodes.filter((n) => n.kind === "service"), bad = sv.filter((n) => n.health === "fail" || n.health === "partial").length;
   const unnamed = nodes.filter((n) => n.unnamed && !n.hidden).length;
-  $("#meta").innerHTML = `<b>${on}</b> / ${nodes.length} cihaz · ${sv.filter((n) => n.online).length} / ${sv.length} servis${bad ? ` · <span style="color:var(--relay)">${bad} yanıt vermiyor</span>` : ""}${unnamed ? ` · <button class="unnamed" id="mUnnamed" title="Adı bilinmeyen cihazları göster">${unnamed} adsız</button>` : ""} · ${esc(ago(DATA.generated))} tarandı`;
+  $("#meta").innerHTML = `<b>${on}</b> / ${_("{n} devices", { n: nodes.length })} · ${sv.filter((n) => n.online).length} / ${_("{n} services", { n: sv.length })}${bad ? ` · <span style="color:var(--relay)">${_("{n} not responding", { n: bad })}</span>` : ""}${unnamed ? ` · <button class="unnamed" id="mUnnamed" title="${_("Show devices with unknown names")}">${_("{n} unnamed", { n: unnamed })}</button>` : ""} · ${_("scanned {a}", { a: esc(ago(DATA.generated)) })}`;
   if ($("#mUnnamed")) $("#mUnnamed").onclick = () => { if (CAN_EDIT) openNaming(); else { prefs.filters.unnamed = !prefs.filters.unnamed; afterFilter(); } };
   const a = DATA.app || {};
-  $("#meta").title = `Son tarama: ${fmtTime(DATA.generated)}\nNodesk ${a.version || "?"}${a.rev ? " (" + a.rev + ")" : ""}`;
+  $("#meta").title = `${_("Last scan:")} ${fmtTime(DATA.generated)}\nNodesk ${a.version || "?"}${a.rev ? " (" + a.rev + ")" : ""}`;
 }
 
 /* ---------------- kaydırma / yakınlaştırma ---------------- */
@@ -1718,8 +1946,14 @@ $("#tTail").onclick = () => { prefs.tail = !prefs.tail; savePrefs(); syncButtons
 $("#tExit").onclick = () => { prefs.exit = !prefs.exit; savePrefs(); syncButtons(); render(); };
 $("#tOff").onclick = () => { prefs.off = !prefs.off; savePrefs(); syncButtons(); render(); fit(); };
 $("#bFilter").onclick = () => { if ($("#filters").classList.contains("open")) closeDrawers(); else { renderFilters(); openDrawer("filters"); } };
-$("#bSettings").onclick = () => { if ($("#settings").classList.contains("open")) closeDrawers(); else if (!CAN_EDIT) openLogin("Ayarlar için giriş yap."); else openSettings(); };
+$("#bSettings").onclick = () => { if ($("#settings").classList.contains("open")) closeDrawers(); else if (!CAN_EDIT) openLogin(_("Log in for settings.")); else openSettings(); };
 $("#bLogin").onclick = () => openLogin();
+$("#bLang").onclick = async () => {
+  const next = LANG === "tr" ? "en" : "tr";
+  try { localStorage.setItem("nodesk-lang", next); } catch (e) {}
+  if (CAN_EDIT) try { await api("PUT", "/api/settings", { lang: next }); } catch (e) {}   // bildirimler ve yeni ziyaretçiler
+  location.reload();
+};
 $("#bLogout").onclick = async () => { try { await api("POST", "/api/logout"); } catch (e) {} await probeApi(); await load(true); };
 $("#bScan").onclick = scanNow;
 $("#zIn").onclick = () => zoomAt(1.25, svg.clientWidth / 2, svg.clientHeight / 2);
@@ -1745,13 +1979,14 @@ $("#q").addEventListener("keydown", (e) => {
 });
 let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { render(); fit(); placeAlerts(); }, 150); });
 syncButtons();
+translateStatic();
 
 /* ---------------- veri ---------------- */
 async function fetchData() {
   // Önce API (harita gizliyse yalnız giriş yapana verir), ulaşılamazsa herkese açık dosya
   try {
     const r = await fetch("/api/data", { cache: "no-store" });
-    if (r.status === 401) { const e = new Error("giriş gerekli"); e.login = true; throw e; }
+    if (r.status === 401) { const e = new Error(_("login required")); e.login = true; throw e; }
     if (r.ok) return r.json();
   } catch (e) { if (e.login) throw e; }
   const r = await fetch("live/data.json?t=" + Date.now(), { cache: "no-store" });
@@ -1761,6 +1996,7 @@ async function fetchData() {
 async function load(force) {
   try {
     const d = await fetchData();
+    if (!LANG_CHOSEN && d.settings && d.settings.lang && d.settings.lang !== LANG) { LANG = d.settings.lang; translateStatic(); }
     const changed = force || !DATA || d.generated !== DATA.generated || JSON.stringify(d.nodes).length !== JSON.stringify(DATA.nodes).length;
     DATA = d;
     if (changed) {
@@ -1774,10 +2010,10 @@ async function load(force) {
     updateMeta();
     afterFilterBadge();
   } catch (e) {
-    if (e.login) { $("#meta").textContent = "harita gizli"; if (!$("#settings").classList.contains("open")) openLogin(); return; }
-    $("#meta").textContent = "veri okunamadı";
+    if (e.login) { $("#meta").textContent = _("map is private"); if (!$("#settings").classList.contains("open")) openLogin(); return; }
+    $("#meta").textContent = _("could not read data");
     $("#alerts").textContent = "";
-    alertBox("warn", `<b>Harita verisi okunamadı</b> (${esc(e.message)}). Servis yeni başlamış olabilir; birkaç saniye sonra yenile. Sorun sürerse Pi'de <span class="mono">sudo nodesk status</span>.`);
+    alertBox("warn", _("<b>Could not read the map data</b> ({e}). The service may have just started; reload in a few seconds. If it persists: <span class=\"mono\">sudo nodesk status</span> on the Pi.", { e: esc(e.message) }));
   }
 }
 function afterFilterBadge() {
@@ -1792,20 +2028,20 @@ async function probeApi() {
   $$("[data-api]").forEach((b) => { b.disabled = !API_OK; });
   $("#bScan").hidden = !CAN_EDIT;
   $("#bLogin").hidden = !API_OK || CAN_EDIT;
-  $("#bLogout").hidden = !(AUTH && AUTH.how === "parola");
+  $("#bLogout").hidden = !(AUTH && AUTH.how === "password");
 }
 function openLogin(msg) {
   openDrawer("settings");
-  $("#sbody").innerHTML = `<h2>Giriş</h2>
-    <p class="hint">${esc(msg || (AUTH && !AUTH.view ? "Bu harita gizli; görmek için giriş yap." : "Düzenlemek için giriş yap. Tailscale üzerinden bağlanıyorsan genelde gerekmez."))}</p>
-    ${AUTH && !AUTH.password ? `<p class="note">Henüz parola belirlenmemiş. Pi'de <span class="mono">sudo nodesk password</span> ile belirleyebilirsin.</p>` : ""}
-    <form id="loginForm"><div class="field"><label for="lPw">Parola</label><input id="lPw" type="password" autocomplete="current-password" required></div>
-    <div class="actions"><button class="btn primary" type="submit">Giriş</button></div><div class="err-msg" id="lErr"></div></form>`;
+  $("#sbody").innerHTML = `<h2>${_("Log in")}</h2>
+    <p class="hint">${esc(msg || (AUTH && !AUTH.view ? _("This map is private; log in to see it.") : _("Log in to edit. Usually not needed when you connect over Tailscale.")))}</p>
+    ${AUTH && !AUTH.password ? `<p class="note">${_("No password set yet. Set one on the Pi with <span class=\"mono\">sudo nodesk password</span>.")}</p>` : ""}
+    <form id="loginForm"><div class="field"><label for="lPw">${_("Password")}</label><input id="lPw" type="password" autocomplete="current-password" required></div>
+    <div class="actions"><button class="btn primary" type="submit">${_("Log in")}</button></div><div class="err-msg" id="lErr"></div></form>`;
   $("#lPw").focus();
   $("#loginForm").onsubmit = async (e) => {
     e.preventDefault();
     try { await api("POST", "/api/login", { password: $("#lPw").value }); await probeApi(); closeDrawers(); await load(true); }
-    catch (err) { $("#lErr").textContent = err.message; }
+    catch (err) { $("#lErr").textContent = _x(err.message); }
   };
 }
 /* Öz-test (adresin sonuna #selftest): kartlar üst üste binmiyor, çizgiler kartların içinden
@@ -1821,12 +2057,12 @@ function selfTest() {
     const cards = [...ALL.filter((n) => n.x !== undefined && n.kind !== "internet"), ...HEADS];
     for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) {
       const a = rect(cards[i]), b = rect(cards[j]);
-      if (hit(a, b[0], b[1], b[2], b[3])) problems.push(`üst üste: ${cards[i].id} / ${cards[j].id}`);
+      if (hit(a, b[0], b[1], b[2], b[3])) problems.push(`overlap: ${cards[i].id} / ${cards[j].id}`);
     }
     for (const d of DRAWN) for (let k = 1; k < d.pts.length; k++) {
       const [x0, y0] = d.pts[k - 1], [x1, y1] = d.pts[k];
       for (const c of cards) if (!d.ends.includes(c.id) && hit(rect(c), x0, y0, x1, y1))
-        problems.push(`${d.kind} çizgisi kartın içinden geçiyor: ${c.id} (${d.ends.join(" → ")})`);
+        problems.push(`${d.kind} line crosses a card: ${c.id} (${d.ends.join(" → ")})`);
     }
   }
   prefs.tail = false; render();

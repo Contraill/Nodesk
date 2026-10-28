@@ -56,14 +56,14 @@ def _dns_name(buf, off, depth=0):
     labels, jumped, end = [], False, off
     while True:
         if off >= len(buf) or depth > 20:
-            raise ValueError("bozuk ad")
+            raise ValueError("bad name")
         n = buf[off]
         if n == 0:
             off += 1
             break
         if n & 0xC0 == 0xC0:
             if off + 1 >= len(buf):
-                raise ValueError("bozuk işaretçi")
+                raise ValueError("bad pointer")
             ptr = ((n & 0x3F) << 8) | buf[off + 1]
             if not jumped:
                 end = off + 2

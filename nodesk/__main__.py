@@ -39,14 +39,14 @@ def main(argv):
         if cmd == "agent-list":
             for name, a in sorted(st.agents()["agents"].items()):
                 rep = st.reports().get(name, {})
-                print(f"{name:20} {a['kind']:7} son rapor: {rep.get('received') or 'yok'}")
+                print(f"{name:20} {a['kind']:7} last report: {rep.get('received') or 'none'}")
             return 0
         if len(argv) < 3:
             print(__doc__, file=sys.stderr)
             return 2
         name = argv[2]
         if cmd == "agent-remove":
-            print("silindi" if st.remove_agent(name) else "böyle bir ajan yok")
+            print("silindi" if st.remove_agent(name) else "no such agent")
             return 0
         kind = argv[3] if len(argv) > 3 else ("router" if name == "router" else "linux")
         a = st.add_agent(name, kind)

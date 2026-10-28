@@ -60,6 +60,33 @@ class History:
 EVENTS = ("new_device", "service_down", "agent_silent", "exit_change")
 
 
+# Bildirim metinleri (ayarlardaki dil: settings.lang)
+MESSAGES = {
+    "en": {"new": ("New device", "{dev} ({addr}) seen on {site}."),
+           "down": ("Service down", "{svc} ({host}) is not responding."),
+           "up": ("Service recovered", "{svc} is running again."),
+           "silent": ("Agent silent", "Agent {name} has not reported for 15 minutes."),
+           "back": ("Agent back", "Agent {name} is reporting again."),
+           "exit": ("Exit node changed", "{now}"),
+           "no_exit": ("", "no device uses an exit node"),
+           "test": ("Nodesk test", "Notifications work.")},
+    "tr": {"new": ("Yeni cihaz", "{dev} ({addr}) {site} ağında görüldü."),
+           "down": ("Servis kapandı", "{svc} ({host}) yanıt vermiyor."),
+           "up": ("Servis düzeldi", "{svc} yeniden çalışıyor."),
+           "silent": ("Ajan sustu", "{name} ajanı 15 dakikadır rapor göndermiyor."),
+           "back": ("Ajan döndü", "{name} ajanı yeniden rapor gönderiyor."),
+           "exit": ("Exit node değişti", "{now}"),
+           "no_exit": ("", "exit node kullanan yok"),
+           "test": ("Nodesk deneme", "Bildirimler çalışıyor.")},
+}
+
+
+def text(lang, key, **kw):
+    """-> (başlık, metin) seçilen dilde"""
+    title, body = MESSAGES.get(lang or "en", MESSAGES["en"])[key]
+    return title, body.format(**kw)
+
+
 class Notifier:
     def __init__(self, path):
         self.path = path
@@ -82,7 +109,7 @@ class Notifier:
             self.last_error = None
         except Exception as e:   # bildirim gitmese de harita çalışmaya devam eder
             self.last_error = f"{type(e).__name__}: {e}"[:200]
-            print(f"[nodesk] bildirim gönderilemedi: {self.last_error}", flush=True)
+            print(f"[nodesk] notification failed: {self.last_error}", flush=True)
 
     def send(self, cfg, title, body, key=None):
         if key and time.time() - self.sent_at.get(key, 0) < 1800:
@@ -91,7 +118,7 @@ class Notifier:
             self.sent_at[key] = time.time()
         threading.Thread(target=self._send, args=(cfg, title, body), daemon=True).start()
 
-    def check(self, data, cfg):
+    def check(self, data, cfg, lang=None):
         """Önceki durumla karşılaştır, değişenleri bildir. -> gönderilecek (başlık, metin) listesi"""
         devs = {n["id"]: n for n in data["nodes"] if n["kind"] not in ("internet", "service")
                 and not n.get("placeholder") and not n["id"].startswith("ip:")}   # ip: geçici kimlik
@@ -107,24 +134,22 @@ class Notifier:
             if ev.get("new_device", True):
                 for nid in sorted(set(cur["devices"]) - set(prev.get("devices", []))):
                     n = devs[nid]
-                    out.append(("Yeni cihaz", f"{n['label']} ({', '.join(n.get('ips') or []) or n.get('mac') or ''}) "
-                                              f"{n.get('site') or ''} ağında görüldü.", f"new:{nid}"))
+                    out.append((*text(lang, "new", dev=n["label"], addr=", ".join(n.get("ips") or []) or n.get("mac") or "",
+                                      site=n.get("site") or ""), f"new:{nid}"))
             if ev.get("service_down", True):
                 for nid in sorted(set(prev.get("svc_up", [])) - set(cur["svc_up"])):
                     if nid in svcs:
-                        out.append(("Servis kapandı", f"{label(nid)} ({label(svcs[nid].get('host'))}) yanıt vermiyor.",
-                                    f"down:{nid}"))
+                        out.append((*text(lang, "down", svc=label(nid), host=label(svcs[nid].get("host"))), f"down:{nid}"))
                 for nid in sorted(set(cur["svc_up"]) - set(prev.get("svc_up", []))):
-                    out.append(("Servis düzeldi", f"{label(nid)} yeniden çalışıyor.", f"up:{nid}"))
+                    out.append((*text(lang, "up", svc=label(nid)), f"up:{nid}"))
             if ev.get("agent_silent", True):
                 for name in sorted(set(prev.get("agents_fresh", [])) - set(cur["agents_fresh"])):
-                    out.append(("Ajan sustu", f"{name} ajanı 15 dakikadır rapor göndermiyor.", f"silent:{name}"))
+                    out.append((*text(lang, "silent", name=name), f"silent:{name}"))
                 for name in sorted(set(cur["agents_fresh"]) - set(prev.get("agents_fresh", []))):
-                    out.append(("Ajan döndü", f"{name} ajanı yeniden rapor gönderiyor.", f"back:{name}"))
+                    out.append((*text(lang, "back", name=name), f"back:{name}"))
             if ev.get("exit_change", True) and cur["exits"] != prev.get("exits", []):
                 txt = lambda e: " → ".join(label(x) for x in e.split(">"))
-                now_ = ", ".join(txt(e) for e in cur["exits"]) or "exit node kullanan yok"
-                out.append(("Exit node değişti", now_, None))
+                out.append((*text(lang, "exit", now=", ".join(txt(e) for e in cur["exits"]) or text(lang, "no_exit")[1]), None))
         self.state = cur
         util.write_json(self.path, cur, indent=None)
         if cfg.get("ntfy_url") or (cfg.get("telegram_token") and cfg.get("telegram_chat")):
