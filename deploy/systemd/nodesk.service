@@ -10,7 +10,7 @@ Environment=PYTHONPATH=@NODESK_HOME@/app
 Environment=PYTHONUNBUFFERED=1
 WorkingDirectory=@NODESK_HOME@
 ExecStart=/usr/bin/python3 -m nodesk serve
-Restart=on-failure
+Restart=always
 RestartSec=15
 Nice=10
 IOSchedulingClass=idle

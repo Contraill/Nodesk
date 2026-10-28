@@ -6,7 +6,7 @@
 # İlk kurulum (bir kez): haritada Ayarlar > Ajanlar > Kurulum komutu, router'da çalıştırılır.
 # Sonraki sürümleri ajan Pi'den kendisi alır.
 
-TOPO_VERSION=9
+TOPO_VERSION=10
 
 echo "#VERSION"
 echo "$TOPO_VERSION"
@@ -122,5 +122,12 @@ mv -f /tmp/nodesk-exit.next /tmp/nodesk-exit.prev 2>/dev/null
 
 echo "#EXITNODE"
 tailscale debug prefs 2>/dev/null | sed -n 's/.*"ExitNodeID": "\([^"]*\)".*/\1/p'
+
+echo "#SELF"
+# Nodesk'in router'daki yükü: dinleyicinin belleği (kB) ve router'ın boş belleği
+for p in $(pidof ucode 2>/dev/null); do
+    grep -q nodesk-listen "/proc/$p/cmdline" 2>/dev/null && echo "listen_rss_kb=$(awk '/^VmRSS/ { print $2 }' "/proc/$p/status")"
+done
+awk '/^MemAvailable/ { print "mem_available_kb=" $2 }' /proc/meminfo
 
 echo "#END"

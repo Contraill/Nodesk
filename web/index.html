@@ -429,6 +429,10 @@ function ago(iso) {
   if (s < 86400 * 2) return Math.round(s / 3600) + " sa önce";
   return Math.round(s / 86400) + " gün önce";
 }
+function dur(sec) {
+  const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
+  return d ? `${d} gün ${h} saat` : h ? `${h} saat ${m} dk` : `${m} dk`;
+}
 function fmtTime(iso) { if (!iso) return "—"; try { return new Date(iso).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" }); } catch (e) { return iso; } }
 function tsPath(n) { const t = n.tailscale; if (!t) return null; if (!t.online) return "down"; if ((t.path || "").startsWith("aktarıcı")) return "relay"; return "direct"; }
 function ipNum(ip) { if (!ip) return 1e12; return ip.split(".").reduce((a, b) => a * 256 + (+b || 0), 0); }
@@ -1436,7 +1440,8 @@ function renderSettings() {
     <button class="btn line" type="submit">Ekle</button></form>
   <div class="err-msg" id="aErr"></div>
   <h3>Sürüm</h3>
-  <p style="margin:0 0 8px">Nodesk <b>${esc(appi.version)}</b> <span class="mono" style="color:var(--muted)">${esc(appi.rev || "")}</span></p>`;
+  <p style="margin:0 0 8px">Nodesk <b>${esc(appi.version)}</b> <span class="mono" style="color:var(--muted)">${esc(appi.rev || "")}</span></p>
+  ${STATE.usage && STATE.usage.rss_mb ? `<p class="hint">Pi'de ${STATE.usage.rss_mb} MB bellek kullanıyor (sınır 150 MB) · ${esc(dur(STATE.usage.uptime_s))} süredir çalışıyor.</p>` : ""}`;
   if (appi.update) {
     html += `<div class="note"><b>Yeni sürüm: ${esc(appi.update.latest)}</b>${(appi.update.changes || []).length ? `<ul style="margin:6px 0 0;padding-left:18px">${appi.update.changes.slice(0, 8).map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}</div>
     <div class="actions"><button class="btn primary" id="sUpdate"${appi.updating ? " disabled" : ""}>${appi.updating ? "Güncelleniyor…" : "Güncelle"}</button></div>`;
@@ -1488,9 +1493,10 @@ function renderSettings() {
 }
 let openAgent = null;
 function agentHtml(a) {
-  const d = (DATA.agents || []).find((x) => x.name === a.name) || {};
+  const d = (DATA.agents || []).find((x) => x.name === a.name) || {}, u = d.usage || {};
   const cls = !a.received ? "" : d.fresh ? "on" : "warn";
   let h = `<div class="agent"><header><span class="status ${cls}"></span><b>${esc(a.name)}</b><small>${a.kind === "router" ? "router" : "sunucu"} · ${a.received ? "son rapor " + esc(ago(a.received)) : "henüz rapor yok"}</small>
+    ${u.listen_rss_kb ? `<small title="Router'da Nodesk dinleyicisinin belleği / router'ın boş belleği">${(u.listen_rss_kb / 1024).toFixed(1)} MB · boş ${Math.round((u.mem_available_kb || 0) / 1024)} MB</small>` : ""}
     <button class="btn line" data-agent-show="${esc(a.name)}">${openAgent === a.name ? "Gizle" : "Kurulum"}</button><button class="btn danger" data-agent-del="${esc(a.name)}" aria-label="Sil">Sil</button></header>`;
   if (openAgent === a.name) {
     const c = a.commands || {};

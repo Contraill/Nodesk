@@ -751,9 +751,11 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
     for name, rep in reports.items():
         a = age_min(rep.get("received"), now)
         fresh = a is not None and a <= (ROUTER_FRESH_MIN if rep["kind"] == "router" else AGENT_FRESH_MIN)
+        usage = dict(x.split("=", 1) for x in (rep.get("sections") or {}).get("SELF", []) if "=" in x)
         entry = {"name": name, "kind": rep["kind"], "received": rep.get("received"),
                  "age_min": round(a, 1) if a is not None else None, "fresh": fresh,
-                 "from": rep.get("from"), "node": None}
+                 "from": rep.get("from"), "node": None,
+                 "usage": {k: int(v) for k, v in usage.items() if v.strip().isdigit()} or None}
         agents_out.append(entry)
         if rep["kind"] != "linux" or not rep.get("sections") or not settings["sources"].get("agents", True):
             continue

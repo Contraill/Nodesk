@@ -24,6 +24,7 @@ from . import agents, auth, model, passive, probe, sources, store, util
 
 API_HOST = "127.0.0.1"
 API_PORT = int(os.environ.get("NODESK_API_PORT", "8089"))
+START = time.monotonic()
 UPDATE_CHECK_HOURS_DEFAULT = 6
 
 
@@ -608,9 +609,19 @@ class Handler(BaseHTTPRequestHandler):
                                                             a["token"])})
         return out
 
+    @staticmethod
+    def self_usage():
+        """Pi'deki Nodesk sürecinin belleği ve çalışma süresi (kendini izleme)."""
+        rss = None
+        for line in util.read_text("/proc/self/status").splitlines():
+            if line.startswith("VmRSS:"):
+                rss = int(line.split()[1]) // 1024
+        return {"rss_mb": rss, "uptime_s": int(time.monotonic() - START)}
+
     def state(self):
         app = self.app
         return {
+            "usage": self.self_usage(),
             "app": app.app_info(),
             "settings": app.store.settings(),
             "scan": {k: app.status.get(k) for k in

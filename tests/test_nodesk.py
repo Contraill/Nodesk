@@ -99,6 +99,8 @@ class CollectTest(unittest.TestCase):
         self.assertFalse(self.ids["mac:aa:bb:cc:00:11:22"]["online"])
         self.assertTrue(any(o["from"] == "router" and o["to"] == "self" for o in self.data["overlay"]))
         self.assertTrue(self.data["router_script"]["ok"])
+        ag = next(a for a in self.data["agents"] if a["name"] == "router")
+        self.assertEqual(ag["usage"], {"listen_rss_kb": 1504, "mem_available_kb": 131448}, "router'daki yük ölçülür")
 
     def test_linux_agent_services(self):
         arm = self.ids["ts:cloud-arm"]
@@ -687,7 +689,7 @@ class ApiTest(unittest.TestCase):
 
     def test_ingest_asks_old_agent_to_update(self):
         token = store.Store(store.Paths(self.home)).agents()["agents"]["router"]["token"]
-        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n9", "#VERSION\n2", 1)
+        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n10", "#VERSION\n2", 1)
         st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=old.encode(), ctype="text/plain")
         self.assertEqual((st, body.strip()), (200, "ok update"))
         cur = open(os.path.join(FIX, "router.txt")).read()
@@ -770,7 +772,7 @@ class ScriptsTest(unittest.TestCase):
             s = agents.installer(kind, "http://100.64.0.1:8088", "x", "tok")
             r = subprocess.run(["sh", "-n"], input=s, text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(agents.topo_version(), "9")
+        self.assertEqual(agents.topo_version(), "10")
 
     def test_router_installer_sandbox(self):
         """Router kurulum scriptini sahte kök dizinde BusyBox ile iki kez çalıştır."""
