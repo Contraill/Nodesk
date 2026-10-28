@@ -1999,7 +1999,7 @@ async function fetchData() {
 async function load(force) {
   try {
     const d = await fetchData();
-    if (d.demo) d.generated = new Date().toISOString();   // GitHub Pages demosu: örnek veri hep "şimdi"
+    if (d.demo) shiftDemo(d);
     if (!LANG_CHOSEN && d.settings && d.settings.lang && d.settings.lang !== LANG) { LANG = d.settings.lang; translateStatic(); }
     const changed = force || !DATA || d.generated !== DATA.generated || JSON.stringify(d.nodes).length !== JSON.stringify(DATA.nodes).length;
     DATA = d;
@@ -2019,6 +2019,21 @@ async function load(force) {
     $("#alerts").textContent = "";
     alertBox("warn", _("<b>Could not read the map data</b> ({e}). The service may have just started; reload in a few seconds. If it persists: <span class=\"mono\">sudo nodesk status</span> on the Pi.", { e: esc(e.message) }));
   }
+}
+/* GitHub Pages demosu: örnek veri hep "şimdi". Zamanlar ve geçmiş günleri bugüne kaydırılır;
+   böylece demo yeniden üretilmeden de güncel kalır. */
+function shiftDemo(d) {
+  const ms = Date.now() - Date.parse(d.generated), days = Math.round(ms / 864e5);
+  const sh = (t) => t && new Date(Date.parse(t) + ms).toISOString();
+  const day = (k) => new Date(Date.parse(k + "T12:00:00Z") + days * 864e5).toISOString().slice(0, 10);
+  for (const n of d.nodes) {
+    for (const k of ["first_seen", "last_seen"]) n[k] = sh(n[k]);
+    if (n.tailscale) n.tailscale.last_seen = sh(n.tailscale.last_seen);
+    if (n.agent) n.agent.received = sh(n.agent.received);
+    if (n.history) n.history.days = Object.fromEntries(Object.entries(n.history.days).map(([k, v]) => [day(k), v]));
+  }
+  for (const a of d.agents || []) a.received = sh(a.received);
+  d.generated = new Date().toISOString();
 }
 function afterFilterBadge() {
   const f = prefs.filters, c = f.sites.length + f.kinds.length + f.tags.length + (f.status ? 1 : 0) + (f.unnamed ? 1 : 0);

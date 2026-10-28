@@ -28,12 +28,10 @@ def history(kind):
                   "day": 7 <= h < 23.5 and rng.random() > 0.05,
                   "evening": (18 <= h < 23 or (d in (1, 2) and 10 <= h < 16)) and rng.random() > 0.03,
                   "rare": 19 <= h < 21 and d % 2 == 0}[kind]
-            if d == 0 and i > (now.hour * 60 + now.minute) // 10:
-                up = False
             bits = bits << 1 | up
             on += up
         days[str(day)] = f"{bits:036x}"
-    return {"pct": round(100 * on / (144 * 6 + (now.hour * 60 + now.minute) // 10 + 1)), "days": days}
+    return {"pct": round(100 * on / (144 * 7)), "days": days}
 
 
 def mac(oui):

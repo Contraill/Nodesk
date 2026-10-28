@@ -247,8 +247,10 @@ sys.exit(0 if not s["running"] and (s.get("last_end") or "") != sys.argv[1] else
 }
 
 summary_lines() {
-    [ -f "$WWW/data.json" ] || { echo "  map: no data yet"; return; }
-    py - "$WWW/data.json" <<'PY'
+    local f="$WWW/data.json"
+    [ -f "$f" ] || f="$DATA/data.json"   # private map: only the API copy exists
+    [ -f "$f" ] || { echo "  map: no data yet"; return; }
+    py - "$f" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
 nodes = [n for n in d["nodes"] if n["kind"] not in ("internet", "service") and not n.get("placeholder")]
