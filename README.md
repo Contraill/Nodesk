@@ -1,125 +1,154 @@
 # Nodesk
 
-HomeNet için hafif bir ağ topolojisi haritası. Kapsadığı yerler: iki ev (F1611A + home-pi, H3600P + home-router), Oracle Cloud ve tailnet. Pi'de çalışır ve CasaOS'ta "Nodesk" olarak görünür.
+Ev ağlarının, uzaktaki bir evin (OpenWrt router), bulut sunucularının ve Tailscale tailnet'inin tek sayfalık, canlı haritası. Bir Raspberry Pi'de çalışır; arayüz Türkçedir.
 
-**Port taraması yapmaz. Pi hiçbir cihaza bağlanmaz:** uzaktaki cihazlar (router, sunucular) kendi verilerini 5 dakikada bir Tailscale/LAN üzerinden Pi'ye gönderir. Ajanlar yeni sürümü de Pi'den kendileri alır. Bir ajan bir kez kurulduktan sonra o cihaza SSH ile girmek gerekmez.
+- **Kim nerede:** Hangi cihaz hangi ağda, neyin altında (modem, router, extender); çevrimiçi mi, son 7 günde ne kadar açıktı.
+- **Ne çalışıyor:** Pi'deki ve sunuculardaki servisler (Docker, CasaOS uygulamaları, sistem servisleri) ve sağlıkları.
+- **Nasıl bağlı:** Tailnet'te kimin kime doğrudan ya da aktarıcı (DERP) üzerinden ulaştığı; kimin interneti hangi exit node üzerinden çıkıyor.
+- **Ne değişti:** Yeni cihaz, kapanan servis, susan ajan, değişen exit node için isteğe bağlı bildirim (ntfy ya da Telegram).
 
-| Kaynak | Ne verir |
-|---|---|
-| `tailscale status` (Pi) | Tüm tailnet cihazları, doğrudan/aktarıcı bağlantı, exit node, subnet route'lar |
-| ARP taraması (Pi, eth0) | F1611A arkasındaki cihazlar (~256 ARP paketi) |
-| Pasif dinleme (Pi, eth0) | Ağa paket göndermeden ARP/DHCP/mDNS/SSDP dinler. Uyuyan telefonları ve cihazların kendi adlarını bulur ("Galaxy-S24", "Salon TV") |
-| Pi'nin komşu tablosu | Pi'nin yakın zamanda konuştuğu cihazlar |
-| Docker API (Pi) | Container'lar, CasaOS uygulama adları; compose uygulamaları gruplanır (örn. Orbis → frontend + backend) |
-| `ss` (Pi) | Docker dışı servisler: CasaOS, Samba, SSH, VNC… |
-| Router ajanı | Ev 2: DHCP kiraları, ARP tablosu, WAN tarafında H3600P ağı, aktif exit node |
-| Sunucu ajanları | Oracle sunucularındaki container'lar ve servisler |
+## İlkeler
 
-## Haritada yapılabilenler
+- **Port taraması yapmaz.** Cihazlar ağa katılırken (DHCP), kendini duyururken (mDNS, SSDP) söylediklerinden ve Pi'nin kendi ARP/komşu tablosundan öğrenilir. Adını söylemeyen cihazlara günde bir kez yalnızca ad sorusu sorulur (NetBIOS, mDNS); her IP'ye bir paket.
+- **Pi hiçbir cihaza bağlanmaz.** Uzaktaki router ve sunucular kendi verilerini 5 dakikada bir Pi'ye gönderir (ajanlar, anahtarla). Ajanlar yeni sürümü de Pi'den kendileri alır.
+- **Markaya özel entegrasyon yok.** Modem, extender ya da router markasından bağımsız çalışır. OpenWrt router için ajan, Linux sunucular için ajan vardır.
+- **Bağımlılık yok.** Python standart kütüphanesi, tek dosyalık web arayüzü; web sunucusu olarak nginx container'ı.
 
-- **Servisler ayrı düğümlerdir:** her servis kendi ikonuyla, çalıştığı cihazdan dallanır.
-  - Çok container'lı uygulamalar (örn. Orbis → frontend, backend) ve Pi'nin sistem servisleri (CasaOS, Samba, SSH, VNC) açılıp kapanan gruplardır.
-  - Durum ışığı: yeşil çalışıyor, sarı kısmen yanıt veriyor, kırmızı yanıt vermiyor, gri durdu. Sağlık kontrolü sadece Pi'nin kendi servis portlarına, Pi'nin içinden bakar.
-  - İkonlar CasaOS'tan ya da açık bir ikon kütüphanesinden gelir. Pi onları bir kez indirir, böylece haritayı açan cihazın internete çıkması gerekmez. Kendi ikonunu servisi düzenleyerek verebilirsin.
-  - Araç çubuğundaki **Servisler** düğmesi hepsini gizler/gösterir.
+## Gereksinimler
 
-- **Bir karta tıkla → Düzenle.** Ad, tür, bağlı olduğu cihaz, etiketler, not, gizleme ve elle servis eklenebilir. Değişiklikler MAC adresine bağlı saklanır, IP değişse de kalır.
-- **Servisler** kartta uygulamaya göre gruplanır. Grup başlığına tıklayınca açılır/kapanır. Paneldeki ✎ ile uygulama adı değiştirilir.
-- **Ayarlar:**
-  - otomatik tarama açık/kapalı, sıklık (1–60 dk), kaynakları tek tek açma/kapama, **Şimdi tara**
-  - ajan ekleme/silme ve kurulum komutları
-  - **güncelleme**
-- **Grup adları:** grubun başlığına (Ev 1, Ev 2, Oracle Cloud…) tıklayınca hem grubu hem üstteki kartı adlandırabilirsin.
-- **Gezgin cihazlar:** Laptop ya da telefon evlerden birinin ağına bağlanınca o evin altında görünür, ayrılınca "Uzak / Mobil"e döner. Bunu Tailscale'in bildirdiği yerel IP'yi ağda canlı görerek anlar; cihaz iki kez görünmez.
-- **Extender arkası:** Keenetic gibi MAC-NAT yapan bir extender'ın arkasındaki cihazlar, extender'ın altında ayrı ayrı görünür. Gerçek MAC'i cihaz ağa yeniden bağlanınca (DHCP) öğrenilir; o zamana kadar mDNS adıyla ya da IP'siyle gösterilir.
-- **Filtre:** grup, tür, etiket ve durum. Eşleşmeyenler soluklaşır.
-- Arama (ad, IP, MAC, servis), Tailnet katmanı, açık/koyu tema, yakınlaştırma.
-
-## İlk kurulum (bir kez)
-
-**1. Pi:** Deploy anahtarını üret. Pi bu özel depoyu bu anahtarla sadece okuyabilir.
+- Raspberry Pi (ya da 7/24 açık herhangi bir Linux makine), Python 3.11+, Docker (compose eklentisiyle), Tailscale, `arp-scan`, `git`, `curl`
+- İsteğe bağlı: OpenWrt router (başka bir evi eklemek için), Linux sunucular (servislerini görmek için)
+- CasaOS varsa web arayüzü CasaOS uygulaması olarak kurulur; yoksa `docker compose` ile.
 
 ```bash
-command -v git >/dev/null || sudo apt install -y git
-sudo mkdir -p /DATA/AppData/nodesk/keys && sudo chmod 700 /DATA/AppData/nodesk/keys
-sudo ssh-keygen -q -t ed25519 -N "" -C nodesk-deploy@home-pi -f /DATA/AppData/nodesk/keys/deploy_ed25519
-sudo cat /DATA/AppData/nodesk/keys/deploy_ed25519.pub
+sudo apt install -y git arp-scan curl
+curl -fsSL https://get.docker.com | sh            # Docker + compose eklentisi
+curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up
 ```
 
-**2. GitHub:** Çıkan satırı depo → Settings → Deploy keys → Add deploy key bölümüne ekle. "Allow write access" **işaretsiz** kalsın.
-
-**3. Pi:** Klonla ve kur.
+## Kurulum
 
 ```bash
-sudo git -c core.sshCommand="ssh -i /DATA/AppData/nodesk/keys/deploy_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-  clone git@github.com:Contraill/Nodesk.git /DATA/AppData/nodesk/app
+sudo git clone https://github.com/Contraill/Nodesk.git /DATA/AppData/nodesk/app
 sudo /DATA/AppData/nodesk/app/bin/nodesk install
 ```
 
-**4. Laptop:** Router ajanını kur. Bu tek bir komut ve tekrar çalıştırmak güvenli. Mevcut cron satırlarına ve SSH anahtarlarına dokunmaz. Bu, router'a SSH ile girmen gereken tek seferdir; sonraki sürümleri ajan Pi'den kendisi alır.
+Veri klasörü varsayılan olarak `/DATA/AppData/nodesk`'tir (CasaOS düzeni). Başka bir yer için iki komutta da `NODESK_HOME=/yol` ver. Kurulum tekrar çalıştırılabilir; bir şey bozulursa onarır.
+
+Harita `http://<pi>:8088` adresindedir. İlk açılışta **kurulum sihirbazı** açılır:
+
+1. Pi'nin bağlı olduğu ağ (arayüz, alt ağ, geçit) kendiliğinden bulunur; ağa bir ad verirsin.
+2. Varsa başka evleri (router ajanı) ve sunucuları (sunucu ajanı) eklersin.
+3. Tailscale cihazlarını gruplara koyarsın (örn. "Bulut", "Gezgin cihazlar").
+4. Kimin düzenleyebileceğini seçersin.
+
+<details><summary>Özel bir çatal (fork) kullanıyorsan: salt okunur deploy anahtarı</summary>
 
 ```bash
-ssh pi@100.64.0.1 sudo nodesk router-script | ssh root@100.64.0.2 sh
+sudo mkdir -p /DATA/AppData/nodesk/keys && sudo chmod 700 /DATA/AppData/nodesk/keys
+sudo ssh-keygen -q -t ed25519 -N "" -C nodesk-deploy -f /DATA/AppData/nodesk/keys/deploy_ed25519
+sudo cat /DATA/AppData/nodesk/keys/deploy_ed25519.pub   # GitHub > Settings > Deploy keys (yazma izni yok)
+sudo git -c core.sshCommand="ssh -i /DATA/AppData/nodesk/keys/deploy_ed25519 -o IdentitiesOnly=yes" \
+  clone git@github.com:<sen>/Nodesk.git /DATA/AppData/nodesk/app
 ```
+Kurulum, anahtar varsa güncellemelerde de onu kullanır.
+</details>
 
-**5. Sunucular (isteğe bağlı):** Oracle sunucuları için Ayarlar → Ajanlar → Ekle, ya da Pi'de `sudo nodesk agent add cloud-arm`. Çıkan `curl … | sudo sh` komutunu o sunucuda çalıştır.
+## Başka evler ve sunucular: ajanlar
 
-Harita: **http://100.64.0.1:8088**
+**Ayarlar > Ajanlar > Ekle**. Her ajanın kendi anahtarı olur; kurulum komutunu kopyalayıp o cihazda çalıştırırsın. Tekrar çalıştırmak güvenlidir.
+
+| Ajan | Nerede | Ne gönderir |
+|---|---|---|
+| Router (OpenWrt) | `uclient-fetch -qO- '…' \| sh` (router'da) | DHCP kiraları, ARP tablosu, WAN tarafındaki modem ağı (`arp-scan` ile), dinleyen servisler, exit node. `ucode-mod-socket` kuruluysa: cihazların DHCP/mDNS ile söylediği adlar ve günde bir ad sorusu |
+| Sunucu (Linux) | `curl -fsSL '…' \| sudo sh` | Docker container'ları, dinleyen portlar, exit node |
+
+Her router ajanı haritada kendi grubu (çerçevesi) olur. Router'ın modemi ve Tailscale adı raporundan kendiliğinden bulunur.
+
+## Erişim
+
+Varsayılan: haritayı ağdaki herkes görür, **düzenlemeyi yalnızca Tailscale üzerinden bağlananlar** yapabilir. Böylece ev Wi-Fi'ındaki bir misafir ayarları değiştiremez. **Ayarlar > Erişim**'den şunlar seçilebilir:
+
+- yalnızca belirli Tailscale hesapları (kimlik `tailscale whois` ile doğrulanır)
+- parolayla giriş (`sudo nodesk password` ya da Ayarlar'dan)
+- haritayı görmek için de giriş
+
+Ajan uçları bu ayarlardan etkilenmez; kendi anahtarlarıyla korunurlar.
+
+## Cihaz tanıma
+
+Ad ve tür bu sırayla aranır:
+
+1. senin verdiğin ad
+2. cihazın DHCP'de söylediği ad
+3. mDNS/NetBIOS/UPnP adı
+4. üretici (MAC) ve işletim sistemi (DHCP parmak izi)
+
+Telefonlar her Wi-Fi ağında farklı rastgele MAC kullanır. Aynı telefonun MAC'leri şu durumlarda tek cihaz sayılır:
+- aynı (fabrika adı olmayan) DHCP/mDNS adını taşıyorlarsa,
+- `config.toml`'da aynı adla yazılmışlarsa,
+- ya da sen "Aynı cihaz" dersen.
+
+Biri kaybolup hemen diğeri gelirse harita sorar. Üst satırdaki **N adsız** bağlantısı, adını söylemeyen cihazları tek ekranda adlandırmanı sağlar.
+
+MAC-NAT yapan extender'ların (tekrarlayıcı) arkasındaki cihazlar ayrı ayrı gösterilir. Kablolu + Wi-Fi bağlı tek cihaz ve extender'ın iki MAC'i iki kez görünmez.
 
 ## Güncelleme
 
-Harita yeni sürümü 6 saatte bir denetler ve üstte bildirir. İki yolu var:
+Harita yeni sürümü 6 saatte bir denetler ve üstte bildirir. **Ayarlar > Güncelle** ya da:
 
-- Ayarlar → **Güncelle**
-- Pi'de:
+```bash
+sudo nodesk update      # değişiklikleri gösterir, uygular, servisi ve web'i yeniler
+sudo nodesk rollback    # bir önceki sürüme döner
+```
 
-  ```bash
-  sudo nodesk update      # değişiklikleri gösterir, uygular, servisi ve web'i yeniler
-  sudo nodesk rollback    # sorun çıkarsa bir önceki sürüme döner (0.2.0 ve sonrası)
-  ```
-
-`config.toml`, haritada yapılan düzenlemeler, geçmiş ve anahtarlar güncellemede korunur. Ajanlar (router dahil) yeni sürümü bir sonraki raporlarında Pi'den kendileri alır. Bu davranış Ayarlar → Ajanlar bölümünden kapatılabilir. Sadece 0.3.0'dan eski bir router ajanı kendini güncelleyemez; harita bunu bildirir ve 4. adımın bir kez daha çalıştırılması yeter.
+`config.toml`, haritadaki düzenlemeler, geçmiş ve anahtarlar korunur. Ajanlar yeni sürümü bir sonraki raporlarında kendileri alır.
 
 ## Komutlar
 
 | Komut | Ne yapar |
 |---|---|
-| `sudo nodesk status` | Sürüm, servis, web, ajanlar ve son tarama |
+| `sudo nodesk status` | Sürüm, servis, web, ajanlar, son tarama |
 | `sudo nodesk run` | Şimdi tara |
 | `sudo nodesk logs 50` | Son günlük satırları |
-| `sudo nodesk agent add <ad>` / `list` / `remove <ad>` | Sunucu ajanları |
-| `sudo nodesk router-script` | Router ajanı kurulum scripti (4. adım) |
-| `sudo nodesk install` | Kurulumu onarır (tekrar çalıştırmak güvenli) |
-| `sudo nodesk uninstall` | Servisi ve web uygulamasını kaldırır; veri klasörünü silmez |
+| `sudo nodesk password` | Düzenleme parolası |
+| `sudo nodesk agent add <ad>` / `list` / `remove <ad>` | Ajanlar |
+| `sudo nodesk install` | Kurulumu onarır |
+| `sudo nodesk uninstall` | Servisi ve web'i kaldırır; veri klasörü kalır |
 
-## Pi'deki klasör düzeni (`/DATA/AppData/nodesk`)
+## Veri klasörü
 
 ```
-app/              bu depo (git). Elle değiştirme; güncelleme bunu yeniler
-config.toml       temel ayarlar ve cihaz adları (güncellemede dokunulmaz)
+app/              bu depo (güncelleme yeniler)
+config.toml       ileri ayarlar (çoğu şey artık haritadan)
 data/
-  overrides.json  haritada yapılan düzenlemeler (config.toml'u ezer)
-  settings.json   tarama ayarları (haritadan değişir)
-  agents.json     ajanlar ve anahtarları
-  agents/         ajanların son raporları
-  passive.json    pasif dinlemede öğrenilenler
-  state.json      ilk/son görülme zamanları
-keys/             deploy_ed25519 (GitHub, salt okunur)
-www/              data.json (web arayüzü /live/ altından okur)
+  settings.json   ayarlar: gruplar, erişim, renkler, bildirimler
+  overrides.json  haritada yapılan düzenlemeler
+  agents.json     ajanlar ve anahtarları; agents/ son raporlar
+  passive*.json   pasif dinlemede ve router'larda duyulanlar
+  state.json      ilk/son görülme; history.json son 7 gün
+  auth.json       parola özeti ve oturumlar (yalnızca root)
+www/              herkese açık harita verisi (harita gizliyse boş)
 ```
 
-Çalışan parçalar şunlar:
+Her JSON dosyasının bir önceki sürümü `.bak` olarak durur. Bozuk bir dosya kenara alınır (`.bozuk-<zaman>`) ve yedekten devam edilir.
 
-- `nodesk.service`: root olarak çalışan Python servisi. Zamanlayıcı, toplayıcı ve pasif dinleyici bunun içinde. API sadece 127.0.0.1:8089'da dinler.
-- `nodesk-web` container'ı: nginx (host ağı, 8088). Haritayı sunar ve `/api/` isteklerini servise iletir.
+Çalışan parçalar:
+- `nodesk.service`: root olarak, toplayıcı, pasif dinleyici ve API (yalnızca 127.0.0.1:8089).
+- `nodesk-web`: nginx container'ı, 8088'de haritayı sunar ve `/api/`'yi iletir.
 
-CasaOS uygulama kimliği bilerek `nodesk-web`. CasaOS'tan kaldırılsa bile veri klasörü silinmez.
+## Sorun giderme
+
+- **Harita güncellenmiyor:** `sudo nodesk status`, `sudo nodesk logs 100`.
+- **Router grubu gri:** Router ajanı rapor göndermiyor. Router'da `logread | grep nodesk-agent`, `/tmp/nodesk-install.log`.
+- **Düzenle düğmesi yok:** Tailscale üzerinden bağlanmıyorsun. Ya Tailscale adresini kullan ya da `sudo nodesk password` ile parola belirleyip giriş yap.
+- **Cihazlar adsız:** Telefonlar adını ağa yeniden bağlanırken söyler. Bir gün bekle ya da "N adsız" ekranından adlandır.
 
 ## Geliştirme
 
 ```bash
-tests/run.sh              # birim + API + script testleri (gerçek çıktılardan alınmış örneklerle)
+tests/run.sh              # birim + API + script + arayüz testleri (Chromium varsa)
 tests/run.sh --preview    # + http://localhost:8099 üzerinde örnek verili önizleme
 ```
 
-Sürüm yükseltirken `VERSION` dosyasını artır. Router scripti değiştiyse `router/topo-collect` içindeki `TOPO_VERSION` değerini de artır.
+Haritanın öz-testi: adresin sonuna `#selftest` ekle. Kart çakışmalarını, çizgilerin kartlardan geçmesini ve JS hatalarını denetler. Sürüm yükseltirken `VERSION`'ı, router tarafı değiştiyse `router/topo-collect`'teki `TOPO_VERSION`'ı artır.

@@ -1400,6 +1400,33 @@ function bindGroups(put) {
     put({ sites: own.filter((x) => x.id !== a.dataset.grpDel) });
   });
 }
+/* Adı bilinmeyen cihazları tek ekrandan adlandır (adlar MAC'e bağlı kalıcıdır) */
+function openNaming() {
+  openDrawer("settings");
+  const list = DATA.nodes.filter((n) => n.unnamed && !n.hidden && !isSvc(n))
+    .sort((a, b) => (a.site || "").localeCompare(b.site || "") || ipNum((a.ips || [])[0]) - ipNum((b.ips || [])[0]));
+  const devs = DATA.nodes.filter((n) => !n.placeholder && n.kind !== "internet" && !isSvc(n));
+  const named = devs.length - devs.filter((n) => n.unnamed).length, types = (STATE && STATE.types) || Object.keys(KIND_TR);
+  const hint = (n) => [(n.ips || []).filter((i) => !i.startsWith("100."))[0], n.vendor ? util_short(n) : (n.random_mac ? "rastgele MAC" : ""), n.os,
+    (n.names || {}).dhcp_name || (n.names || {}).mdns_name, siteName(n.site), n.online ? "çevrimiçi" : "görünmüyor"].filter(Boolean).join(" · ");
+  $("#sbody").innerHTML = `<h2>Adsız cihazlar</h2>
+    <p class="hint">${named}/${devs.length} cihaz tanınıyor (%${Math.round(100 * named / Math.max(1, devs.length))}). Kendi adını söylemeyen cihazları burada bir kez adlandırman yeter: ad MAC adresine bağlı kalır. Telefonun başka Wi-Fi ağındaki MAC'i ayrı görünüyorsa cihazın "Düzenle" ekranındaki "Aynı cihaz" ile birleştir.</p>
+    ${list.length ? list.map((n) => `<div class="field" style="border-top:1px solid var(--card-line);padding-top:10px">
+      <label for="nm-${esc(n.id)}"><b>${esc(n.label)}</b> <small>${esc(hint(n))}</small></label>
+      <input id="nm-${esc(n.id)}" data-nm="${esc(n.id)}" maxlength="60" placeholder="ad (örn. Annemin telefonu)" style="width:100%;margin-bottom:6px">
+      <div class="row"><select data-nt="${esc(n.id)}" aria-label="Tür" style="flex:1;min-width:0;background:var(--field);border:1px solid var(--card-line);border-radius:7px;padding:6px">${types.map((t) => `<option value="${t}"${t === n.kind ? " selected" : ""}>${esc(KIND_TR[t] || t)}</option>`).join("")}</select>
+      <button class="btn line" data-ns="${esc(n.id)}">Kaydet</button></div></div>`).join("") : `<p class="note">Adsız cihaz kalmadı.</p>`}
+    <div class="err-msg" id="sErr"></div>`;
+  $$("[data-ns]", $("#sbody")).forEach((b) => b.onclick = async () => {
+    const id = b.dataset.ns, n = byId.get(id), name = $(`[data-nm="${CSS.escape(id)}"]`).value.trim();
+    if (!name) return;
+    try {
+      await api("PUT", "/api/device?id=" + encodeURIComponent(id), { ...(n.override || {}), name, type: $(`[data-nt="${CSS.escape(id)}"]`).value });
+      await load(true); openNaming();
+    } catch (e) { $("#sErr").textContent = "Kaydedilemedi: " + e.message; }
+  });
+}
+function util_short(n) { return n.short_vendor || n.vendor; }
 /* İlk kurulum sihirbazı: yeni kurulumda (setup_done yoksa) bir kez açılır */
 function renderWizard() {
   const s = STATE.settings, L = STATE.local || {}, loc = (STATE.sites || []).find((x) => x.type === "local") || {};
@@ -1604,7 +1631,7 @@ function updateMeta() {
   const sv = DATA.nodes.filter((n) => n.kind === "service"), bad = sv.filter((n) => n.health === "fail" || n.health === "partial").length;
   const unnamed = nodes.filter((n) => n.unnamed && !n.hidden).length;
   $("#meta").innerHTML = `<b>${on}</b> / ${nodes.length} cihaz · ${sv.filter((n) => n.online).length} / ${sv.length} servis${bad ? ` · <span style="color:var(--relay)">${bad} yanıt vermiyor</span>` : ""}${unnamed ? ` · <button class="unnamed" id="mUnnamed" title="Adı bilinmeyen cihazları göster">${unnamed} adsız</button>` : ""} · ${esc(ago(DATA.generated))} tarandı`;
-  if ($("#mUnnamed")) $("#mUnnamed").onclick = () => { prefs.filters.unnamed = !prefs.filters.unnamed; afterFilter(); };
+  if ($("#mUnnamed")) $("#mUnnamed").onclick = () => { if (CAN_EDIT) openNaming(); else { prefs.filters.unnamed = !prefs.filters.unnamed; afterFilter(); } };
   const a = DATA.app || {};
   $("#meta").title = `Son tarama: ${fmtTime(DATA.generated)}\nNodesk ${a.version || "?"}${a.rev ? " (" + a.rev + ")" : ""}`;
 }

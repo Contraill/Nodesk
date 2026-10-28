@@ -61,6 +61,8 @@ preflight() {
     done
     [ ${#missing[@]} -eq 0 ] || die "Eksik araç(lar): ${missing[*]}  (örn. sudo apt install arp-scan)"
     ok "git, tailscale, docker, arp-scan, ss, curl mevcut"
+    command -v casaos-cli >/dev/null 2>&1 || docker compose version >/dev/null 2>&1 \
+        || die "docker compose eklentisi yok (Docker'ı https://get.docker.com ile kurmak ekler)"
     [ -r /usr/share/arp-scan/ieee-oui.txt ] && ok "üretici veritabanı mevcut" \
         || warn "/usr/share/arp-scan/ieee-oui.txt yok; üretici adları boş kalır"
     if web_running; then
