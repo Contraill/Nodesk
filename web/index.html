@@ -409,7 +409,7 @@ const NO_FILTER = () => ({ sites: [], kinds: [], tags: [], status: "", hidden: f
 const prefs = { tail: false, off: true, svc: true, exit: true, collapsed: {}, filters: NO_FILTER(), dismissed: {} };
 try { const p = JSON.parse(localStorage.getItem("nodesk-prefs") || "{}"); Object.assign(prefs, p); prefs.filters = Object.assign(NO_FILTER(), p.filters || {}); } catch (e) {}
 const savePrefs = () => { try { localStorage.setItem("nodesk-prefs", JSON.stringify(prefs)); } catch (e) {} };
-let view = { x: 0, y: 0, k: 1 }, fitted = false, bounds = null, HEADS = [], BUSES = [];
+let view = { x: 0, y: 0, k: 1 }, fitted = false, bounds = null, HEADS = [], BUSES = [], DRAWN = [];
 
 /* ---------------- yardımcılar ---------------- */
 function el(tag, attrs, parent) {
@@ -495,15 +495,14 @@ function isVisible(n) {
 function kidSort(a, b) {
   const sa = isSvc(a), sb = isSvc(b);
   if (sa !== sb) return sa ? 1 : -1;                      // önce cihazlar, sonra servisler
+  // Sıra çevrimiçi durumuna bağlı değil: cihaz uyuyunca kartlar yer değiştirmesin
   if (sa) {
     if ((a.source === "system") !== (b.source === "system")) return a.source === "system" ? 1 : -1;   // uygulamalar önce
-    if (a.online !== b.online) return a.online ? -1 : 1;
-    return a.label.localeCompare(b.label, "tr");
+    return a.label.localeCompare(b.label, "tr") || a.id.localeCompare(b.id);
   }
   const oa = ORDER.indexOf(a.kind), ob = ORDER.indexOf(b.kind);
   if (oa !== ob) return (oa < 0 ? 99 : oa) - (ob < 0 ? 99 : ob);
-  if (a.online !== b.online) return a.online ? -1 : 1;
-  return ipNum((a.ips || [])[0]) - ipNum((b.ips || [])[0]);
+  return ipNum((a.ips || [])[0]) - ipNum((b.ips || [])[0]) || a.id.localeCompare(b.id);
 }
 function measure(n) {
   n.cw = cardW(n); n.ch = cardH(n);
@@ -638,7 +637,7 @@ function layout() {
     if (!best || k > best.k * 1.02) best = { k, lines, W };
   }
   const edges = [], frames = [];
-  HEADS = []; BUSES = [];
+  HEADS = []; BUSES = []; DRAWN = [];
   let y = 150;
   for (const line of best.lines) {
     const lw = line.reduce((s, x) => s + x.w, 0) + SITE_GAP * (line.length - 1);
@@ -837,6 +836,7 @@ function drawExits(g, R) {
   const raw = links.map((l) => l.pts);
   nudge(raw, raw.length).forEach((pts, i) => {
     const { a, b } = links[i], d = roundPath(pts);
+    DRAWN.push({ kind: "exit", pts, ends: [a.id, b.id] });
     const t = el("title", {}, el("path", { class: "exit", d }, g));
     t.textContent = `${a.label} interneti ${b.label} üzerinden çıkıyor (exit node)`;
     el("path", { class: "exit-flow", d }, g);   // akış yönü: kullanan cihazdan exit node'a
@@ -933,6 +933,7 @@ function drawTailnet(g, ports, R, inet, exitRoutes) {
   const bt = text(g, Math.min(...ends) - 36, busY + 4, "Tailnet", "ts-bus-label", { "text-anchor": "end" });
   bt.setAttribute("fill", "var(--tail)");
   ports.forEach((p, i) => {
+    DRAWN.push({ kind: "tailnet", pts: drops[i], ends: [] });
     const path = el("path", { class: `ts-link ${p.st}`, d: roundPath(drops[i]) }, g);
     const t = el("title", {}, path); t.textContent = p.tip;
   });
@@ -1612,9 +1613,14 @@ function updateMeta() {
 function applyView() { world.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`); }
 function fit() {
   if (!bounds) return;
-  const vw = svg.clientWidth, vh = svg.clientHeight, top = 70, bottom = 56;
-  const k = Math.min((vw - 32) / bounds.w, (vh - top - bottom) / bounds.h, 1.4);
-  view = { k, x: (vw - bounds.w * k) / 2, y: top + (vh - top - bottom - bounds.h * k) / 2 };
+  const vw = svg.clientWidth, vh = svg.clientHeight, top = vw < 700 ? 130 : 70, bottom = 56;
+  if (vw < 700) {   // telefonda enine sığdır, aşağı kaydırılır: kartlar okunur kalsın
+    const k = Math.min((vw - 16) / bounds.w, 1.4);
+    view = { k, x: (vw - bounds.w * k) / 2, y: top };
+  } else {
+    const k = Math.min((vw - 32) / bounds.w, (vh - top - bottom) / bounds.h, 1.4);
+    view = { k, x: (vw - bounds.w * k) / 2, y: top + (vh - top - bottom - bounds.h * k) / 2 };
+  }
   applyView();
 }
 function zoomAt(f, cx, cy) {
@@ -1763,8 +1769,38 @@ function openLogin(msg) {
     catch (err) { $("#lErr").textContent = err.message; }
   };
 }
+/* Öz-test (adresin sonuna #selftest): kartlar üst üste binmiyor, çizgiler kartların içinden
+   geçmiyor, JS hatası yok. Tailnet kapalı ve açıkken bakar; sonucu body[data-selftest]'e yazar
+   (tests/test_ui.py başsız Chromium ile okur). */
+const JS_ERRORS = [];
+addEventListener("error", (e) => JS_ERRORS.push(String(e.message)));
+function selfTest() {
+  const problems = [], rect = (n) => [n.x, n.y, n.x + n.cw, n.y + n.ch];
+  const hit = (r, x0, y0, x1, y1) => Math.max(x0, x1) > r[0] + 1 && Math.min(x0, x1) < r[2] - 1 && Math.max(y0, y1) > r[1] + 1 && Math.min(y0, y1) < r[3] - 1;
+  for (const tail of [false, true]) {
+    prefs.tail = tail; render();
+    const cards = [...ALL.filter((n) => n.x !== undefined && n.kind !== "internet"), ...HEADS];
+    for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) {
+      const a = rect(cards[i]), b = rect(cards[j]);
+      if (hit(a, b[0], b[1], b[2], b[3])) problems.push(`üst üste: ${cards[i].id} / ${cards[j].id}`);
+    }
+    for (const d of DRAWN) for (let k = 1; k < d.pts.length; k++) {
+      const [x0, y0] = d.pts[k - 1], [x1, y1] = d.pts[k];
+      for (const c of cards) if (!d.ends.includes(c.id) && hit(rect(c), x0, y0, x1, y1))
+        problems.push(`${d.kind} çizgisi kartın içinden geçiyor: ${c.id} (${d.ends.join(" → ")})`);
+    }
+  }
+  prefs.tail = false; render();
+  document.body.dataset.selftest = JSON.stringify({ ok: !problems.length && !JS_ERRORS.length, problems: [...new Set(problems)].slice(0, 20),
+    errors: JS_ERRORS, cards: ALL.filter((n) => n.x !== undefined).length, lines: DRAWN.length });
+}
 (async () => {
   await probeApi(); await load(true);
+  if (location.hash === "#selftest") {
+    try { closeDrawers(); selfTest(); }
+    catch (e) { document.body.dataset.selftest = JSON.stringify({ ok: false, problems: [], errors: [String(e && e.stack || e)] }); }
+    return;
+  }
   if (CAN_EDIT && STATE && STATE.settings.setup_done === false && DATA) { openDrawer("settings"); renderWizard(); }
 })();
 setInterval(() => load(false), 30000);
