@@ -747,7 +747,7 @@ class ApiTest(unittest.TestCase):
 
     def test_ingest_asks_old_agent_to_update(self):
         token = store.Store(store.Paths(self.home)).agents()["agents"]["router"]["token"]
-        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n10", "#VERSION\n2", 1)
+        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n11", "#VERSION\n2", 1)
         st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=old.encode(), ctype="text/plain")
         self.assertEqual((st, body.strip()), (200, "ok update"))
         cur = open(os.path.join(FIX, "router.txt")).read()
@@ -821,6 +821,28 @@ class ApiTest(unittest.TestCase):
         self.call("PUT", dev, {})
         os.remove(app.paths.auth)
 
+    def test_agent_removal_handshake(self):
+        """Sil -> ajan bir sonraki raporunda kendini kaldırır -> "kaldırıldım" -> kayıt silinir."""
+        st, body = self.call("POST", "/api/agents", {"name": "ev3", "kind": "router"})
+        token = store.Store(store.Paths(self.home)).agents()["agents"]["ev3"]["token"]
+        ing = lambda text: self.call("POST", f"/api/ingest?agent=ev3&token={token}", raw=text.encode(), ctype="text/plain")
+        cur = open(os.path.join(FIX, "router.txt")).read()
+        self.assertEqual(ing(cur)[1].strip(), "ok")
+        self.assertEqual(self.call("DELETE", "/api/agent?name=ev3", {})[0], 200)
+        a = next(x for x in json.loads(self.call("GET", "/api/agents")[1]) if x["name"] == "ev3")
+        self.assertTrue(a["removing"])
+        self.assertIn("nodesk-listen disable", a["manual_uninstall"])
+        self.assertEqual(ing(cur.replace("#VERSION\n11", "#VERSION\n9", 1))[1].strip(), "ok update",
+                         "eski sürüm kaldırmayı bilmez: önce güncellenir")
+        self.assertEqual(ing(cur)[1].strip(), "ok uninstall")
+        self.assertEqual(ing("#UNINSTALLED\n#END\n")[1].strip(), "ok bye")
+        self.assertNotIn("ev3", [x["name"] for x in json.loads(self.call("GET", "/api/agents")[1])])
+        self.assertEqual(ing(cur)[0], 403, "anahtar artık geçersiz")
+        # zorla silme: cihaza ulaşılamıyorsa
+        self.call("POST", "/api/agents", {"name": "ev4", "kind": "linux"})
+        self.call("DELETE", "/api/agent?name=ev4&force=1", {})
+        self.assertNotIn("ev4", [x["name"] for x in json.loads(self.call("GET", "/api/agents")[1])])
+
     def test_scan_now(self):
         st, body = self.call("POST", "/api/scan", {})
         self.assertEqual(st, 200)
@@ -832,7 +854,7 @@ class ScriptsTest(unittest.TestCase):
             s = agents.installer(kind, "http://100.64.0.1:8088", "x", "tok")
             r = subprocess.run(["sh", "-n"], input=s, text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(agents.topo_version(), "10")
+        self.assertEqual(agents.topo_version(), "11")
 
     def test_router_installer_sandbox(self):
         """Router kurulum scriptini sahte kök dizinde BusyBox ile iki kez çalıştır."""
@@ -910,6 +932,54 @@ else printf '#!/bin/sh\\n# NODESK_EOF\\ntouch {root}/updated\\n' > "$o"; fi
         r = subprocess.run([bb, "sh", f"{root}/usr/sbin/nodesk-agent"], env={**env, "NODESK_UPDATING": "1"})
         self.assertFalse(os.path.exists(f"{root}/updated"), "kurulum sırasında tekrar güncellemeye girmez")
         shutil.rmtree(root)
+
+    def test_router_agent_uninstalls_itself(self):
+        """Kurulumdan sonra Pi "ok uninstall" derse router'da hiçbir Nodesk dosyası kalmaz."""
+        shell = shutil.which("busybox") and [shutil.which("busybox"), "sh"] or ["sh"]
+        os.makedirs(os.path.join(ROOT, "tests", "out"), exist_ok=True)
+        root = tempfile.mkdtemp(dir=os.path.join(ROOT, "tests", "out"))
+        self.addCleanup(shutil.rmtree, root, True)
+        for d in ("usr/sbin", "etc/crontabs", "etc/dropbear", "etc/init.d", "tmp", "bin"):
+            os.makedirs(os.path.join(root, d), exist_ok=True)
+        with open(os.path.join(root, "etc/crontabs/root"), "w") as f:
+            f.write("17 4 * * 1 /usr/sbin/update-tailscale-safe\n")
+        with open(os.path.join(root, "bin/curl"), "w") as f:   # sahte curl: POST gövdesini kaydeder
+            f.write(f"""#!/bin/sh
+o=""; body=""
+while [ $# -gt 0 ]; do case "$1" in -o) o="$2"; shift;; --data-binary) body="${{2#@}}"; shift;; esac; shift; done
+[ -n "$body" ] && cat "$body" >> {root}/posted
+[ -n "$o" ] && [ "$o" != /dev/null ] && cat {root}/answer > "$o" 2>/dev/null
+exit 0
+""")
+        for b in ("curl", "logger"):
+            if b == "logger":
+                open(os.path.join(root, "bin/logger"), "w").write("#!/bin/sh\nexit 0\n")
+            os.chmod(os.path.join(root, "bin", b), 0o755)
+        open(os.path.join(root, "answer"), "w").write("ok\n")
+        fix = lambda t: t.replace("/usr/sbin/", f"{root}/usr/sbin/").replace("/etc/", f"{root}/etc/").replace("/tmp/", f"{root}/tmp/")
+        env = {"PATH": f"{root}/bin:/usr/bin:/bin"}
+        r = subprocess.run(shell + ["-c", fix(agents.installer("router", "http://pi:8088", "router", "tok"))],
+                           text=True, capture_output=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        # dinleyici kurulmuş gibi (bu makinede ucode yok): servis betiği durdurulma/kaldırılma çağrılarını kaydeder
+        with open(os.path.join(root, "etc/init.d/nodesk-listen"), "w") as f:
+            f.write(f"#!/bin/sh\necho \"$1\" >> {root}/listen.log\n")
+        os.chmod(os.path.join(root, "etc/init.d/nodesk-listen"), 0o755)
+        open(os.path.join(root, "usr/sbin/nodesk-listen"), "w").write("x")
+        open(os.path.join(root, "tmp/nodesk-heard.txt"), "w").write("x")
+        for f in ("usr/sbin/nodesk-agent", "usr/sbin/topo-collect", "etc/nodesk-agent.conf"):
+            self.assertTrue(os.path.exists(os.path.join(root, f)), f"kurulumdan sonra var: {f}")
+        self.assertIn("nodesk-agent", open(os.path.join(root, "etc/crontabs/root")).read())
+        open(os.path.join(root, "answer"), "w").write("ok uninstall\n")
+        r = subprocess.run(shell + [os.path.join(root, "usr/sbin/nodesk-agent")], text=True, capture_output=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        left = [os.path.relpath(os.path.join(d, f), root) for d, _, fs in os.walk(root) for f in fs
+                if "nodesk" in f or "topo-collect" in f]
+        self.assertEqual(left, [], "router'da Nodesk dosyası kalmadı")
+        self.assertEqual(open(os.path.join(root, "etc/crontabs/root")).read(), "17 4 * * 1 /usr/sbin/update-tailscale-safe\n",
+                         "yalnızca Nodesk'in cron satırı silindi")
+        self.assertEqual(open(os.path.join(root, "listen.log")).read().split(), ["stop", "disable"])
+        self.assertTrue(open(os.path.join(root, "posted")).read().endswith("#UNINSTALLED\n#END\n"), "Pi'ye son haber")
 
     def test_cli_syntax(self):
         self.assertEqual(subprocess.run(["bash", "-n", os.path.join(ROOT, "bin", "nodesk")]).returncode, 0)

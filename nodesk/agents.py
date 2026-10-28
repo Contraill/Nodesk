@@ -67,6 +67,28 @@ if [ -z "$NODESK_UPDATING" ] && [ -n "$NODESK_INSTALL_URL" ] && grep -q '^ok upd
     fi
     rm -f "$NEW"
 fi
+if grep -q '^ok uninstall' "$RESP" 2>/dev/null; then
+    # Ajan arayüzden silindi: router'dan iz bırakmadan kaldır, sonra Pi'ye son haberi ver.
+    # (Pi'nin kurduğu paketlere dokunmaz: arp-scan, ucode-mod-socket kullanıcınındır.)
+    logger -t nodesk-agent "Pi ajanı sildi; router'dan kaldırılıyor"
+    /etc/init.d/nodesk-listen stop >/dev/null 2>&1
+    /etc/init.d/nodesk-listen disable >/dev/null 2>&1
+    sed -i '/nodesk-agent/d' /etc/crontabs/root 2>/dev/null
+    /etc/init.d/cron restart >/dev/null 2>&1
+    rm -f /etc/init.d/nodesk-listen /usr/sbin/nodesk-listen /usr/sbin/topo-collect /etc/nodesk-agent.conf
+    printf '#UNINSTALLED\n#END\n' > "$OUT"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsS -m 25 -H 'Content-Type: text/plain' --data-binary "@$OUT" -o /dev/null "$NODESK_URL"
+    else
+        uclient-fetch -q --timeout=25 -O /dev/null --post-file="$OUT" "$NODESK_URL"
+    fi
+    rm -f /tmp/nodesk-agent.txt /tmp/nodesk-agent.resp /tmp/nodesk-heard.txt /tmp/nodesk-heard.txt.sending \
+        /tmp/nodesk-probed.txt /tmp/nodesk-exit.prev /tmp/nodesk-exit.next /tmp/nodesk-names.uc \
+        /tmp/nodesk-install.sh /tmp/nodesk-install.log /tmp/authorized_keys.yedek
+    logger -t nodesk-agent "kaldırıldı"
+    rm -f /usr/sbin/nodesk-agent
+    exit 0
+fi
 exit 0
 NODESK_EOF
 chmod 755 /usr/sbin/nodesk-agent.new
@@ -184,6 +206,21 @@ END { for (c in n) print c, n[c] }'
 } > "$OUT"
 curl -fsS -m 25 -H 'Content-Type: text/plain' --data-binary "@$OUT" -o "$RESP" "$NODESK_URL"
 rc=$?
+if [ $rc -eq 0 ] && grep -q '^ok uninstall' "$RESP"; then
+    # Ajan arayüzden silindi: sunucudan iz bırakmadan kaldır, Pi'ye son haberi ver.
+    logger -t nodesk-agent "Pi ajanı sildi; kaldırılıyor" 2>/dev/null
+    printf '#UNINSTALLED\n#END\n' > "$OUT"
+    curl -fsS -m 25 -H 'Content-Type: text/plain' --data-binary "@$OUT" -o /dev/null "$NODESK_URL"
+    rm -f "$OUT" "$RESP" /etc/cron.d/nodesk-agent /usr/local/sbin/nodesk-agent /var/log/nodesk-agent-install.log \
+        /tmp/nodesk-exit.prev /tmp/nodesk-exit.next
+    rm -rf /etc/nodesk
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl disable --now nodesk-agent.timer >/dev/null 2>&1
+        rm -f /etc/systemd/system/nodesk-agent.service /etc/systemd/system/nodesk-agent.timer
+        systemctl daemon-reload >/dev/null 2>&1
+    fi
+    exit 0
+fi
 if [ $rc -eq 0 ] && [ -z "$NODESK_UPDATING" ] && [ -n "$NODESK_INSTALL_URL" ] && grep -q '^ok update' "$RESP"; then
     NEW=$(mktemp)
     if curl -fsS -m 30 -o "$NEW" "$NODESK_INSTALL_URL" && head -n 1 "$NEW" | grep -q '^#!/bin/sh' \
@@ -254,7 +291,25 @@ def topo_version():
     return None
 
 
-LINUX_AGENT_VERSION = "4"   # LINUX_INSTALLER değişince artır
+LINUX_AGENT_VERSION = "5"   # LINUX_INSTALLER değişince artır
+
+
+# Bu sürümden itibaren ajan "ok uninstall" yanıtıyla kendini kaldırabilir
+UNINSTALL_SINCE = {"router": 11, "linux": 5}
+
+
+def can_uninstall(kind, version):
+    return str(version or "").isdigit() and int(version) >= UNINSTALL_SINCE[kind]
+
+
+def manual_uninstall(kind):
+    """Cihaza ulaşılamıyorsa elle kaldırma komutu (cihazda çalıştırılır)."""
+    if kind == "router":
+        return ("/etc/init.d/nodesk-listen stop; /etc/init.d/nodesk-listen disable; sed -i '/nodesk-agent/d' "
+                "/etc/crontabs/root; /etc/init.d/cron restart; rm -f /etc/init.d/nodesk-listen /usr/sbin/nodesk-listen "
+                "/usr/sbin/nodesk-agent /usr/sbin/topo-collect /etc/nodesk-agent.conf /tmp/nodesk-*")
+    return ("systemctl disable --now nodesk-agent.timer; rm -f /etc/systemd/system/nodesk-agent.* "
+            "/etc/cron.d/nodesk-agent /usr/local/sbin/nodesk-agent; rm -rf /etc/nodesk; systemctl daemon-reload")
 
 
 def expected_version(kind):

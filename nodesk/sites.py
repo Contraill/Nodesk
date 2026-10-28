@@ -45,7 +45,8 @@ def from_config(cfg):
 def resolve(sites, router_agents):
     """Ayarlardaki gruplar + kayıtlı router ajanları -> eksiksiz grup listesi.
     Her zaman tam olarak bir yerel ağ ve bir varsayılan grup vardır."""
-    out = [dict(s) for s in sites or []]
+    # ajanı silinmiş router grubu haritadan kalkar (ayarda kalır: aynı adla yeniden eklenirse döner)
+    out = [dict(s) for s in sites or [] if s.get("type") != "router" or s.get("agent") in router_agents]
     if not any(s["type"] == "local" for s in out):
         out.insert(0, {"id": "ev1", "type": "local", "name": "Ev"})
     have = {s.get("agent") for s in out if s["type"] == "router"}

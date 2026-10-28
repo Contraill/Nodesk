@@ -810,6 +810,11 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                                 (nid.startswith("ip:") and now - last > dt.timedelta(hours=24))):
             del state[nid]
 
+    # artık var olmayan grupların (ör. ajanı silinen router) eski kayıtları haritada kalmasın
+    valid_sites = {x["id"] for x in allsites}
+    for nid in [n for n, st in state.items() if (st.get("snapshot") or {}).get("site") not in valid_sites | {None}]:
+        del state[nid]
+
     # ------------------------------------------------ düğümler
     sites_present = {LID} | {x["id"] for x in routers} | {st["snapshot"].get("site") for st in state.values()}
     roots = {}

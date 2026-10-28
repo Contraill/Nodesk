@@ -571,9 +571,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(self.agent_list())
             if method == "DELETE" and path == "/api/agent":
                 self.json_body()
-                ok = app.store.remove_agent(q.get("name", ""))
+                name = q.get("name", "")
+                if q.get("force"):   # cihaza ulaşılamıyor: kayıt silinir, cihazdaki ajan elle kaldırılır
+                    ok = app.store.purge_agent(name)
+                else:                # ajan bir sonraki raporunda kendini kaldırır
+                    ok = app.store.remove_agent(name)
                 app.rebuild()
-                return self.send_json({"removed": ok})
+                return self.send_json({"removed": ok, "pending": ok and not q.get("force")})
             if method == "GET" and path == "/api/agent/install":
                 name, token = q.get("name", ""), q.get("token", "")
                 if not app.store.check_token(name, token):
@@ -588,13 +592,25 @@ class Handler(BaseHTTPRequestHandler):
                 text = self.body(1024 * 1024).decode("utf-8", "replace")
                 if "#END" not in text:
                     return self.fail("rapor eksik (#END yok)")
+                ag = app.store.agents()["agents"][name]
+                if ag.get("removing") and text.startswith("#UNINSTALLED"):
+                    app.store.purge_agent(name)
+                    log(f"ajan {name}: cihazdan kaldırıldı, kayıt silindi")
+                    threading.Thread(target=app.rebuild, daemon=True).start()
+                    return self.send_text("ok bye\n")
                 app.store.save_report(name, text, self.remote())
                 if app.store.agents()["agents"][name]["kind"] == "router":
                     app.import_router_names()
                 threading.Thread(target=app.rebuild, daemon=True).start()
-                kind = app.store.agents()["agents"][name]["kind"]
+                kind = ag["kind"]
                 want = agents.expected_version(kind)
                 have = agents.reported_version(kind, util.parse_sections(text))
+                if ag.get("removing"):
+                    if agents.can_uninstall(kind, have):
+                        log(f"ajan {name}: silindi, cihazdan kendini kaldıracak")
+                        return self.send_text("ok uninstall\n")
+                    # eski sürüm kaldırmayı bilmez: önce güncellensin, sonraki raporda kaldırılır
+                    return self.send_text("ok update\n" if have != want else "ok\n")
                 if app.store.settings().get("agent_auto_update", True) and have != want:
                     log(f"ajan {name}: sürüm {have} -> {want}, kendini güncelleyecek")
                     return self.send_text("ok update\n")
@@ -624,7 +640,8 @@ class Handler(BaseHTTPRequestHandler):
         for name, a in sorted(app.store.agents()["agents"].items()):
             r = reports.get(name, {})
             out.append({"name": name, "kind": a["kind"], "received": r.get("received"),
-                        "from": r.get("from"),
+                        "from": r.get("from"), "removing": a.get("removing"),
+                        "manual_uninstall": agents.manual_uninstall(a["kind"]),
                         "commands": agents.install_commands(a["kind"], app.public_url(), name,
                                                             a["token"])})
         return out

@@ -1554,8 +1554,13 @@ function renderSettings() {
   };
   $$("[data-agent-show]", $("#sbody")).forEach((b) => b.onclick = () => { openAgent = openAgent === b.dataset.agentShow ? null : b.dataset.agentShow; renderSettings(); });
   $$("[data-agent-del]", $("#sbody")).forEach((b) => b.onclick = async () => {
-    if (!confirm(`"${b.dataset.agentDel}" ajanı silinsin mi? Anahtarı geçersiz olur; o cihazdaki ajan artık rapor gönderemez.`)) return;
+    if (!confirm(`"${b.dataset.agentDel}" ajanı silinsin mi?\n\nCihaz bir sonraki raporunda (en geç 5 dakika) kendini tamamen kaldırır: zamanlayıcıyı, dinleyici servisini ve dosyalarını siler, sonra kayıt da silinir.`)) return;
     try { await api("DELETE", "/api/agent?name=" + encodeURIComponent(b.dataset.agentDel)); AGENTS = await api("GET", "/api/agents"); await load(true); renderSettings(); }
+    catch (err) { $("#aErr").textContent = err.message; }
+  });
+  $$("[data-agent-force]", $("#sbody")).forEach((b) => b.onclick = async () => {
+    if (!confirm(`"${b.dataset.agentForce}" kaydı şimdi silinsin mi? Cihazdaki ajan kendini kaldıramaz; yukarıdaki komutu cihazda elle çalıştırman gerekir.`)) return;
+    try { await api("DELETE", "/api/agent?force=1&name=" + encodeURIComponent(b.dataset.agentForce)); AGENTS = await api("GET", "/api/agents"); await load(true); renderSettings(); }
     catch (err) { $("#aErr").textContent = err.message; }
   });
   $$("[data-copy]", $("#sbody")).forEach((b) => b.onclick = () => copyText(b.previousElementSibling.textContent, b));
@@ -1566,8 +1571,10 @@ function agentHtml(a) {
   const cls = !a.received ? "" : d.fresh ? "on" : "warn";
   let h = `<div class="agent"><header><span class="status ${cls}"></span><b>${esc(a.name)}</b><small>${a.kind === "router" ? "router" : "sunucu"} · ${a.received ? "son rapor " + esc(ago(a.received)) : "henüz rapor yok"}</small>
     ${u.listen_rss_kb ? `<small title="Router'da Nodesk dinleyicisinin belleği / router'ın boş belleği">${(u.listen_rss_kb / 1024).toFixed(1)} MB · boş ${Math.round((u.mem_available_kb || 0) / 1024)} MB</small>` : ""}
-    <button class="btn line" data-agent-show="${esc(a.name)}">${openAgent === a.name ? "Gizle" : "Kurulum"}</button><button class="btn danger" data-agent-del="${esc(a.name)}" aria-label="Sil">Sil</button></header>`;
-  if (openAgent === a.name) {
+    ${a.removing ? `<button class="btn danger" data-agent-force="${esc(a.name)}">Yine de sil</button></header>
+      <p class="hint" style="margin:6px 0 0">Kaldırılıyor: cihaz bir sonraki raporunda (en geç 5 dakika) kendini tamamen silecek: zamanlayıcı, dinleyici servisi, dosyalar. Cihaz kapalıysa ya da ulaşılamıyorsa "Yine de sil" ile kaydı silebilirsin; o zaman cihazda şunu çalıştır:</p><pre>${esc(a.manual_uninstall || "")}</pre><button class="btn line" data-copy>Kopyala</button>`
+    : `<button class="btn line" data-agent-show="${esc(a.name)}">${openAgent === a.name ? "Gizle" : "Kurulum"}</button><button class="btn danger" data-agent-del="${esc(a.name)}" aria-label="Sil">Sil</button></header>`}`;
+  if (openAgent === a.name && !a.removing) {
     const c = a.commands || {};
     h += `<p class="hint" style="margin:8px 0 2px">${a.kind === "router" ? "Router'da (OpenWrt):" : "O sunucuda:"}</p><pre>${esc(c.direct)}</pre><button class="btn line" data-copy>Kopyala</button>`;
     if (c.ssh) h += `<p class="hint" style="margin:8px 0 2px">Ya da router'a SSH ile girebildiğin bir bilgisayardan (ROUTER_IP yerine router'ın adresi):</p><pre>${esc(c.ssh)}</pre><button class="btn line" data-copy>Kopyala</button>`;

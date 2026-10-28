@@ -302,6 +302,18 @@ class Store:
             return cur
 
     def remove_agent(self, name):
+        """Silme isteği: ajan bir sonraki raporunda kendini cihazdan kaldırır ("ok uninstall"),
+        sonra "#UNINSTALLED" gönderir ve kayıt o zaman silinir (purge_agent)."""
+        with self.lock:
+            a = self.agents()
+            if name not in a["agents"]:
+                return False
+            a["agents"][name]["removing"] = util.iso(util.utcnow())
+            util.write_json(self.p.agents, a, mode=0o600)
+            return True
+
+    def purge_agent(self, name):
+        """Kaydı ve raporlarını tamamen sil (cihaz kendini kaldırdı ya da kullanıcı zorladı)."""
         with self.lock:
             a = self.agents()
             if a["agents"].pop(name, None) is None:
