@@ -55,7 +55,8 @@
    "ExitNode": false,
    "ExitNodeOption": false,
    "PrimaryRoutes": null,
-   "LastSeen": "2026-10-27T13:00:00Z"
+   "LastSeen": "2026-10-27T13:00:00Z",
+   "Active": true
   },
   "k3": {
    "ID": "nA2",

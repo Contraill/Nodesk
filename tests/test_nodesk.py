@@ -172,6 +172,13 @@ class CollectTest(unittest.TestCase):
         self.assertIn(("ts:laptop", "router"), links, "router'ın bağlantı tablosu")
         self.assertNotIn(("router", "router"), links, "kendi trafiği sayılmaz")
 
+    def test_tailscale_path(self):
+        ts = {n["tailscale"]["name"]: n["tailscale"]["path"] for n in self.data["nodes"] if n.get("tailscale")}
+        self.assertEqual(ts["cloud-arm"], "doğrudan")
+        self.assertEqual(ts["cloud-amd-1"], "aktarıcı (fra)", "trafik var, doğrudan adres yok")
+        self.assertEqual(ts["cloud-amd-2"], "boşta", "Relay alanı dolu ama trafik yok: aktarıcı sayılmaz")
+        self.assertEqual(ts["laptop-old"], "bağlantı yok")
+
     def test_exit_tuples_filter(self):
         e = [("100.64.0.3", "142.250.1.1", 6, 50000, 443),   # tailnet -> internet
              ("100.64.0.4", "192.168.1.1", 17, 5000, 53),     # yerel hedef: exit değil

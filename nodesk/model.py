@@ -178,14 +178,18 @@ def ts_short(node):
 def ts_info(node, is_self=False):
     ips = node.get("TailscaleIPs") or []
     v4 = next((i for i in ips if ":" not in i), ips[0] if ips else None)
+    # Relay alanı bağlantının değil, cihazın "ev" DERP bölgesidir: her eşte doludur. Aktarıcı
+    # yalnızca trafik varken (Active) doğrudan adres (CurAddr) yoksa; trafik yoksa "boşta".
     if is_self:
         path = "bu cihaz"
+    elif not node.get("Online"):
+        path = "bağlantı yok"
     elif node.get("CurAddr"):
         path = "doğrudan"
-    elif node.get("Relay"):
-        path = f"aktarıcı ({node['Relay']})"
+    elif node.get("Active"):
+        path = f"aktarıcı ({node.get('Relay') or 'DERP'})"
     else:
-        path = "bağlantı yok"
+        path = "boşta"
     addrs = []
     for a in (node.get("Addrs") or []) + [node.get("CurAddr") or ""]:
         host = a.rpartition(":")[0].strip("[]")

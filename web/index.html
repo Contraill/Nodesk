@@ -452,7 +452,11 @@ function dur(sec) {
   return d ? `${d} gün ${h} saat` : h ? `${h} saat ${m} dk` : `${m} dk`;
 }
 function fmtTime(iso) { if (!iso) return "—"; try { return new Date(iso).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" }); } catch (e) { return iso; } }
-function tsPath(n) { const t = n.tailscale; if (!t) return null; if (!t.online) return "down"; if ((t.path || "").startsWith("aktarıcı")) return "relay"; return "direct"; }
+function tsPath(n) {
+  const t = n.tailscale; if (!t) return null; if (!t.online) return "down";
+  if ((t.path || "").startsWith("aktarıcı")) return "relay";
+  return t.path === "boşta" ? "idle" : "direct";   // boşta: şu an trafik yok, gerekince doğrudan bağlanır
+}
 function ipNum(ip) { if (!ip) return 1e12; return ip.split(".").reduce((a, b) => a * 256 + (+b || 0), 0); }
 function hostFor(n) {
   if (n.id === "self") return location.hostname || (n.ips || [])[0];
@@ -901,16 +905,17 @@ function tailnetPorts(frames) {
   const self = byId.get("self");
   return frames.filter((f) => tsMembers(f.id).length).map((f) => {
     const ms = tsMembers(f.id), paths = ms.map(tsPath), hub = !!self && f.id === self.site;
-    const nDir = paths.filter((x) => x === "direct").length, nRel = paths.filter((x) => x === "relay").length, nDown = ms.length - nDir - nRel;
+    const cnt = (k) => paths.filter((x) => x === k).length;
+    const nDir = cnt("direct"), nRel = cnt("relay"), nIdle = cnt("idle"), nDown = cnt("down");
     const st = hub ? "direct" : nDown === ms.length ? "down" : nRel ? "relay" : "direct";
     // kısa özet (çerçeveye sığsın); ayrıntı üzerine gelince
     let sum;
     if (hub) sum = "görüş noktası";
     else if (ms.length === 1) sum = ms[0].tailscale.path;
     else if (nDown === ms.length) sum = "bağlantı yok";
-    else if (nDir === ms.length) sum = "doğrudan";
-    else if (nRel === ms.length) sum = `${nRel} aktarıcı`;
-    else sum = `${nDir}/${ms.length} doğrudan`;
+    else if (nRel) sum = `${nRel}/${ms.length} aktarıcı`;
+    else sum = [nDir ? `${nDir} doğrudan` : "", nIdle ? `${nIdle} boşta` : "", nDown ? `${nDown} kapalı` : ""].filter(Boolean).join(" · ");
+    if (`Tailnet · ${sum}`.length * 6.5 + 46 > f.w) sum = `${ms.length - nDown}/${ms.length} çevrimiçi`;   // çerçeveye sığsın
     const label = `Tailnet · ${sum}`, w = label.length * 6.5 + 22;
     const cx = Math.max(f.x + w / 2 + 12, Math.min(f.x + f.w - w / 2 - 12, f.x + f.w / 2 + 130));
     return { site: f.id, f, st, hub, label, x: cx - w / 2, y: f.y - 10, w, h: 20, cx,
@@ -998,7 +1003,7 @@ function drawCard(parent, n, q, fa) {
   text(g, 46, 41, clip(line, 26), "ip");
   if ((n.tags || []).length) text(g, n.cw - 10, 41, "#" + clip(n.tags[0], 10), "tagdot", { "text-anchor": "end" });
   if (n.tailscale) {
-    const p = tsPath(n), col = p === "direct" ? "var(--tail)" : p === "relay" ? "var(--relay)" : "var(--off)";
+    const p = tsPath(n), col = p === "direct" ? "var(--tail)" : p === "relay" ? "var(--relay)" : p === "idle" ? "var(--muted)" : "var(--off)";
     el("rect", { x: n.cw - 30, y: -8, width: 22, height: 16, rx: 8, fill: "var(--card)", stroke: col, "stroke-width": 1.4 }, g);
     text(g, n.cw - 19, 4, "ts", "ts-badge", { "text-anchor": "middle", fill: col });
   }
