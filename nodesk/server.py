@@ -19,7 +19,7 @@ import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agents, model, passive, probe, sources, store, util
+from . import agents, auth, model, passive, probe, sources, store, util
 
 API_HOST = "127.0.0.1"
 API_PORT = int(os.environ.get("NODESK_API_PORT", "8089"))
@@ -34,6 +34,7 @@ class App:
     def __init__(self, home, fixtures=None):
         self.paths = store.Paths(home)
         self.store = store.Store(self.paths)
+        self.auth = auth.Auth(self.paths.auth)
         self.fixtures = fixtures
         self.cfg = store.load_config(self.paths)
         oui_path = os.environ.get("NODESK_OUI") or self.cfg.get("general", {}).get(
@@ -285,7 +286,13 @@ class App:
             data["app"] = self.app_info()
             data["apps"] = {k: v for k, v in self.store.overrides().get("apps", {}).items()}
             util.write_json(self.paths.state, state)
-            util.write_json(self.paths.data_json, data)
+            util.write_json(self.paths.data_private, data, mode=0o600, backup=False)
+            if settings["access"]["view"] == "login":   # gizli harita: herkese açık klasörde durmasın
+                for p in (self.paths.data_json, self.paths.data_json + ".bak"):
+                    if os.path.exists(p):
+                        os.remove(p)
+            else:
+                util.write_json(self.paths.data_json, data, backup=False)
             return data
 
     def collect(self):
@@ -435,10 +442,59 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         self.dispatch("DELETE")
 
+    def send_cookie(self, obj, cookie):
+        body = json.dumps(obj, ensure_ascii=False).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Set-Cookie", cookie)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    # Ajan anahtarıyla korunan ya da herkese açık olması gereken uçlar
+    OPEN = {("GET", "/api/agent/install"), ("POST", "/api/ingest"), ("POST", "/api/login"),
+            ("POST", "/api/logout"), ("GET", "/api/auth")}
+    VIEW = {("GET", "/api/state"), ("GET", "/api/data")}
+    FAILS = {}   # IP -> (hata sayısı, son deneme): parola denemelerini yavaşlat
+
     def dispatch(self, method):
         path, q = self.route()
         app = self.app
         try:
+            access = app.store.settings()["access"]
+            ip, tok = self.remote(), auth.cookie_token(self.headers.get("Cookie"))
+            can_edit, can_view, how = app.auth.identify(ip, tok, access)
+            if (method, path) not in self.OPEN:
+                if (method, path) in self.VIEW and not can_view:
+                    return self.fail("haritayı görmek için giriş gerekli", 401)
+                if (method, path) not in self.VIEW and not can_edit:
+                    return self.fail("düzenlemek için giriş gerekli", 401)
+            if method == "GET" and path == "/api/auth":
+                return self.send_json({"edit": can_edit, "view": can_view, "how": how,
+                                       "password": app.auth.has_password(),
+                                       "access": access if can_edit else None})
+            if method == "POST" and path == "/api/login":
+                n, last = self.FAILS.get(ip, (0, 0))
+                if n >= 5 and time.time() - last < 60:
+                    return self.fail("çok fazla hatalı deneme; bir dakika bekle", 429)
+                if not app.auth.check_password(str(self.json_body().get("password") or "")):
+                    self.FAILS[ip] = (n + 1, time.time())
+                    time.sleep(1)
+                    return self.fail("parola yanlış", 403)
+                self.FAILS.pop(ip, None)
+                t = app.auth.new_session()
+                return self.send_cookie({"ok": True}, f"{auth.COOKIE}={t}; HttpOnly; SameSite=Strict; Path=/; "
+                                                      f"Max-Age={auth.SESSION_DAYS * 86400}")
+            if method == "POST" and path == "/api/logout":
+                app.auth.end_session(tok)
+                return self.send_cookie({"ok": True}, f"{auth.COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0")
+            if method == "PUT" and path == "/api/password":
+                app.auth.set_password(str(self.json_body().get("password") or ""))
+                return self.send_json({"ok": True})
+            if method == "GET" and path == "/api/data":
+                data = util.read_json(app.paths.data_private)
+                return self.send_json(data) if data else self.fail("harita henüz hazır değil", 503)
             if method == "GET" and path == "/api/state":
                 return self.send_json(self.state())
             if method == "POST" and path == "/api/scan":

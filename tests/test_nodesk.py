@@ -414,6 +414,20 @@ class ProbeTest(unittest.TestCase):
                          "başka adrese gitmez")
 
 
+class FileSafetyTest(unittest.TestCase):
+    def test_corrupt_json_uses_backup(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        p = os.path.join(d, "overrides.json")
+        util.write_json(p, {"devices": {"a": 1}})
+        util.write_json(p, {"devices": {"a": 2}})          # önceki sürüm .bak'ta
+        with open(p, "w") as f:
+            f.write('{"devices": {"a": 3')                   # yarım yazılmış dosya
+        self.assertEqual(util.read_json(p, {}), {"devices": {"a": 1}}, "son sağlam yedek")
+        self.assertTrue(any(x.startswith("overrides.json.bozuk-") for x in os.listdir(d)), "bozuk dosya kenarda")
+        self.assertEqual(util.read_json(p, {}), {"devices": {"a": 1}}, "geri yüklendi")
+
+
 class CasaosTitleTest(unittest.TestCase):
     def test_pathological_compose_is_fast(self):
         """0.2.0'da regex bu biçimde dakikalarca takılıp tüm servisi kilitliyordu."""
@@ -532,13 +546,13 @@ class ApiTest(unittest.TestCase):
             return json.loads(r.read())
 
     @classmethod
-    def call(cls, method, path, body=None, ctype="application/json", raw=None):
-        data = raw if raw is not None else json.dumps(body or {}).encode()
+    def call(cls, method, path, body=None, ctype="application/json", raw=None, headers=None, full=False):
+        data = raw if raw is not None else (json.dumps(body or {}).encode() if method != "GET" else None)
         req = urllib.request.Request(f"http://127.0.0.1:{cls.port}{path}", data=data, method=method,
-                                     headers={"Content-Type": ctype})
+                                     headers={"Content-Type": ctype, **(headers or {})})
         try:
             with urllib.request.urlopen(req, timeout=10) as r:
-                return r.status, r.read().decode()
+                return (r.status, r.read().decode(), r.headers) if full else (r.status, r.read().decode())
         except urllib.error.HTTPError as e:
             return e.code, e.read().decode()
 
@@ -658,6 +672,47 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(st, 400)
         self.call("PUT", "/api/site?id=ev1", {})
         self.call("PUT", "/api/device?id=oracle-gw", {})
+
+    def test_access_rules(self):
+        """Ev ağı (misafir) görür ama düzenleyemez; tailnet düzenler; hesap listesi ve parola."""
+        app = server.Handler.app
+        lan, ts = {"X-Real-IP": "192.168.44.50"}, {"X-Real-IP": "100.64.0.4"}
+        dev = "/api/device?id=mac:9c:8e:cd:01:02:03"
+        self.assertEqual(self.call("GET", "/api/state", headers=lan)[0], 200, "harita herkese açık")
+        self.assertEqual(self.call("GET", "/api/data", headers=lan)[0], 200)
+        self.assertEqual(self.call("PUT", dev, {"name": "x"}, headers=lan)[0], 401, "misafir düzenleyemez")
+        self.assertEqual(self.call("GET", "/api/agents", headers=lan)[0], 401, "ajan anahtarları gizli")
+        self.assertEqual(self.call("POST", "/api/scan", {}, headers=lan)[0], 401)
+        self.assertEqual(self.call("PUT", dev, {"name": "x"}, headers=ts)[0], 200, "tailnet düzenler")
+        a = json.loads(self.call("GET", "/api/auth", headers=lan)[1])
+        self.assertEqual((a["edit"], a["view"], a["access"]), (False, True, None))
+        # yalnızca belirli Tailscale hesapları (kimlik whois ile, istemciye sorulmaz)
+        app.auth._whois_cache.clear()
+        app.auth._whois = lambda ip: {"100.64.0.4": "sahip@ornek.com"}.get(ip)
+        self.call("PUT", "/api/settings", {"access": {"ts_users": ["Sahip@ornek.com"]}})
+        self.assertEqual(self.call("PUT", dev, {"name": "x"}, headers=ts)[0], 200)
+        self.assertEqual(self.call("PUT", dev, {"name": "x"}, headers={"X-Real-IP": "100.64.0.3"})[0], 401,
+                         "listede olmayan tailnet hesabı")
+        # parola: ev ağından giriş
+        app.auth.set_password("dogru-parola-1")
+        self.assertEqual(self.call("POST", "/api/login", {"password": "yanlis"}, headers=lan)[0], 403)
+        st, _, h = self.call("POST", "/api/login", {"password": "dogru-parola-1"}, headers=lan, full=True)
+        self.assertEqual(st, 200)
+        cookie = h["Set-Cookie"].split(";")[0]
+        self.assertIn("HttpOnly", h["Set-Cookie"])
+        self.assertEqual(self.call("PUT", dev, {"name": "x"}, headers={**lan, "Cookie": cookie})[0], 200)
+        self.call("POST", "/api/logout", {}, headers={**lan, "Cookie": cookie})
+        self.assertEqual(self.call("PUT", dev, {"name": "x"}, headers={**lan, "Cookie": cookie})[0], 401,
+                         "çıkıştan sonra oturum geçersiz")
+        # gizli harita: görmek için de giriş; data.json herkese açık klasörde kalmaz
+        self.call("PUT", "/api/settings", {"access": {"view": "login", "ts_users": []}})
+        self.assertEqual(self.call("GET", "/api/data", headers=lan)[0], 401)
+        self.assertFalse(os.path.exists(os.path.join(self.home, "www", "data.json")))
+        self.assertEqual(self.call("GET", "/api/data", headers=ts)[0], 200)
+        self.call("PUT", "/api/settings", {"access": {"view": "everyone"}})
+        self.assertTrue(os.path.exists(os.path.join(self.home, "www", "data.json")))
+        self.call("PUT", dev, {})
+        os.remove(app.paths.auth)
 
     def test_scan_now(self):
         st, body = self.call("POST", "/api/scan", {})

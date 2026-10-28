@@ -4,8 +4,10 @@ import datetime as dt
 import ipaddress
 import json
 import os
+import shutil
 import re
 import tempfile
+import time
 import threading
 
 MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
@@ -109,14 +111,31 @@ _write_lock = threading.Lock()
 
 
 def read_json(path, default=None):
+    """Bozuk dosya sessizce boş sayılmaz (bir sonraki kayıt verileri ezerdi): kenara alınır
+    (<ad>.bozuk-<zaman>) ve son sağlam yedek (<ad>.bak) kullanılır."""
     try:
         with open(path, encoding="utf-8") as f:
             return json.load(f)
-    except (OSError, json.JSONDecodeError):
+    except OSError:
         return default
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        bad = f"{path}.bozuk-{int(time.time())}"
+        try:
+            os.replace(path, bad)
+        except OSError:
+            pass
+        print(f"[nodesk] bozuk dosya kenara alındı: {bad}", flush=True)
+        try:
+            with open(path + ".bak", encoding="utf-8") as f:
+                data = json.load(f)
+            write_json(path, data)
+            print(f"[nodesk] yedekten geri yüklendi: {path}.bak", flush=True)
+            return data
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            return default
 
 
-def write_json(path, obj, mode=0o644, indent=1):
+def write_json(path, obj, mode=0o644, indent=1, backup=True):
     """Atomik yazma: okuyan taraf hiçbir zaman yarım dosya görmez."""
     d = os.path.dirname(path) or "."
     with _write_lock:
@@ -126,6 +145,8 @@ def write_json(path, obj, mode=0o644, indent=1):
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(obj, f, ensure_ascii=False, indent=indent)
             os.chmod(tmp, mode)
+            if backup and os.path.exists(path):
+                shutil.copy2(path, path + ".bak")   # son sağlam sürüm (read_json bozulursa kullanır)
             os.replace(tmp, path)
         except BaseException:
             try:

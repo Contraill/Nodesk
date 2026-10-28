@@ -10,6 +10,7 @@
 #   sudo nodesk router-script        router ajanı kurulum scripti (Laptop'tan kullanılır)
 #   sudo nodesk agent add <ad>       sunucu ajanı ekle, kurulum komutunu göster
 #   sudo nodesk agent list|remove    ajanları listele / sil
+#   sudo nodesk password             düzenleme parolasını belirle (ev ağından düzenlemek için)
 #   sudo nodesk uninstall            kaldır (veri klasörünü silmez)
 set -euo pipefail
 
@@ -411,6 +412,8 @@ cmd_agent() {
     esac
 }
 
+cmd_password() { need_root password; py -m nodesk password; }
+
 cmd_uninstall() {
     need_root uninstall
     read -r -p "Nodesk kaldırılsın mı? Veri klasörü ($NODESK_HOME) silinmez. [e/H] " a
@@ -441,6 +444,7 @@ case "${1:-}" in
     logs)           shift; cmd_logs "${1:-50}" ;;
     router-script)  cmd_router_script ;;
     agent)          shift; cmd_agent "$@" ;;
+    password)       cmd_password ;;
     uninstall)      cmd_uninstall ;;
     version|-v|--version) echo "$(app_version) ($(app_rev))" ;;
     ""|help|-h|--help) usage ;;

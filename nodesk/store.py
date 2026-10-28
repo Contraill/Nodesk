@@ -42,6 +42,8 @@ DEFAULT_SETTINGS["colors"] = {"net": "#3b82d6", "srv": "#c2508a", "pc": "#8e66d0
                               "media": "#d6a03a", "home": "#4f9d69", "other": "", "app": "#1e9ab0",
                               "sys": "#8c9440"}
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+# Kim düzenler / kim görür (auth.py). edit: tailnet | password | everyone; view: everyone | login
+DEFAULT_SETTINGS["access"] = {"edit": "tailnet", "view": "everyone", "ts_users": []}
 INTERVALS = (1, 2, 5, 10, 15, 30, 60)
 DEVICE_TYPES = ("modem", "router", "ap", "server", "cloud-vm", "pc", "laptop", "phone",
                 "tablet", "tv", "console", "iot", "lamp", "vacuum", "camera", "printer",
@@ -63,7 +65,9 @@ class Paths:
         self.state = os.path.join(self.data, "state.json")
         self.passive = os.path.join(self.data, "passive.json")
         self.update = os.path.join(self.data, "update.json")
-        self.data_json = os.path.join(self.www, "data.json")
+        self.data_json = os.path.join(self.www, "data.json")              # herkese açık harita
+        self.data_private = os.path.join(self.data, "data.json")          # /api/data (giriş gerekirse)
+        self.auth = os.path.join(self.data, "auth.json")
 
 
 def load_config(paths):
@@ -113,6 +117,18 @@ class Store:
             for k, v in (patch.get("sources") or {}).items():
                 if k in DEFAULT_SETTINGS["sources"]:
                     cur["sources"][k] = bool(v)
+            acc = patch.get("access") or {}
+            if "edit" in acc:
+                if acc["edit"] not in ("tailnet", "password", "everyone"):
+                    raise ValueError("edit: tailnet | password | everyone")
+                cur["access"]["edit"] = acc["edit"]
+            if "view" in acc:
+                if acc["view"] not in ("everyone", "login"):
+                    raise ValueError("view: everyone | login")
+                cur["access"]["view"] = acc["view"]
+            if "ts_users" in acc:
+                users = acc["ts_users"] if isinstance(acc["ts_users"], list) else str(acc["ts_users"]).split(",")
+                cur["access"]["ts_users"] = sorted({str(u).strip().lower()[:100] for u in users if str(u).strip()})[:20]
             for k, v in (patch.get("colors") or {}).items():
                 if k not in COLOR_CATEGORIES or not (v == "" or HEX_COLOR.match(str(v))):
                     raise ValueError(f"geçersiz renk: {k}={v}")
