@@ -1,4 +1,6 @@
-# Nodesk
+# <img src="web/icon.svg" width="32" height="32" alt=""> Nodesk
+
+**[Live demo](https://contraill.github.io/Nodesk/)** (made-up sample data)
 
 A live, single-page map of your home network, a remote home (OpenWrt router), your cloud servers and your Tailscale tailnet. Runs on a Raspberry Pi. The interface is in English and Turkish (switch with the **EN / TR** button).
 
@@ -168,6 +170,8 @@ Running parts:
 tests/run.sh              # unit + API + script + UI tests (UI tests need Chromium)
 tests/run.sh --preview    # + a preview with sample data at http://localhost:8099
 ```
+
+The demo on GitHub Pages is built from `demo/make_demo.py` (an invented network) by `.github/workflows/pages.yml`.
 
 The map has a self-test: add `#selftest` to the address. It checks for overlapping cards, lines crossing cards and JS errors. When releasing, bump `VERSION`; if the router side changed, bump `TOPO_VERSION` in `router/topo-collect`.
 

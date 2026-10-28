@@ -1,3 +1,4 @@
 tests/out/
 __pycache__/
 *.pyc
+demo/_site/

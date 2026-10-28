@@ -34,7 +34,7 @@ x-casaos:
   author: nodesk
   developer: nodesk
   category: Network
-  icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/nginx.png
+  icon: https://cdn.jsdelivr.net/gh/Contraill/Nodesk@main/web/icon.png
   tagline:
     en_us: Network topology map
   description:

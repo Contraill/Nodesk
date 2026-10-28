@@ -164,8 +164,8 @@ def fallback_label(vendor, mac, ip, names=None):
     if os_name:
         return os_name + tail
     if util.is_local_mac(mac):
-        return "Telefon/tablet?" + tail
-    return "Bilinmeyen" + tail
+        return "Phone/tablet?" + tail
+    return "Unknown" + tail
 
 
 # ---------------------------------------------------------------- Tailscale
@@ -217,7 +217,7 @@ def docker_services(containers, app_name):
 
 def system_services(ports):
     return [{"id": "system:" + p["proc"], "name": p["name"], "ports": p["ports"],
-             "source": "system", "app": "_system", "app_name": "Sistem", "state": "running",
+             "source": "system", "app": "_system", "app_name": "System", "state": "running",
              "proc": p["proc"]} for p in ports or []]
 
 

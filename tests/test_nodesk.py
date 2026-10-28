@@ -1076,5 +1076,18 @@ def _free_port():
     return p
 
 
+class DemoTest(unittest.TestCase):
+    def test_demo_data(self):
+        """GitHub Pages demosu: tutarlı ağaç, yalnızca belgeleme/özel adresler."""
+        sys.path.insert(0, os.path.join(ROOT, "demo"))
+        import make_demo
+        ids = {n["id"] for n in make_demo.data["nodes"]}
+        for n in make_demo.data["nodes"]:
+            self.assertTrue(n["parent"] is None or n["parent"] in ids, n["id"])
+            for ip in n["ips"]:
+                self.assertTrue(ip.startswith(("192.168.", "100.64.0.")), ip)
+        self.assertTrue(make_demo.data["demo"])
+
+
 if __name__ == "__main__":
     unittest.main()

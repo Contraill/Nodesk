@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Nodesk</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141C24'/%3E%3Cpath d='M8 22h16M11 22V12h10v10M16 12V7' stroke='%235BC8A6' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -467,7 +468,8 @@ const TR = {
   // uyarılar ve üst satır
   "The map has not been updated for {n} minutes. Check with <span class=\"mono\">sudo nodesk status</span> on the Pi.": "Harita {n} dakikadır güncellenmedi. Pi'de <span class=\"mono\">sudo nodesk status</span> ile kontrol et.",
   "This router agent version ({v}) cannot update itself. Run its install command (Settings &gt; Agents) on the router <b>one last time</b>; later versions update themselves.": "Router ajanının bu sürümü ({v}) kendini güncelleyemiyor. Kurulum komutunu (Ayarlar &gt; Ajanlar) router'da <b>son kez</b> çalıştır; sonraki sürümleri kendisi alacak.",
-  "Attention": "Dikkat", "New version available: <b>{a}</b> (now {b}). Settings → Update.": "Yeni sürüm var: <b>{a}</b> (şu an {b}). Ayarlar → Güncelle.",
+  "Attention": "Dikkat",
+  "Demo with made-up sample data. Editing, settings and scanning need a real install: <a href=\"https://github.com/Contraill/Nodesk\">github.com/Contraill/Nodesk</a>": "Uydurma örnek verili demo. Düzenleme, ayarlar ve tarama için gerçek kurulum gerekir: <a href=\"https://github.com/Contraill/Nodesk\">github.com/Contraill/Nodesk</a>", "New version available: <b>{a}</b> (now {b}). Settings → Update.": "Yeni sürüm var: <b>{a}</b> (şu an {b}). Ayarlar → Güncelle.",
   "Cannot reach the Nodesk service: the map is read-only. On the Pi: <span class=\"mono\">sudo nodesk status</span>.": "Nodesk servisine ulaşılamıyor: harita salt okunur. Pi'de <span class=\"mono\">sudo nodesk status</span>.",
   "{n} not responding": "{n} yanıt vermiyor", "Show devices with unknown names": "Adı bilinmeyen cihazları göster", "{n} unnamed": "{n} adsız",
   "scanned {a}": "{a} tarandı", "Last scan:": "Son tarama:", "Log in for settings.": "Ayarlar için giriş yap.", "login required": "giriş gerekli",
@@ -498,7 +500,7 @@ const TR = {
   "there must be exactly one local network group": "tam olarak bir yerel ağ grubu olmalı", "at most one default group is allowed": "en fazla bir varsayılan grup olabilir",
 };
 const TR_RX = [
-  [/^relay \((.+)\)$/, "aktarıcı ($1)"],
+  [/^relay \((.+)\)$/, "aktarıcı ($1)"], [/^Phone\/tablet\?/, "Telefon/tablet?"], [/^Unknown( \(\.\d+\))?$/, "Bilinmeyen$1"],
   [/^(.+): router agent \((.+)\) has not reported yet\. Install command: Settings > Agents\.$/, "$1: router ajanı ($2) henüz rapor göndermedi. Kurulum komutu: Ayarlar > Ajanlar."],
   [/^(.+): router agent last reported (\d+) minutes ago; showing the last known state\.$/, "$1: router ajanının son raporu $2 dakika önce geldi; son bilinen durumuyla gösteriliyor."],
   [/^Agent (.+) last reported (\d+) minutes ago\.$/, "$1 ajanının son raporu $2 dakika önce geldi."],
@@ -577,7 +579,7 @@ const GLYPHS = {   // servis simgeleri (ikon bulunamazsa ya da internet yoksa)
   screen: "M3 4h18v12H3zM8 20h8M12 16v4",
   database: "M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
   dns: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9M12 3c-2.5 2.6-3.8 5.6-3.8 9s1.3 6.4 3.8 9",
-  nodesk: "M4 20h16M7 20V10h10v10M12 10V4",
+  nodesk: "M9 3h6v5H9zM12 8v4M5 12h14M5 12v4M12 12v4M19 12v4M3 16h4v5H3zM10 16h4v5h-4zM17 16h4v5h-4z",
   app: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   box: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9",
   server: "M4 3h16v7H4zM4 14h16v7H4zM8 6.5h.01M8 17.5h.01M12 6.5h5M12 17.5h5",
@@ -1224,7 +1226,7 @@ function drawCard(parent, n, q, fa) {
   el("rect", { class: "box", width: n.cw, height: n.ch, rx: n.kind === "modem" || n.kind === "router" ? 6 : 10 }, g);
   el("path", { class: "icon", d: ICONS[n.kind] || ICONS.device, transform: "translate(12,14)" }, g);
   el("circle", { class: "led", cx: 33, cy: 15, r: 5, fill: n.online ? "var(--on)" : n.stale ? "var(--relay)" : "var(--off)" }, g);
-  text(g, 46, 23, clip(n.placeholder ? _x(n.label) : n.label, n.cw > CW ? 24 : 21), "name");
+  text(g, 46, 23, clip(n.placeholder || n.unnamed ? _x(n.label) : n.label, n.cw > CW ? 24 : 21), "name");
   const lan = (n.ips || []).filter((i) => !i.startsWith("100."));
   const line = lan.length ? lan[0] + (lan.length > 1 ? `  +${lan.length - 1}` : "") : (n.tailscale ? n.tailscale.ip : (n.random_mac ? _("random MAC") : n.mac || ""));
   text(g, 46, 41, clip(line, 26), "ip");
@@ -1855,7 +1857,7 @@ function updateAlerts() {
   const items = (DATA.errors || []).map((e) => esc(_x(e)));
   const age = (Date.now() - new Date(DATA.generated).getTime()) / 60000;
   const interval = (DATA.settings && DATA.settings.interval_min) || 5;
-  if (age > Math.max(15, interval * 3) && (!DATA.settings || DATA.settings.auto)) items.unshift(_("The map has not been updated for {n} minutes. Check with <span class=\"mono\">sudo nodesk status</span> on the Pi.", { n: Math.round(age) }));
+  if (!DATA.demo && age > Math.max(15, interval * 3) && (!DATA.settings || DATA.settings.auto)) items.unshift(_("The map has not been updated for {n} minutes. Check with <span class=\"mono\">sudo nodesk status</span> on the Pi.", { n: Math.round(age) }));
   const rs = DATA.router_script || {};
   const autoUpd = !DATA.settings || DATA.settings.agent_auto_update !== false;
   if (rs.ok === false && !(rs.self_update && autoUpd)) items.push(_("This router agent version ({v}) cannot update itself. Run its install command (Settings &gt; Agents) on the router <b>one last time</b>; later versions update themselves.", { v: esc(rs.installed) }));
@@ -1863,7 +1865,8 @@ function updateAlerts() {
   const up = DATA.app && DATA.app.update;
   $("#updBadge").hidden = !up;
   if (up) alertBox("info", _("New version available: <b>{a}</b> (now {b}). Settings → Update.", { a: esc(up.latest), b: esc(DATA.app.version) }), "u:" + up.latest);
-  if (!API_OK) alertBox("warn", _("Cannot reach the Nodesk service: the map is read-only. On the Pi: <span class=\"mono\">sudo nodesk status</span>."), "noapi:" + new Date().toDateString());
+  if (DATA.demo) alertBox("info", _("Demo with made-up sample data. Editing, settings and scanning need a real install: <a href=\"https://github.com/Contraill/Nodesk\">github.com/Contraill/Nodesk</a>"), "demo");
+  else if (!API_OK) alertBox("warn", _("Cannot reach the Nodesk service: the map is read-only. On the Pi: <span class=\"mono\">sudo nodesk status</span>."), "noapi:" + new Date().toDateString());
 }
 function updateMeta() {
   const nodes = DATA.nodes.filter((n) => !n.placeholder && n.kind !== "internet" && !isSvc(n));
@@ -1996,6 +1999,7 @@ async function fetchData() {
 async function load(force) {
   try {
     const d = await fetchData();
+    if (d.demo) d.generated = new Date().toISOString();   // GitHub Pages demosu: örnek veri hep "şimdi"
     if (!LANG_CHOSEN && d.settings && d.settings.lang && d.settings.lang !== LANG) { LANG = d.settings.lang; translateStatic(); }
     const changed = force || !DATA || d.generated !== DATA.generated || JSON.stringify(d.nodes).length !== JSON.stringify(DATA.nodes).length;
     DATA = d;
