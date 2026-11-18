@@ -421,6 +421,8 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         me = ts.get("Self") or {}
         ts_self = ts_short(me)
         for node, is_self in [(me, True)] + [(p, False) for p in (ts.get("Peer") or {}).values()]:
+            if not is_self and node.get("OS") == "js":   # tarayıcıdaki geçici istemci (Tailscale SSH konsolu)
+                continue
             info = ts_info(node, is_self)
             ts_nodes[info["name"]] = info
             ts_by_id[node.get("ID")] = info["name"]
@@ -588,7 +590,7 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             label=loc.get("modem_name") if is_gw else None,
             parent_hint=None if is_gw else (f"mac:{o['bridge']}" if o.get("bridge") else f"{LID}-gw"),
             is_root=is_gw, online=o["online"], via=sorted(o["via"]), names=o["names"],
-            aliases=o.get("aliases"),
+            aliases=o.get("aliases"), seen_at=max(filter(None, o["ips"].values()), default=None),
             now=any(arp_by_ip.get(ip) in (mac, o.get("bridge")) for ip in o["live"]))
     # Artık bir MAC'e bağlanan IP'lerin geçici (ip:) kayıtları kopya olarak kalmasın
     taken = retired | {ip for nid, kw in seen.items() if nid.startswith("mac:") for ip in kw["ips"]}
@@ -631,6 +633,12 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
     def rnames(mac):
         return {k: v for k, v in (heard.get(mac) or {}).items() if k in NAME_KEYS and v}
 
+    def put(nid, kw):
+        # Aynı MAC iki evde: şu an çevrimiçi olduğu yer kazanır. Taşınan cihazın eski evdeki
+        # DHCP kirası saatlerce kalır; Pi onu kendi ağında görürken eski eve çekmesin.
+        if not (seen.get(nid, {}).get("online") and not kw["online"]):
+            seen[nid] = kw
+
     router_ids, router_fresh_of, modem_ip_of, router_script = {}, {}, {}, None
     for rs in routers:
         agent, SID = rs["agent"], rs["id"]
@@ -669,12 +677,12 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
             kw["via"] = ["tailscale", "ajan"]
             for e in sources.parse_arpscan("\n".join(sec.get("ARPSCAN_WAN", []))):
                 is_gw = e["ip"] == mip
-                seen[f"mac:{e['mac']}"] = dict(
+                put(f"mac:{e['mac']}", dict(
                     mac=e["mac"], vendor=e["vendor"] or util.vendor_for(e["mac"], oui),
                     ips=[e["ip"]], site=SID, kind="modem" if is_gw else None,
                     label=rs.get("modem_name") if is_gw else None,
                     parent_hint=None if is_gw else f"{SID}-gw", is_root=is_gw, online=True, now=True,
-                    via=["router arp"], names=rnames(e["mac"]))
+                    via=["router arp"], names=rnames(e["mac"])))
             lan = {}
             for line in sec.get("LEASES", []):
                 p = line.split()
@@ -692,13 +700,13 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
                     d["reachable"] = True
             for mac, d in lan.items():
                 names = {**rnames(mac), **({"dhcp_name": d["hostname"]} if d["hostname"] else {})}
-                seen[f"mac:{mac}"] = dict(
+                put(f"mac:{mac}", dict(
                     mac=mac, vendor=util.vendor_for(mac, oui), ips=[d["ip"]], site=SID,
                     parent_hint=rid, online=bool(d.get("reachable")), now=bool(d.get("reachable")),
                     names=names,
                     via=["router dhcp"] + (["router arp"] if d.get("reachable") else []),
                     note=None if d.get("reachable") else
-                    "Has a DHCP lease but is not in the router's ARP table right now")
+                    "Has a DHCP lease but is not in the router's ARP table right now"))
             if sec.get("LISTEN") is not None:
                 kw["services"] = system_services(parse_proc_listen(sec.get("LISTEN")))
             ex = ((sec.get("EXITNODE") or [""])[0] or "").strip()
@@ -796,8 +804,13 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         st = state.setdefault(nid, {"first_seen": now_s})
         if kw.get("online"):
             st["last_seen"] = now_s
-        snap = {k: v for k, v in kw.items() if k not in ("online", "now")}
+        snap = {k: v for k, v in kw.items() if k not in ("online", "now", "seen_at")}
         old = st.get("snapshot") or {}
+        # Çevrimdışı cihaz en son çevrimiçi görüldüğü evde kalır: eski evdeki pasif kayıt ya da
+        # DHCP kirası onu oraya geri taşımasın (o evde son görülmesi daha yeniyse taşınır)
+        if (nid.startswith("mac:") and not kw.get("online") and old.get("site")
+                and old["site"] != kw.get("site") and (kw.get("seen_at") or "") < (st.get("last_seen") or "")):
+            continue
         # Bu turda hizmet listesi gelmediyse (örn. ajan raporu eskidi) eskisini koru
         if not snap.get("services") and old.get("services") and nid != "self":
             snap["services"] = old["services"]
@@ -808,6 +821,11 @@ def build(raw, cfg, settings, overrides, state, oui, now, extra=None):
         last = util.parse_iso(st.get("last_seen") or st.get("first_seen"))
         if nid not in seen and (not last or last < cutoff or
                                 (nid.startswith("ip:") and now - last > dt.timedelta(hours=24))):
+            del state[nid]
+
+    # tailnet'ten çıkarılan cihazlar (silinen, süresi dolan geçici cihazlar) hemen kalksın
+    if ts:
+        for nid in [n for n in state if n.startswith("ts:") and n not in seen]:
             del state[nid]
 
     # artık var olmayan grupların (ör. ajanı silinen router) eski kayıtları haritada kalmasın

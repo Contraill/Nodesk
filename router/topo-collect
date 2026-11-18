@@ -6,7 +6,7 @@
 # İlk kurulum (bir kez): haritada Ayarlar > Ajanlar > Kurulum komutu, router'da çalıştırılır.
 # Sonraki sürümleri ajan Pi'den kendisi alır.
 
-TOPO_VERSION=12
+TOPO_VERSION=13
 
 echo "#VERSION"
 echo "$TOPO_VERSION"

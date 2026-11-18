@@ -450,6 +450,44 @@ class GenericSitesTest(unittest.TestCase):
         self.assertNotIn("ts:home-router", ids, "router iki kez görünmez")
         self.assertEqual(ids["ts:cloud-arm"]["site"], "mobile", "atanmamış Tailscale cihazı varsayılan grupta")
 
+    def moved(self, state, pi_online, lease=True, router_arp=False):
+        """Router'ın LAN'ındaki bir cihaz (aa:..:01) Pi'nin evine taşındı; router'da DHCP kirası duruyor."""
+        T = util.parse_iso(NOW)
+        m, seen = "a8:5e:45:00:00:01", util.iso(T - dt.timedelta(minutes=2 if pi_online else 600))
+        sec = {"VERSION": ["13"], "ROUTE": ["default via 192.168.1.1 dev wan"],
+               "ADDR": ["2: br-lan    inet 192.168.77.1/24"],
+               "LEASES": [f"1795042659 {m} 192.168.77.50 laptop-x *"] if lease else [],
+               "NEIGH": [f"192.168.77.50 dev br-lan lladdr {m} REACHABLE"] if router_arp else [],
+               "ARPSCAN_WAN": [], "EXITNODE": [""]}
+        raw = {"ifaces": [{"ifname": "eth0", "ip": "10.0.0.2", "prefix": 24, "mac": "88:a2:9e:35:f8:b1"}],
+               "route": {"dev": "eth0", "gateway": "10.0.0.1"}, "arp": [], "neigh": [],
+               "passive": {m: {"ips": {"10.0.0.50": seen}, "last": seen, "dhcp_name": "laptop-x"}},
+               "ts": {"Self": {"ID": "1", "HostName": "pi", "TailscaleIPs": ["100.64.0.1"], "Online": True},
+                      "Peer": {"k": {"ID": "2", "HostName": "tailscale-ssh-console-x", "OS": "js",
+                                     "TailscaleIPs": ["100.64.0.9"], "Online": True}}},
+               "reports": {"evim": {"kind": "router", "received": NOW, "sections": sec}}}
+        settings = json.loads(json.dumps(store.DEFAULT_SETTINGS))
+        data, state = model.build(raw, {}, settings, {"devices": {}}, state, {}, T,
+                                  {"sites": sites.resolve(None, ["evim"])})
+        return {n["id"]: n for n in data["nodes"]}, state
+
+    def test_moved_device(self):
+        nid = "mac:a8:5e:45:00:00:01"
+        old = lambda site, last: {nid: {"first_seen": "2026-10-01T00:00:00+00:00", "last_seen": last,
+                                        "snapshot": {"mac": nid[4:], "site": site, "ips": ["x"]}},
+                                  "ts:old-phone": {"snapshot": {"site": "mobile"}}}
+        ids, state = self.moved(old("evim", "2026-10-26T10:00:00+00:00"), pi_online=True)
+        self.assertEqual((ids[nid]["site"], ids[nid]["online"]), ("ev1", True),
+                         "eski evdeki DHCP kirası Pi'nin şu an gördüğü cihazı geri çekmez")
+        ids, _ = self.moved(state, pi_online=False)
+        self.assertEqual(ids[nid]["site"], "ev1", "kapandı: en son görüldüğü yerde kalır")
+        ids, _ = self.moved(old("evim", "2026-10-27T12:30:00+00:00"), pi_online=False, lease=False)
+        self.assertEqual(ids[nid]["site"], "evim", "Pi'nin eski pasif kaydı onu Pi'nin evine taşımaz")
+        ids, _ = self.moved(old("ev1", "2026-10-26T10:00:00+00:00"), pi_online=False, router_arp=True)
+        self.assertEqual((ids[nid]["site"], ids[nid]["online"]), ("evim", True), "yeni evde çevrimiçi: taşınır")
+        self.assertFalse([i for i in ids if "console" in i], "tarayıcıdaki Tailscale SSH konsolu cihaz değil")
+        self.assertNotIn("ts:old-phone", state, "tailnet'ten silinen cihaz kalmaz")
+
     def test_migration_and_validation(self):
         cfg = {"ev1": {"name": "Ana ev", "gateway_ip": "192.168.44.1"}, "ev2": {"modem_ip": "192.168.1.1"},
                "oracle": {"name": "Bulut"}, "tailscale": {"site_of": {"Cloud-Arm": "oracle"}}}
@@ -831,7 +869,7 @@ class ApiTest(unittest.TestCase):
 
     def test_ingest_asks_old_agent_to_update(self):
         token = store.Store(store.Paths(self.home)).agents()["agents"]["router"]["token"]
-        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n12", "#VERSION\n2", 1)
+        old = open(os.path.join(FIX, "router.txt")).read().replace("#VERSION\n13", "#VERSION\n2", 1)
         st, body = self.call("POST", f"/api/ingest?agent=router&token={token}", raw=old.encode(), ctype="text/plain")
         self.assertEqual((st, body.strip()), (200, "ok update"))
         cur = open(os.path.join(FIX, "router.txt")).read()
@@ -916,7 +954,7 @@ class ApiTest(unittest.TestCase):
         a = next(x for x in json.loads(self.call("GET", "/api/agents")[1]) if x["name"] == "ev3")
         self.assertTrue(a["removing"])
         self.assertIn("nodesk-listen disable", a["manual_uninstall"])
-        self.assertEqual(ing(cur.replace("#VERSION\n12", "#VERSION\n9", 1))[1].strip(), "ok update",
+        self.assertEqual(ing(cur.replace("#VERSION\n13", "#VERSION\n9", 1))[1].strip(), "ok update",
                          "eski sürüm kaldırmayı bilmez: önce güncellenir")
         self.assertEqual(ing(cur)[1].strip(), "ok uninstall")
         self.assertEqual(ing("#UNINSTALLED\n#END\n")[1].strip(), "ok bye")
@@ -938,7 +976,7 @@ class ScriptsTest(unittest.TestCase):
             s = agents.installer(kind, "http://100.64.0.1:8088", "x", "tok")
             r = subprocess.run(["sh", "-n"], input=s, text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(agents.topo_version(), "12")
+        self.assertEqual(agents.topo_version(), "13")
 
     def test_router_installer_sandbox(self):
         """Router kurulum scriptini sahte kök dizinde BusyBox ile iki kez çalıştır."""

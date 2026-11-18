@@ -1,50 +1,69 @@
 #!/usr/bin/ucode
 // Nodesk: router'ın kendi ağlarında duyduğu yayınları kaydeder. Salt dinler, paket göndermez.
-//   wan    : H3600P tarafındaki cihazların DHCP istekleri (UDP 67): telefonlar ağa her
+//   wan    : modem tarafındaki cihazların DHCP istekleri (UDP 67): telefonlar ağa her
 //            katıldığında adını burada söyler. Bir de mDNS duyuruları.
-//   br-lan : mDNS duyuruları (DHCP adları zaten dnsmasq kiralarında).
-// Soketler SO_BINDTODEVICE ile arayüze bağlı: dnsmasq'ın LAN DHCP trafiğine dokunmaz
-// (dnsmasq WAN'da zaten DHCP vermez).
+//   br-lan : mDNS duyuruları ve DHCP istekleri (adlar dnsmasq kiralarında da var).
+// Ham soket (AF_PACKET) + BPF süzgeci: paket güvenlik duvarından önce görülür, bu yüzden WAN'ın
+// "gelen trafiği reddet" kuralı dinlemeyi engellemez ve hiçbir ayar değişmez. Süzgeç çekirdekte
+// yalnızca UDP 67/5353'ü geçirir; yönlendirilen trafik kullanıcı alanına hiç kopyalanmaz.
+// UDP 5353 soketleri yalnızca mDNS çoklu yayın grubuna üye olmak için açık (okunup atılır).
 // Her farklı paket bir kez /tmp/nodesk-heard.txt'ye yazılır; topo-collect onu Pi'ye gönderir,
 // ayrıştırmayı Pi yapar. Deneme: ucode /usr/sbin/nodesk-listen 30  (30 sn dinleyip çıkar)
 import * as socket from 'socket';
 import { md5 } from 'digest';
 import { open, readfile, stat } from 'fs';
 
-const OUT = '/tmp/nodesk-heard.txt', MAX = 262144;
+const OUT = '/tmp/nodesk-heard.txt', MAX = 262144, ETH_P_IP = 0x0800;
+// tcpdump -dd 'ip and udp and (dst port 67 or dst port 5353)'  (Ethernet çerçevesi)
+const BPF = [[0x28, 0, 0, 12], [0x15, 0, 9, 0x800], [0x30, 0, 0, 23], [0x15, 0, 7, 17], [0x28, 0, 0, 20],
+	[0x45, 5, 0, 0x1fff], [0xb1, 0, 0, 14], [0x48, 0, 0, 16], [0x15, 1, 0, 67], [0x15, 0, 1, 5353],
+	[0x6, 0, 0, 0xffff], [0x6, 0, 0, 0]];
 
-function listen(dev, port, kind) {
+function raw(dev) {
+	let s = socket.create(socket.AF_PACKET, socket.SOCK_RAW, 0);
+	if (s && s.setopt(socket.SOL_SOCKET, socket.SO_ATTACH_FILTER, { filter: BPF })
+	    && s.bind({ family: socket.AF_PACKET, interface: dev, protocol: ETH_P_IP, address: '00:00:00:00:00:00' }))
+		return s;
+	s?.close();
+	return null;
+}
+
+function mdns_member(dev) {
 	let s = socket.create(socket.AF_INET, socket.SOCK_DGRAM);
 	if (!s)
 		return null;
 	s.setopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1);
-	if (!s.setopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, dev) || !s.bind({ address: '0.0.0.0', port: port })) {
+	if (!s.setopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, dev) || !s.bind({ address: '0.0.0.0', port: 5353 })) {
 		s.close();
 		return null;
 	}
-	if (port == 5353)
-		s.setopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
-			{ multiaddr: '224.0.0.251', ifindex: +trim(readfile(`/sys/class/net/${dev}/ifindex`) ?? '0') });
-	return { s: s, kind: kind };
+	s.setopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
+		{ multiaddr: '224.0.0.251', ifindex: +trim(readfile(`/sys/class/net/${dev}/ifindex`) ?? '0') });
+	return s;
 }
 
-let ls = filter([listen('wan', 67, 'dhcp'), listen('wan', 5353, 'mdns'), listen('br-lan', 5353, 'mdns')], (x) => x);
-if (!length(ls))
+let raws = filter([raw('wan'), raw('br-lan')], (x) => x);
+if (!length(raws))
 	exit(1);
-let kind = {};
-for (let x in ls)
-	kind[x.s.fileno()] = x.kind;
-let socks = map(ls, (x) => x.s);
+let members = filter([mdns_member('wan'), mdns_member('br-lan')], (x) => x);
+let is_raw = {};
+for (let s in raws)
+	is_raw[s.fileno()] = true;
 
 const until = ARGV[0] ? time() + +ARGV[0] : 0;
 let seen = {}, count = 0;
 while (!until || time() < until) {
-	for (let ev in socket.poll(until ? 1000 : 60000, ...socks) ?? []) {
+	for (let ev in socket.poll(until ? 1000 : 60000, ...raws, ...members) ?? []) {
 		if (!(ev[1] & socket.POLLIN))
 			continue;
-		let a = {}, d = ev[0].recv(4096, socket.MSG_DONTWAIT, a), k = kind[ev[0].fileno()];
+		let f = ev[0].recv(4096, socket.MSG_DONTWAIT);
+		if (!f || !is_raw[ev[0].fileno()] || length(f) < 42)
+			continue;
+		// Ethernet (14) + IPv4 (ihl) + UDP (8) -> yük
+		let ihl = (ord(f, 14) & 15) * 4, dport = ord(f, 16 + ihl) * 256 + ord(f, 17 + ihl);
+		let k = dport == 67 ? 'dhcp' : 'mdns', d = substr(f, 22 + ihl);
 		// sadece DHCP istekleri (op 1) ve mDNS yanıtları/duyuruları (QR biti)
-		if (!d || length(d) < 12 || (k == 'dhcp' ? ord(d, 0) != 1 : !(ord(d, 2) & 0x80)))
+		if (length(d) < 12 || (k == 'dhcp' ? ord(d, 0) != 1 : !(ord(d, 2) & 0x80)))
 			continue;
 		let h = md5(d);
 		if (seen[h])
@@ -57,10 +76,10 @@ while (!until || time() < until) {
 			count = length(seen);
 		}
 		if ((stat(OUT)?.size ?? 0) < MAX) {
-			let f = open(OUT, 'a');
-			if (f) {
-				f.write(`${a.address} ${k} ${hexenc(d)}\n`);
-				f.close();
+			let o = open(OUT, 'a');
+			if (o) {
+				o.write(sprintf('%d.%d.%d.%d %s %s\n', ord(f, 26), ord(f, 27), ord(f, 28), ord(f, 29), k, hexenc(d)));
+				o.close();
 			}
 		}
 	}
